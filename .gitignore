@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv
+venv/
+
+# Experiment results (large JSON files; can be regenerated)
+experiments/results/evo_*/
+experiments/results/static_control/
+experiments/results/random_mutation/
+experiments/results/fig_*.png
+experiments/results/figures/
+experiments/results/seed_manifest.json
+experiments/results/experiment_runs.csv
+
+# Local environment and secrets
+.env
+*.key
+*.pem
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
