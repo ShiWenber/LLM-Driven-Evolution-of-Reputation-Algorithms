@@ -10,17 +10,18 @@ Payoff matrix (R, S, T, P):
     P (punishment) = 1  — mutual defection
     S (sucker)     = 0  — cooperate vs defector
 
-Strategy interface matches donor_game: each agent runs the same
-`evaluate()` / `decide()` pair, but in the IPD these are repurposed:
-    - `evaluate()` is unused (no third-party observation in two-player game)
-    - `decide()` takes recipient_reputation but in practice only history matters
-    - Strategies consume my_history to decide C/D each round
+Strategy interface: this game does NOT use the CodeAgent wrapper.
+Instead, IPDGame.play_match calls a *strategy function* directly with
+`decide(my_history, round_num) -> bool` and tracks history itself.
+This keeps the IPD path simple and avoids cross-pollination with the
+donor-game reputation API.
 """
 from __future__ import annotations
 
 import random
+import textwrap
 import numpy as np
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Callable, Optional
 from dataclasses import dataclass, field
 
 
@@ -29,6 +30,10 @@ T_PAYOFF = 5
 R_PAYOFF = 3
 P_PAYOFF = 1
 S_PAYOFF = 0
+
+
+# A strategy callable type: decide(my_history, round_num) -> bool
+IPDStrategy = Callable[[list, int], bool]
 
 
 @dataclass
@@ -49,56 +54,35 @@ class IPDMatchResult:
 
 
 class IPDGame:
-    """Iterated Prisoner's Dilemma between two LLM-coded strategies.
-
-    Each round both agents simultaneously decide C or D based on
-    opponent's full action history (full information).
-    """
+    """Iterated Prisoner's Dilemma between two IPD strategy callables."""
 
     def __init__(self, num_rounds: int = 1000, noise: float = 0.0):
         self.num_rounds = num_rounds
-        self.noise = noise  # Probability that an agent's action is flipped
+        self.noise = noise
 
     def play_match(
         self,
-        agent_a,
-        agent_b,
+        strategy_a: IPDStrategy,
+        strategy_b: IPDStrategy,
         seed: int | None = None,
     ) -> IPDMatchResult:
-        """Play an IPD match between two CodeAgent-like objects.
-
-        Each round both agents call decide(recipient_reputation, round, history).
-        In IPD we treat recipient_reputation as a constant 0.0 placeholder
-        and rely on my_history for decision logic.
-        """
         rng = random.Random(seed)
-        history_a: list[dict] = []
-        history_b: list[dict] = []
-        coop_a: list[bool] = []
-        coop_b: list[bool] = []
+        history_a: list = []
+        history_b: list = []
+        coop_a: list = []
+        coop_b: list = []
         payoff_a = 0.0
         payoff_b = 0.0
 
         for r in range(self.num_rounds):
-            # Both agents decide simultaneously
-            decision_a = agent_a.decide(
-                recipient_reputation=0.0,
-                round_num=r,
-                my_history=history_a,
-            )
-            decision_b = agent_b.decide(
-                recipient_reputation=0.0,
-                round_num=r,
-                my_history=history_b,
-            )
+            decision_a = bool(strategy_a(history_a, r))
+            decision_b = bool(strategy_b(history_b, r))
 
-            # Apply noise: each agent's action flipped independently
             if self.noise > 0 and rng.random() < self.noise:
                 decision_a = not decision_a
             if self.noise > 0 and rng.random() < self.noise:
                 decision_b = not decision_b
 
-            # Compute payoff for this round
             if decision_a and decision_b:
                 payoff_a += R_PAYOFF
                 payoff_b += R_PAYOFF
@@ -112,7 +96,6 @@ class IPDGame:
                 payoff_a += P_PAYOFF
                 payoff_b += P_PAYOFF
 
-            # Record histories
             action_a = "donate" if decision_a else "not_donate"
             action_b = "donate" if decision_b else "not_donate"
             history_a.append({
@@ -137,28 +120,21 @@ class IPDGame:
 
     def all_play_all(
         self,
-        agents: list,
+        strategies: List[IPDStrategy],
         seed: int | None = None,
     ) -> Dict[str, Any]:
-        """Run an all-play-all IPD tournament.
-
-        Each agent plays against every other agent (and itself).
-        Returns aggregated per-agent statistics.
-        """
-        n = len(agents)
+        n = len(strategies)
         total_payoff = np.zeros(n)
         matches_played = np.zeros(n)
-        cooperation_counts: list[list[bool]] = [[] for _ in range(n)]
+        cooperation_counts: list = [[] for _ in range(n)]
 
         for i in range(n):
             for j in range(n):
-                result = self.play_match(agents[i], agents[j], seed=seed)
+                result = self.play_match(strategies[i], strategies[j], seed=seed)
                 total_payoff[i] += result.payoff_a
                 matches_played[i] += 1
-                # Track i's cooperation rate across the tournament
                 cooperation_counts[i].extend(result.coop_actions)
 
-        # Per-agent statistics
         per_agent = []
         for i in range(n):
             mean_payoff = float(total_payoff[i] / matches_played[i])
@@ -191,10 +167,87 @@ def ipd_tournament_to_fitness(
     tournament_result: Dict[str, Any],
     num_agents: int,
 ) -> np.ndarray:
-    """Convert tournament per-agent payoff into fitness for selection.
-
-    Fitness = mean_payoff - min_payoff + 1, so all are positive and
-    relative differences are preserved (Moran-style).
-    """
     payoffs = np.array([a["mean_payoff"] for a in tournament_result["per_agent"]])
     return payoffs - payoffs.min() + 1.0
+
+
+def load_ipd_strategy_from_code(code: str) -> Optional[IPDStrategy]:
+    """Compile LLM-generated Python code into an IPDStrategy callable.
+
+    Supports two signatures for `decide`:
+        (a) `decide(my_history, round_num) -> bool`  — pure IPD style
+        (b) `decide(recipient_reputation, round_num, my_history) -> bool`
+            — donor-game style (LLM templates use this; we ignore
+            recipient_reputation in IPD)
+
+    Returns None if compilation fails.
+    """
+    try:
+        namespace: dict = {}
+        full_src = code
+        exec(full_src, namespace)
+        if "decide" not in namespace:
+            return None
+        # Inspect signature
+        import inspect
+        sig = inspect.signature(namespace["decide"])
+        params = list(sig.parameters.keys())
+
+        if len(params) == 2 and "my_history" in params:
+            # Pure IPD signature: decide(my_history, round_num)
+            def strategy(my_history, round_num):
+                return bool(namespace["decide"](my_history, round_num))
+        elif len(params) == 3 and "my_history" in params:
+            # Donor-game signature: decide(recipient_reputation, round_num, my_history)
+            def strategy(my_history, round_num):
+                return bool(namespace["decide"](0.0, round_num, my_history))
+        else:
+            return None
+        return strategy
+    except Exception:
+        return None
+
+
+def load_ipd_strategies_from_code(code_strings: List[str]) -> List[Optional[IPDStrategy]]:
+    """Compile a list of code strings; None for un-compilable code."""
+    return [load_ipd_strategy_from_code(c) for c in code_strings]
+
+
+# Pre-built classical strategies for baseline tournaments
+def tit_for_tat(history, round_num):
+    if not history:
+        return True
+    return history[-1].get("partner_action") == "donate"
+
+
+def always_cooperate(history, round_num):
+    return True
+
+
+def always_defect(history, round_num):
+    return False
+
+
+def pavlov(history, round_num):
+    """Win-Stay, Lose-Shift: cooperate if last round was (C,*), defect if (D,*)."""
+    if not history:
+        return True
+    last = history[-1]
+    if last["action"] == "donate":
+        return True  # stayed
+    return False  # shifted
+
+
+def grim_trigger(history, round_num):
+    if any(h["partner_action"] == "not_donate" for h in history):
+        return False
+    return True
+
+
+CLASSICAL_STRATEGIES = {
+    "tit_for_tat": tit_for_tat,
+    "always_cooperate": always_cooperate,
+    "always_defect": always_defect,
+    "pavlov": pavlov,
+    "grim_trigger": grim_trigger,
+}
