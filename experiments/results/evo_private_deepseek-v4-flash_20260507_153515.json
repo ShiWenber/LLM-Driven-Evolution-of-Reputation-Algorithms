@@ -1,0 +1,295 @@
+{
+  "config": {
+    "population_size": 15,
+    "num_rounds_per_gen": 40,
+    "benefit": 3,
+    "cost": 1,
+    "observability": "private",
+    "observability_p": 0.3,
+    "elite_count": 2,
+    "num_eliminate": 4,
+    "llm_provider": "openai",
+    "llm_model": "deepseek-v4-flash",
+    "seed": 0
+  },
+  "trajectory": [
+    {
+      "fitness_mean": 42.13333333333333,
+      "fitness_std": 12.109867418303509,
+      "fitness_max": 66.0,
+      "fitness_min": 27.0,
+      "cooperation_rate_mean": 0.5266666666666666,
+      "cooperation_rate_std": 0.37119925766209294,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 0,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 40.4,
+      "fitness_std": 12.605818762248914,
+      "fitness_max": 63.0,
+      "fitness_min": 17.0,
+      "cooperation_rate_mean": 0.505,
+      "cooperation_rate_std": 0.3546359635833155,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 1,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 31.466666666666665,
+      "fitness_std": 13.098939736567315,
+      "fitness_max": 50.0,
+      "fitness_min": -4.0,
+      "cooperation_rate_mean": 0.39333333333333337,
+      "cooperation_rate_std": 0.35266446124074113,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 2,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 24.4,
+      "fitness_std": 10.934959228700093,
+      "fitness_max": 45.0,
+      "fitness_min": 3.0,
+      "cooperation_rate_mean": 0.305,
+      "cooperation_rate_std": 0.329292170167062,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 3,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 27.2,
+      "fitness_std": 15.428112867964982,
+      "fitness_max": 48.0,
+      "fitness_min": 0.0,
+      "cooperation_rate_mean": 0.34,
+      "cooperation_rate_std": 0.3988316269638939,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 4,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 10.0,
+      "fitness_std": 9.605553948974867,
+      "fitness_max": 23.0,
+      "fitness_min": -15.0,
+      "cooperation_rate_mean": 0.12499999999999999,
+      "cooperation_rate_std": 0.2596471965314986,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 5,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 22.533333333333335,
+      "fitness_std": 22.011714053102622,
+      "fitness_max": 54.0,
+      "fitness_min": -15.0,
+      "cooperation_rate_mean": 0.2816666666666666,
+      "cooperation_rate_std": 0.40056903968673807,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 6,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 3.8666666666666667,
+      "fitness_std": 6.042810236599819,
+      "fitness_max": 12.0,
+      "fitness_min": -9.0,
+      "cooperation_rate_mean": 0.04833333333333333,
+      "cooperation_rate_std": 0.11047875612784368,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 7,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 0.8,
+      "fitness_std": 1.869046102516825,
+      "fitness_max": 6.0,
+      "fitness_min": -1.0,
+      "cooperation_rate_mean": 0.010000000000000002,
+      "cooperation_rate_std": 0.01527525231651947,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 8,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 6.0,
+      "fitness_std": 12.33963802818651,
+      "fitness_max": 18.0,
+      "fitness_min": -37.0,
+      "cooperation_rate_mean": 0.075,
+      "cooperation_rate_std": 0.24782386218172509,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 9,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    }
+  ],
+  "final_population": [
+    {
+      "agent_id": 0,
+      "strategy_id": "31c3b27393fb",
+      "fitness": 18.0,
+      "cooperation_rate": 0.0,
+      "generation": 9,
+      "parent_id": "0fdceead7ca8",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Donate only if the recipient has been observed donating at least twice.\n    This is a stricter variant of the conditional cooperator, requiring more evidence.\n    \"\"\"\n    donation_count = 0\n    for obs in observations:\n        if obs.get('agent_id') == recipient_id and obs.get('action') is True:\n            donation_count += 1\n            if donation_count >= 2:\n                return True\n    return False"
+    },
+    {
+      "agent_id": 1,
+      "strategy_id": "0fdceead7ca8",
+      "fitness": 15.0,
+      "cooperation_rate": 0.0,
+      "generation": 8,
+      "parent_id": "955389935a7b",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Donate only if the recipient has been observed donating at least once.\n    Otherwise, do not donate.\n    This is a variant of the always-defect strategy, now conditionally cooperative.\n    \"\"\"\n    # Scan observations for any record of the recipient donating\n    for obs in observations:\n        # Assume each observation dict has keys: 'agent_id', 'action', 'round'\n        if obs.get('agent_id') == recipient_id and obs.get('action') is True:\n            return True\n    # Default: no observed donation from this recipient\n    return False"
+    },
+    {
+      "agent_id": 2,
+      "strategy_id": "b98ca6966f3c",
+      "fitness": 12.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "1e1968f0d6e4",
+      "code": "import random\n\ndef strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Donates if the donation rate in the last 10 rounds is below 0.4.\n    First round: random (50/50).\n    \"\"\"\n    if round_num == 1:\n        return random.random() < 0.5\n    window = min(len(my_history), 10)\n    if window == 0:\n        return random.random() < 0.5\n    recent = my_history[-window:]\n    donations = sum(1 for entry in recent if entry.get('action', False))\n    # Donate if donation rate is below 0.4\n    return donations < 0.4 * window"
+    },
+    {
+      "agent_id": 3,
+      "strategy_id": "cb89dc711e6a",
+      "fitness": 12.0,
+      "cooperation_rate": 0.0,
+      "generation": 8,
+      "parent_id": "4d92342ec2c6",
+      "code": "import random\n\ndef strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Donates to keep the total number of donations no more than non-donations.\n    First round: random (50/50).\n    Later rounds: donate if donations <= non-donations, otherwise not.\n    \"\"\"\n    if round_num == 1:\n        return random.random() < 0.5\n    else:\n        donations = sum(1 for entry in my_history if entry.get('action', False))\n        non_donations = len(my_history) - donations\n        return donations <= non_donations"
+    },
+    {
+      "agent_id": 4,
+      "strategy_id": "4c3bb181e2a7",
+      "fitness": 12.0,
+      "cooperation_rate": 0.0,
+      "generation": 9,
+      "parent_id": "0fdceead7ca8",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Donate only if the recipient has been observed donating in more than 50%\n    of their observed rounds (with at least one observation). Otherwise, do not donate.\n    This variant requires a majority of observed cooperative actions.\n    \"\"\"\n    total_obs = 0\n    donate_obs = 0\n    for obs in observations:\n        if obs.get('agent_id') == recipient_id:\n            total_obs += 1\n            if obs.get('action') is True:\n                donate_obs += 1\n    if total_obs > 0 and donate_obs / total_obs > 0.5:\n        return True\n    return False"
+    },
+    {
+      "agent_id": 5,
+      "strategy_id": "64c64166b944",
+      "fitness": 10.0,
+      "cooperation_rate": 0.05,
+      "generation": 9,
+      "parent_id": "1e1968f0d6e4",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Variant of the original: uses a shorter window (4), a more permissive threshold\n    (donate if donations <= non-donations), and adds a small amount of random exploration.\n    \"\"\"\n    import random\n\n    # First round: random 50/50\n    if round_num == 1:\n        return random.random() < 0.5\n\n    # Use a window of the last 4 actions (original used 5)\n    window = min(len(my_history), 4)\n    recent = my_history[-window:]\n    donations = sum(1 for entry in recent if entry.get('action', False))\n    non_donations = window - donations\n\n    # Base decision: donate if donations are at most half (i.e., \u2264 non-donations)\n    base_decision = donations <= non_donations\n\n    # With 5% probability, override with a random decision (exploration)\n    if random.random() < 0.05:\n        return random.random() < 0.5\n\n    return base_decision"
+    },
+    {
+      "agent_id": 6,
+      "strategy_id": "1e1968f0d6e4",
+      "fitness": 9.0,
+      "cooperation_rate": 0.0,
+      "generation": 4,
+      "parent_id": "4d92342ec2c6",
+      "code": "import random\n\ndef strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Donates to keep the number of donations close to non-donations within a recent window.\n    First round: random (50/50).\n    Later rounds: consider the last 5 actions; donate if donations < non-donations.\n    \"\"\"\n    if round_num == 1:\n        return random.random() < 0.5\n    window = min(len(my_history), 5)\n    recent = my_history[-window:]\n    donations = sum(1 for entry in recent if entry.get('action', False))\n    non_donations = window - donations\n    return donations < non_donations"
+    },
+    {
+      "agent_id": 7,
+      "strategy_id": "5956534043cd",
+      "fitness": 9.0,
+      "cooperation_rate": 0.0,
+      "generation": 7,
+      "parent_id": "202b58847c53",
+      "code": "import random\n\ndef strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Variant of the original balancing strategy.\n    - First round: donate with 20% probability (more cautious).\n    - Later rounds: donate only if the number of donations in the last 5 rounds\n      is strictly less than the number of non-donations in those rounds.\n    \"\"\"\n    if round_num == 1:\n        return random.random() < 0.2\n\n    # Consider only the most recent 5 rounds (or all if fewer)\n    recent = my_history[-5:] if len(my_history) >= 5 else my_history\n    donations = sum(1 for entry in recent if entry.get('action', False))\n    non_donations = len(recent) - donations\n    # Donate only when donations are strictly less than non-donations\n    return donations < non_donations"
+    },
+    {
+      "agent_id": 8,
+      "strategy_id": "955389935a7b",
+      "fitness": 9.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Never donate.\n    \"\"\"\n    return False"
+    },
+    {
+      "agent_id": 9,
+      "strategy_id": "f40147e8af68",
+      "fitness": 9.0,
+      "cooperation_rate": 0.0,
+      "generation": 2,
+      "parent_id": "215e2783d479",
+      "code": "import random\n\ndef strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Donate based on the majority of the last 3 actions.\n    If there are more donations than non-donations in the last 3 rounds,\n    then donate (keeping the streak); otherwise, do not donate.\n    First round: random.\n    \"\"\"\n    if round_num == 1:\n        return random.random() < 0.5\n\n    # Get the last up to 3 actions (assumes key 'action')\n    recent_actions = [entry.get('action', False) for entry in my_history[-3:]]\n    # Count donations\n    donations = sum(recent_actions)\n    # Donate if majority (>=2) of recent actions were donations\n    if donations >= 2:\n        return True\n    else:\n        return False"
+    },
+    {
+      "agent_id": 10,
+      "strategy_id": "4d92342ec2c6",
+      "fitness": 5.0,
+      "cooperation_rate": 0.025,
+      "generation": 3,
+      "parent_id": "215e2783d479",
+      "code": "import random\n\ndef strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Donates to keep the total number of donations as close as possible to non-donations.\n    First round: random (50/50).\n    Later rounds: donate if donations < non-donations, otherwise not.\n    \"\"\"\n    if round_num == 1:\n        return random.random() < 0.5\n    else:\n        donations = sum(1 for entry in my_history if entry.get('action', False))\n        non_donations = len(my_history) - donations\n        return donations < non_donations"
+    },
+    {
+      "agent_id": 11,
+      "strategy_id": "512544777010",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "4c3bb181e2a7",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Donate only if the recipient has been observed donating at least 3 times.\n    This variant changes the threshold from a proportion (>50%) to an absolute count (>=3).\n    \"\"\"\n    donate_count = 0\n    for obs in observations:\n        if obs.get('agent_id') == recipient_id:\n            if obs.get('action') is True:\n                donate_count += 1\n    return donate_count >= 3"
+    },
+    {
+      "agent_id": 12,
+      "strategy_id": "10405a45c7a2",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "31c3b27393fb",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Donate if the recipient has been observed donating more often than not.\n    If no observations are available, default to not donating.\n    This is a softer version that uses majority rule instead of a fixed threshold.\n    \"\"\"\n    donations = 0\n    total_obs = 0\n    for obs in observations:\n        if obs.get('agent_id') == recipient_id:\n            total_obs += 1\n            if obs.get('action') is True:\n                donations += 1\n    if total_obs == 0:\n        return False\n    # Donate if observed donations exceed half of total observations\n    return donations > total_obs / 2"
+    },
+    {
+      "agent_id": 13,
+      "strategy_id": "95e74bb81228",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "cb89dc711e6a",
+      "code": "import random\n\ndef strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    First round: random (50/50).\n    Later rounds: consider only the last 5 rounds (or all if fewer).\n    Donate if in those rounds donations <= non-donations.\n    \"\"\"\n    if round_num == 1:\n        return random.random() < 0.5\n    else:\n        # Use only recent history (up to 5 rounds)\n        window_size = 5\n        recent_history = my_history[-window_size:] if len(my_history) >= window_size else my_history\n        donations = sum(1 for entry in recent_history if entry.get('action', False))\n        non_donations = len(recent_history) - donations\n        return donations <= non_donations"
+    },
+    {
+      "agent_id": 14,
+      "strategy_id": "3d51f3c8b7d2",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "31c3b27393fb",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Donate only if the recipient has been observed donating at least once.\n    This is a more generous variant of the conditional cooperator.\n    \"\"\"\n    for obs in observations:\n        if obs.get('agent_id') == recipient_id and obs.get('action') is True:\n            return True\n    return False"
+    }
+  ],
+  "timestamp": "2026-05-07T15:35:15.183394"
+}

@@ -1,0 +1,271 @@
+"""LLM-driven mutation operator for strategy code evolution.
+
+Uses LLM APIs to rewrite successful strategy code, creating variants
+that preserve core insights while exploring the strategy space.
+"""
+
+import os
+import random
+import time
+from typing import Optional, List
+
+from ..sandbox.validator import clean_code, validate_strategy_code, CodeValidationError
+from ..agents.prompts import build_mutation_prompt
+from ..config.load_env import get_api_key as _env_api_key, get_base_url as _env_base_url
+
+
+class MutationOperator:
+    """Mutates strategy code using LLM-based rewriting."""
+
+    def __init__(
+        self,
+        llm_provider: str = "openai",
+        model: str = "gpt-4o",
+        temperature: float = 0.8,
+        max_retries: int = 3,
+        rate_limit_delay: float = 0.5,
+        api_key: str = "",
+        api_base_url: str = ""
+    ):
+        """
+        Initialize mutation operator.
+
+        Args:
+            llm_provider: "openai" or "anthropic"
+            model: Model name
+            temperature: LLM temperature for mutation creativity
+            max_retries: Max attempts if mutation produces invalid code
+            rate_limit_delay: Seconds between API calls
+        """
+        self.llm_provider = llm_provider
+        self.model = model
+        self.temperature = temperature
+        self.max_retries = max_retries
+        self.rate_limit_delay = rate_limit_delay
+        self.api_key = api_key
+        self.api_base_url = api_base_url
+        self._client = None
+
+    def _get_client(self):
+        """Lazy initialization of LLM client."""
+        if self._client is not None:
+            return self._client
+
+        if self.llm_provider == "openai":
+            from openai import OpenAI
+            kwargs = {}
+            # Try explicit arg -> env var -> load_env (covers .env + shell)
+            api_key = self.api_key or _env_api_key("openai") or _env_api_key("deepseek")
+            if api_key:
+                kwargs["api_key"] = api_key
+            base_url = self.api_base_url or _env_base_url("openai") or _env_base_url("deepseek")
+            if base_url:
+                kwargs["base_url"] = base_url
+            self._client = OpenAI(**kwargs)
+        elif self.llm_provider == "anthropic":
+            import anthropic
+            api_key = self.api_key or _env_api_key("anthropic")
+            self._client = anthropic.Anthropic(api_key=api_key)
+        else:
+            raise ValueError(f"Unknown provider: {self.llm_provider}")
+
+        return self._client
+
+    def mutate(
+        self,
+        parent_code: str,
+        parent_fitness: float,
+        population_size: int = 20
+    ) -> Optional[str]:
+        """
+        Mutate a strategy code string.
+
+        Args:
+            parent_code: The successful parent strategy code
+            parent_fitness: Fitness score of the parent
+            population_size: Population size (for prompt context)
+
+        Returns:
+            Mutated code string, or None if all retries failed
+        """
+        prompt = build_mutation_prompt(parent_code, parent_fitness, population_size)
+
+        for attempt in range(self.max_retries):
+            try:
+                response = self._call_llm(prompt)
+                if response is None:
+                    delay = 2 ** attempt
+                    print(f"  [mutation] LLM returned None (attempt {attempt + 1}), "
+                          f"retrying in {delay}s...")
+                    time.sleep(delay)
+                    continue
+
+                cleaned = clean_code(response)
+
+                # Validate the mutated code
+                try:
+                    validate_strategy_code(cleaned)
+                except CodeValidationError as e:
+                    print(f"  [mutation] Validation failed (attempt {attempt + 1}): {e}")
+                    # Add error feedback to prompt for next attempt
+                    prompt = (
+                        f"Your previous output had an error: {e}\n\n"
+                        f"Please fix the issue and return ONLY a valid Python function.\n\n"
+                        f"{prompt}"
+                    )
+                    continue
+
+                time.sleep(self.rate_limit_delay)
+                return cleaned
+
+            except Exception as e:
+                delay = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                print(f"  [mutation] API call failed (attempt {attempt + 1}): {e}")
+                print(f"  [mutation] Retrying in {delay}s...")
+                time.sleep(delay)
+
+        # All LLM retries failed — fall back to random mutation
+        print(f"  [mutation] All LLM attempts failed, using random mutation fallback")
+        random_op = RandomMutationOperator()
+        return random_op.mutate(parent_code, parent_fitness)
+
+    def _call_llm(self, prompt: str) -> Optional[str]:
+        """Call the LLM API. Returns None on malformed response."""
+        client = self._get_client()
+
+        if self.llm_provider == "openai":
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a Python programmer. "
+                            "Respond with valid Python code. "
+                            "The code MUST contain BOTH 'evaluate' AND 'decide' functions. "
+                            "evaluate(current_reputation, observation, my_history, round_num) -> float "
+                            "decide(recipient_reputation, round_num, my_history) -> bool. "
+                            "In evaluate: use observation['action'] == 'donate' NOT observation['donated']. "
+                            "evaluate must return a float between -1.0 and 1.0. "
+                            "Focus on INDIRECT reciprocity: use observation-based reputation "
+                            "(observation dict) to update and consult reputation scores. "
+                            "Do NOT condition decide() on partner_action from my_history — "
+                            "that would be direct reciprocity, which is not the target of this game."
+                        )
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=self.temperature,
+                max_tokens=8000
+            )
+            if response is None or not hasattr(response, 'choices') or not response.choices:
+                return None
+            content = response.choices[0].message.content
+            return content if content else None
+
+        elif self.llm_provider == "anthropic":
+            response = client.messages.create(
+                model=self.model,
+                max_tokens=8000,
+                temperature=self.temperature,
+                system=(
+                    "You are a Python programmer. "
+                    "Respond with valid Python code only. "
+                    "Must contain BOTH evaluate() and decide() functions. "
+                    "evaluate(current_reputation, observation, my_history, round_num) -> float. "
+                    "decide(recipient_reputation, round_num, my_history) -> bool. "
+                    "In evaluate: use observation['action'] == 'donate' NOT observation['donated']. "
+                    "evaluate must return a float between -1.0 and 1.0. "
+                    "Focus on INDIRECT reciprocity: use observation-based reputation "
+                    "(observation dict) to update and consult reputation scores. "
+                    "Do NOT condition decide() on partner_action from my_history — "
+                    "that would be direct reciprocity, which is not the target of this game."
+                ),
+                messages=[{"role": "user", "content": prompt}]
+            )
+            if response is None or not hasattr(response, 'content') or not response.content:
+                return None
+            return response.content[0].text
+
+        raise ValueError(f"Unknown provider: {self.llm_provider}")
+
+
+class RandomMutationOperator:
+    """Non-LLM mutation operator for control experiments.
+
+    Performs simple syntactic perturbations: flip comparisons,
+    change constants, swap branches. Used to test whether LLM-driven
+    mutation is actually better than random variation.
+    """
+
+    def mutate(self, parent_code: str, parent_fitness: float = 0, population_size: int = 20) -> Optional[str]:
+        """Apply random syntactic mutations to strategy code."""
+        code = parent_code
+
+        mutations = [
+            self._flip_comparison,
+            self._change_constant,
+            self._swap_return,
+        ]
+
+        # Apply 1-3 random mutations
+        for _ in range(random.randint(1, 3)):
+            mutation_fn = random.choice(mutations)
+            code = mutation_fn(code)
+
+        try:
+            validate_strategy_code(code)
+        except CodeValidationError:
+            return None
+
+        return code
+
+    def _flip_comparison(self, code: str) -> str:
+        """Flip a comparison operator."""
+        flips = [
+            (">", "<="),
+            ("<", ">="),
+            (">=", "<"),
+            ("<=", ">"),
+            ("==", "!="),
+            ("!=", "=="),
+        ]
+        old, new = random.choice(flips)
+        if old in code:
+            # Replace first occurrence
+            code = code.replace(old, new, 1)
+        return code
+
+    def _change_constant(self, code: str) -> str:
+        """Change a numeric constant by random factor."""
+        import re
+        # Find a number and scale it
+        numbers = re.findall(r'\b(\d+\.?\d*)\b', code)
+        if numbers:
+            target = random.choice(numbers)
+            factor = random.uniform(0.5, 2.0)
+            new_val = float(target) * factor
+            code = code.replace(target, f"{new_val:.1f}", 1)
+        return code
+
+    def _swap_return(self, code: str) -> str:
+        """Swap True/False in a return statement."""
+        if "return True" in code:
+            code = code.replace("return True", "return False", 1)
+        elif "return False" in code:
+            code = code.replace("return False", "return True", 1)
+        return code
+
+
+def create_mutation_operator(
+    llm_provider: str = "openai",
+    model: str = "gpt-4o",
+    use_random: bool = False
+):
+    """Factory function to create appropriate mutation operator."""
+    if use_random:
+        return RandomMutationOperator()
+    return MutationOperator(
+        llm_provider=llm_provider,
+        model=model
+    )

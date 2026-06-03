@@ -1,0 +1,73 @@
+# Configuration for LLM Indirect Reciprocity Experiments
+
+# Population parameters
+population_size: 20
+num_rounds: 100
+benefit: 2  # Benefit to recipient
+cost: 1      # Cost to donor
+
+# Model configurations
+models:
+  gpt-4o:
+    name: gpt-4o
+    provider: openai
+    temperature: 0.7
+    max_tokens: 150
+
+  claude-3-5-sonnet:
+    name: claude-3-5-sonnet-20241022
+    provider: anthropic
+    temperature: 0.7
+    max_tokens: 150
+
+  gemini-1-5-pro:
+    name: gemini-1.5-pro
+    provider: google
+    temperature: 0.7
+    max_tokens: 150
+
+# Experiment configurations
+experiments:
+  run1_observability_effect:
+    description: "H1: Test if cooperation higher in public vs anonymous"
+    conditions: ["public", "anonymous"]
+    mechanisms: ["image_scoring"]
+    seeds: 5
+    models: ["gpt-4o", "claude-3-5-sonnet", "gemini-1-5-pro"]
+
+  run2_mechanism_comparison:
+    description: "H3: Compare Image Scoring vs Standing"
+    conditions: ["public"]
+    mechanisms: ["image_scoring", "standing"]
+    seeds: 5
+    models: ["gpt-4o", "claude-3-5-sonnet", "gemini-1-5-pro"]
+
+  run3_extended_dynamics:
+    description: "Extended simulation with 500 rounds"
+    conditions: ["public", "anonymous"]
+    mechanisms: ["image_scoring", "standing"]
+    seeds: 3
+    models: ["gpt-4o", "claude-3-5-sonnet", "gemini-1-5-pro"]
+    num_rounds: 500
+
+# Reputation mechanisms
+reputation:
+  image_scoring:
+    delta_cooperate: 1.0
+    delta_defect: -1.0
+
+  standing:
+    delta_cooperate: 1.0
+    delta_unjustified_defect: -1.0
+    delta_justified_defect: 0.0
+    threshold: 0.0
+
+# Analysis parameters
+analysis:
+  significance_level: 0.05
+  effect_size_threshold: 0.2  # Small effect
+
+# Output paths
+results_dir: results
+figures_dir: results/figures
+logs_dir: logs

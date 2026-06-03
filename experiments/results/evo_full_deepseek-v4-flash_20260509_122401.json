@@ -1,0 +1,225 @@
+{
+  "config": {
+    "population_size": 15,
+    "num_rounds_per_gen": 40,
+    "benefit": 3,
+    "cost": 1,
+    "observability": "full",
+    "observability_p": 0.3,
+    "elite_count": 2,
+    "num_eliminate": 4,
+    "llm_provider": "openai",
+    "llm_model": "deepseek-v4-flash",
+    "seed": 0
+  },
+  "trajectory": [
+    {
+      "fitness_mean": 41.06666666666667,
+      "fitness_std": 13.061223356009021,
+      "fitness_max": 68.0,
+      "fitness_min": 19.0,
+      "cooperation_rate_mean": 0.5133333333333333,
+      "cooperation_rate_std": 0.34227993741315826,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 0,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 49.733333333333334,
+      "fitness_std": 13.930621745716241,
+      "fitness_max": 82.0,
+      "fitness_min": 25.0,
+      "cooperation_rate_mean": 0.6216666666666666,
+      "cooperation_rate_std": 0.34397997357727417,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 1,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 43.6,
+      "fitness_std": 14.022838514366484,
+      "fitness_max": 65.0,
+      "fitness_min": 8.0,
+      "cooperation_rate_mean": 0.545,
+      "cooperation_rate_std": 0.35791060336346564,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 2,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 36.4,
+      "fitness_std": 14.291256067959878,
+      "fitness_max": 56.0,
+      "fitness_min": 14.0,
+      "cooperation_rate_mean": 0.45500000000000007,
+      "cooperation_rate_std": 0.28740215726399826,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 3,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 47.333333333333336,
+      "fitness_std": 10.952422360170171,
+      "fitness_max": 73.0,
+      "fitness_min": 30.0,
+      "cooperation_rate_mean": 0.5916666666666667,
+      "cooperation_rate_std": 0.24860723150293831,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 4,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    }
+  ],
+  "final_population": [
+    {
+      "agent_id": 0,
+      "strategy_id": "051c11a8947f",
+      "fitness": 73.0,
+      "cooperation_rate": 0.5,
+      "generation": 3,
+      "parent_id": "8628a9da6ee3",
+      "code": "import random\n\ndef evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    return current_reputation\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # random donation with 50% probability\n    return random.random() < 0.3"
+    },
+    {
+      "agent_id": 1,
+      "strategy_id": "1da0354e32c2",
+      "fitness": 61.0,
+      "cooperation_rate": 0.875,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Reciprocal evaluation: if donor helped a high-reputation recipient, reward more\n    # But we don't see recipient's reputation in observation? We have only current_reputation of donor.\n    # So we can't directly condition on recipient reputation. We'll just use a simple update.\n    # For this strategy, we make evaluation asymmetric:\n    # Donating to someone: +0.2; Not donating: -0.1\n    if observation[\"action\"] == \"donate\":\n        return max(-1.0, min(1.0, current_reputation + 0.2))\n    else:\n        return max(-1.0, min(1.0, current_reputation - 0.1))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # donate if recipient reputation > 0 (i.e., generally good)\n    return recipient_reputation > 0.0"
+    },
+    {
+      "agent_id": 2,
+      "strategy_id": "9f7c9f40fff9",
+      "fitness": 58.0,
+      "cooperation_rate": 0.8,
+      "generation": 4,
+      "parent_id": "9f7c9f40fff9",
+      "code": "# Pair 2: Image Scoring (simple)\ndef evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        updated = current_reputation + 0.3\n    else:\n        updated = current_reputation - 0.3\n    return max(-1.0, min(1.0, updated))\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation > 0.0"
+    },
+    {
+      "agent_id": 3,
+      "strategy_id": "78fc0e7675f0",
+      "fitness": 55.0,
+      "cooperation_rate": 0.575,
+      "generation": 3,
+      "parent_id": "8628a9da6ee3",
+      "code": "import random\n\ndef evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    return current_reputation\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # random donation with 78.3% probability\n    return random.random() < 0.5"
+    },
+    {
+      "agent_id": 4,
+      "strategy_id": "42f2a49e2da5",
+      "fitness": 51.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    return current_reputation\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    return False  # always defect"
+    },
+    {
+      "agent_id": 5,
+      "strategy_id": "9f7c9f40fff9",
+      "fitness": 50.0,
+      "cooperation_rate": 0.625,
+      "generation": 0,
+      "parent_id": null,
+      "code": "# Pair 2: Image Scoring (simple)\ndef evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        updated = current_reputation + 0.3\n    else:\n        updated = current_reputation - 0.3\n    return max(-1.0, min(1.0, updated))\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation > 0.0"
+    },
+    {
+      "agent_id": 6,
+      "strategy_id": "29fbb62c0dba",
+      "fitness": 49.0,
+      "cooperation_rate": 0.275,
+      "generation": 1,
+      "parent_id": "29fbb62c0dba",
+      "code": "# Pair 4: Strict Image Scoring\ndef evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        updated = current_reputation + 0.2\n    else:\n        updated = current_reputation - 0.8  # severe penalty\n    return max(-1.0, min(1.0, updated))\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation > 0.8  # very strict"
+    },
+    {
+      "agent_id": 7,
+      "strategy_id": "8628a9da6ee3",
+      "fitness": 47.0,
+      "cooperation_rate": 0.55,
+      "generation": 4,
+      "parent_id": "8628a9da6ee3",
+      "code": "import random\n\ndef evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    return current_reputation\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # random donation with 50% probability\n    return random.random() < 0.5"
+    },
+    {
+      "agent_id": 8,
+      "strategy_id": "3dd976a83345",
+      "fitness": 44.0,
+      "cooperation_rate": 0.85,
+      "generation": 1,
+      "parent_id": "1da0354e32c2",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Reciprocal evaluation: if donor helped a high-reputation recipient, reward more\n    # But we don't see recipient's reputation in observation? We have only current_reputation of donor.\n    # So we can't directly condition on recipient reputation. We'll just use a simple update.\n    # For this strategy, we make evaluation asymmetric:\n    # Donating to someone: +0.2; Not donating: -0.1\n    if observation[\"action\"] == \"donate\":\n        return max(-1.4, min(1.0, current_reputation + 0.2))\n    else:\n        return max(-1.0, min(1.0, current_reputation - 0.1))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # donate if recipient reputation > 0 (i.e., generally good)\n    return recipient_reputation > 0.0"
+    },
+    {
+      "agent_id": 9,
+      "strategy_id": "5cda957322ee",
+      "fitness": 44.0,
+      "cooperation_rate": 1.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    return current_reputation  # ignore observation, keep reputation unchanged\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    return True  # always donate"
+    },
+    {
+      "agent_id": 10,
+      "strategy_id": "8628a9da6ee3",
+      "fitness": 39.0,
+      "cooperation_rate": 0.45,
+      "generation": 3,
+      "parent_id": "8628a9da6ee3",
+      "code": "import random\n\ndef evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    return current_reputation\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # random donation with 50% probability\n    return random.random() < 0.5"
+    },
+    {
+      "agent_id": 11,
+      "strategy_id": "1da0354e32c2",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "1da0354e32c2",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Reciprocal evaluation: if donor helped a high-reputation recipient, reward more\n    # But we don't see recipient's reputation in observation? We have only current_reputation of donor.\n    # So we can't directly condition on recipient reputation. We'll just use a simple update.\n    # For this strategy, we make evaluation asymmetric:\n    # Donating to someone: +0.2; Not donating: -0.1\n    if observation[\"action\"] == \"donate\":\n        return max(-1.0, min(1.0, current_reputation + 0.2))\n    else:\n        return max(-1.0, min(1.0, current_reputation - 0.1))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # donate if recipient reputation > 0 (i.e., generally good)\n    return recipient_reputation > 0.0"
+    },
+    {
+      "agent_id": 12,
+      "strategy_id": "78fc0e7675f0",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "78fc0e7675f0",
+      "code": "import random\n\ndef evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    return current_reputation\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # random donation with 78.3% probability\n    return random.random() < 0.5"
+    },
+    {
+      "agent_id": 13,
+      "strategy_id": "9f7c9f40fff9",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "9f7c9f40fff9",
+      "code": "# Pair 2: Image Scoring (simple)\ndef evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        updated = current_reputation + 0.3\n    else:\n        updated = current_reputation - 0.3\n    return max(-1.0, min(1.0, updated))\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation > 0.0"
+    },
+    {
+      "agent_id": 14,
+      "strategy_id": "c4561d808ae8",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "9f7c9f40fff9",
+      "code": "# Pair 2: Image Scoring (simple)\ndef evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] != \"donate\":\n        updated = current_reputation + 0.3\n    else:\n        updated = current_reputation - 0.3\n    return max(-1.0, min(1.0, updated))\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation > 0.0"
+    }
+  ],
+  "timestamp": "2026-05-09T12:24:01.509001"
+}

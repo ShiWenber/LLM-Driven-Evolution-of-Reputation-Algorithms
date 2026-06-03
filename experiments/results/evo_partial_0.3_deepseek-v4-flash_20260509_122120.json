@@ -1,0 +1,225 @@
+{
+  "config": {
+    "population_size": 15,
+    "num_rounds_per_gen": 40,
+    "benefit": 3,
+    "cost": 1,
+    "observability": "partial_0.3",
+    "observability_p": 0.3,
+    "elite_count": 2,
+    "num_eliminate": 4,
+    "llm_provider": "openai",
+    "llm_model": "deepseek-v4-flash",
+    "seed": 1
+  },
+  "trajectory": [
+    {
+      "fitness_mean": 28.133333333333333,
+      "fitness_std": 14.678177301316701,
+      "fitness_max": 71.0,
+      "fitness_min": 11.0,
+      "cooperation_rate_mean": 0.3516666666666667,
+      "cooperation_rate_std": 0.37086235841466697,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 0,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 25.333333333333332,
+      "fitness_std": 11.914510294408057,
+      "fitness_max": 51.0,
+      "fitness_min": 8.0,
+      "cooperation_rate_mean": 0.31666666666666665,
+      "cooperation_rate_std": 0.36579441706449756,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 1,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 26.266666666666666,
+      "fitness_std": 18.042419152898784,
+      "fitness_max": 60.0,
+      "fitness_min": -1.0,
+      "cooperation_rate_mean": 0.32833333333333337,
+      "cooperation_rate_std": 0.3863144947952236,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 2,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 14.666666666666666,
+      "fitness_std": 11.608426058495422,
+      "fitness_max": 27.0,
+      "fitness_min": -16.0,
+      "cooperation_rate_mean": 0.18333333333333332,
+      "cooperation_rate_std": 0.33586538308607444,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 3,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 7.333333333333333,
+      "fitness_std": 9.421016694367735,
+      "fitness_max": 21.0,
+      "fitness_min": -19.0,
+      "cooperation_rate_mean": 0.09166666666666666,
+      "cooperation_rate_std": 0.25210227201585383,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 4,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    }
+  ],
+  "final_population": [
+    {
+      "agent_id": 0,
+      "strategy_id": "3d3434c2ac6b",
+      "fitness": 21.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Ignore observations; reputation stays the same.\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Never donate.\n    return False"
+    },
+    {
+      "agent_id": 1,
+      "strategy_id": "bf193e3ff56d",
+      "fitness": 20.0,
+      "cooperation_rate": 0.025,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Update based on recipient's past behavior toward us (if any).\n    # But we only have observation of another agent, not the recipient's history.\n    # So we ignore the observation and use my_history to adjust.\n    # Not efficient, but for diversity: evaluate uses personal history to modify reputation.\n    # For simplicity, return the same reputation unchanged.\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate if the recipient has never defected against us in the past.\n    # Check my_history for interactions where we were recipient and partner defected.\n    for entry in my_history:\n        if entry[\"role\"] == \"recipient\" and entry[\"partner_action\"] == \"not_donate\":\n            return False\n    return True"
+    },
+    {
+      "agent_id": 2,
+      "strategy_id": "0bd81f29baab",
+      "fitness": 18.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    return False\n"
+    },
+    {
+      "agent_id": 3,
+      "strategy_id": "bf193e3ff56d",
+      "fitness": 12.0,
+      "cooperation_rate": 0.0,
+      "generation": 1,
+      "parent_id": "bf193e3ff56d",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Update based on recipient's past behavior toward us (if any).\n    # But we only have observation of another agent, not the recipient's history.\n    # So we ignore the observation and use my_history to adjust.\n    # Not efficient, but for diversity: evaluate uses personal history to modify reputation.\n    # For simplicity, return the same reputation unchanged.\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate if the recipient has never defected against us in the past.\n    # Check my_history for interactions where we were recipient and partner defected.\n    for entry in my_history:\n        if entry[\"role\"] == \"recipient\" and entry[\"partner_action\"] == \"not_donate\":\n            return False\n    return True"
+    },
+    {
+      "agent_id": 4,
+      "strategy_id": "1b888d453f1d",
+      "fitness": 12.0,
+      "cooperation_rate": 0.0,
+      "generation": 4,
+      "parent_id": "bf193e3ff56d",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Update based on recipient's past behavior toward us (if any).\n    # But we only have observation of another agent, not the recipient's history.\n    # So we ignore the observation and use my_history to adjust.\n    # Not efficient, but for diversity: evaluate uses personal history to modify reputation.\n    # For simplicity, return the same reputation unchanged.\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate if the recipient has never defected against us in the past.\n    # Check my_history for interactions where we were recipient and partner defected.\n    for entry in my_history:\n        if entry[\"role\"] == \"recipient\" and entry[\"partner_action\"] == \"not_donate\":\n            return False\n    return False"
+    },
+    {
+      "agent_id": 5,
+      "strategy_id": "d84c3c859da4",
+      "fitness": 9.0,
+      "cooperation_rate": 0.0,
+      "generation": 2,
+      "parent_id": "e18c4d7c1c0d",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Always-donate evaluator: reputation unchanged\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Always donate\n    return False"
+    },
+    {
+      "agent_id": 6,
+      "strategy_id": "bf193e3ff56d",
+      "fitness": 8.0,
+      "cooperation_rate": 0.025,
+      "generation": 2,
+      "parent_id": "bf193e3ff56d",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Update based on recipient's past behavior toward us (if any).\n    # But we only have observation of another agent, not the recipient's history.\n    # So we ignore the observation and use my_history to adjust.\n    # Not efficient, but for diversity: evaluate uses personal history to modify reputation.\n    # For simplicity, return the same reputation unchanged.\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate if the recipient has never defected against us in the past.\n    # Check my_history for interactions where we were recipient and partner defected.\n    for entry in my_history:\n        if entry[\"role\"] == \"recipient\" and entry[\"partner_action\"] == \"not_donate\":\n            return False\n    return True"
+    },
+    {
+      "agent_id": 7,
+      "strategy_id": "c3bcd548ba55",
+      "fitness": 7.0,
+      "cooperation_rate": 0.05,
+      "generation": 1,
+      "parent_id": "f3bb18a97a7e",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Image scoring: reward donating to good recipients, punish defecting against good.\n    # Use a simple heuristic: if donor donates to a recipient of high reputation, good;\n    # if donor defects against a high reputation recipient, bad.\n    # We don't have recipient's reputation in evaluate, so we approximate using current_reputation of donor?\n    # Actually observation only gives donor and recipient IDs, not their reputations.\n    # We can use current_reputation as the donor's current reputation (given by system).\n    # But that's not the recipient's. The problem says evaluate receives \"current_reputation\" (of the observed agent).\n    # So we only have the donor's current reputation, not the recipient's.\n    # We need to assess based on the donor's action and the context. Since we don't have recipient reputation,\n    # we can use a simpler approach: just update based on action alone.\n    # To create diversity, we'll define a strategy that uses a different update magnitude.\n    # Let's use a small update for donations and large for defections.\n    if observation[\"action\"] == \"donate\":\n        return min(1.0, current_reputation + 0.2)\n    else:\n        return max(-1.0, current_reputation - 0.5)\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate only if recipient reputation is high.\n    return recipient_reputation > 0.5"
+    },
+    {
+      "agent_id": 8,
+      "strategy_id": "b1363cf46e9b",
+      "fitness": 6.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    return False"
+    },
+    {
+      "agent_id": 9,
+      "strategy_id": "127f33f14230",
+      "fitness": 6.0,
+      "cooperation_rate": 0.0,
+      "generation": 3,
+      "parent_id": "127f33f14230",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Always-defect evaluator: ignore all observations, keep reputation as is\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Always defect\n    return False"
+    },
+    {
+      "agent_id": 10,
+      "strategy_id": "127f33f14230",
+      "fitness": 6.0,
+      "cooperation_rate": 0.0,
+      "generation": 4,
+      "parent_id": "127f33f14230",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Always-defect evaluator: ignore all observations, keep reputation as is\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Always defect\n    return False"
+    },
+    {
+      "agent_id": 11,
+      "strategy_id": "1b888d453f1d",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "bf193e3ff56d",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Update based on recipient's past behavior toward us (if any).\n    # But we only have observation of another agent, not the recipient's history.\n    # So we ignore the observation and use my_history to adjust.\n    # Not efficient, but for diversity: evaluate uses personal history to modify reputation.\n    # For simplicity, return the same reputation unchanged.\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate if the recipient has never defected against us in the past.\n    # Check my_history for interactions where we were recipient and partner defected.\n    for entry in my_history:\n        if entry[\"role\"] == \"recipient\" and entry[\"partner_action\"] == \"not_donate\":\n            return False\n    return False"
+    },
+    {
+      "agent_id": 12,
+      "strategy_id": "e430554929a0",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "3d3434c2ac6b",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Ignore observations; reputation stays the same.\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Never donate.\n    return True"
+    },
+    {
+      "agent_id": 13,
+      "strategy_id": "1b888d453f1d",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "bf193e3ff56d",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Update based on recipient's past behavior toward us (if any).\n    # But we only have observation of another agent, not the recipient's history.\n    # So we ignore the observation and use my_history to adjust.\n    # Not efficient, but for diversity: evaluate uses personal history to modify reputation.\n    # For simplicity, return the same reputation unchanged.\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate if the recipient has never defected against us in the past.\n    # Check my_history for interactions where we were recipient and partner defected.\n    for entry in my_history:\n        if entry[\"role\"] == \"recipient\" and entry[\"partner_action\"] == \"not_donate\":\n            return False\n    return False"
+    },
+    {
+      "agent_id": 14,
+      "strategy_id": "1b888d453f1d",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "1b888d453f1d",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Update based on recipient's past behavior toward us (if any).\n    # But we only have observation of another agent, not the recipient's history.\n    # So we ignore the observation and use my_history to adjust.\n    # Not efficient, but for diversity: evaluate uses personal history to modify reputation.\n    # For simplicity, return the same reputation unchanged.\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate if the recipient has never defected against us in the past.\n    # Check my_history for interactions where we were recipient and partner defected.\n    for entry in my_history:\n        if entry[\"role\"] == \"recipient\" and entry[\"partner_action\"] == \"not_donate\":\n            return False\n    return False"
+    }
+  ],
+  "timestamp": "2026-05-09T12:21:20.017157"
+}

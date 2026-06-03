@@ -1,0 +1,225 @@
+{
+  "config": {
+    "population_size": 15,
+    "num_rounds_per_gen": 40,
+    "benefit": 3,
+    "cost": 1,
+    "observability": "private",
+    "observability_p": 0.3,
+    "elite_count": 2,
+    "num_eliminate": 4,
+    "llm_provider": "openai",
+    "llm_model": "deepseek-v4-flash",
+    "seed": 0
+  },
+  "trajectory": [
+    {
+      "fitness_mean": 45.333333333333336,
+      "fitness_std": 28.7973764237107,
+      "fitness_max": 108.0,
+      "fitness_min": 8.0,
+      "cooperation_rate_mean": 0.5666666666666667,
+      "cooperation_rate_std": 0.4784233364802441,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 0,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 26.666666666666668,
+      "fitness_std": 27.20457477868178,
+      "fitness_max": 63.0,
+      "fitness_min": -19.0,
+      "cooperation_rate_mean": 0.3333333333333333,
+      "cooperation_rate_std": 0.43461349368017665,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 1,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 13.333333333333334,
+      "fitness_std": 17.579027908909588,
+      "fitness_max": 45.0,
+      "fitness_min": -28.0,
+      "cooperation_rate_mean": 0.16666666666666666,
+      "cooperation_rate_std": 0.34960294939005054,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 2,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 5.333333333333333,
+      "fitness_std": 12.594531441154222,
+      "fitness_max": 15.0,
+      "fitness_min": -40.0,
+      "cooperation_rate_mean": 0.06666666666666667,
+      "cooperation_rate_std": 0.24944382578492943,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 3,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 0.0,
+      "fitness_std": 0.0,
+      "fitness_max": 0.0,
+      "fitness_min": 0.0,
+      "cooperation_rate_mean": 0.0,
+      "cooperation_rate_std": 0.0,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 4,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    }
+  ],
+  "final_population": [
+    {
+      "agent_id": 0,
+      "strategy_id": "c55995c25966",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 1,
+      "parent_id": "c55995c25966",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Always defect: ignore observations, return unchanged\n    return current_reputation\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Never donate\n    return False"
+    },
+    {
+      "agent_id": 1,
+      "strategy_id": "9cd078b390ea",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Simple update: if donate to good reputation (>0) increase; if not donate to good, decrease.\n    rep = current_reputation\n    if observation['action'] == 'donate':\n        if rep > 0:\n            rep = min(1.0, rep + 0.1)\n        else:\n            rep = max(-1.0, rep - 0.1)\n    else:  # not donate\n        if rep > 0:\n            rep = max(-1.0, rep - 0.2)\n        else:\n            rep = min(1.0, rep + 0.05)\n    return rep\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate only if reputation > 0.5\n    return recipient_reputation > 0.5"
+    },
+    {
+      "agent_id": 2,
+      "strategy_id": "c55995c25966",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 2,
+      "parent_id": "c55995c25966",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Always defect: ignore observations, return unchanged\n    return current_reputation\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Never donate\n    return False"
+    },
+    {
+      "agent_id": 3,
+      "strategy_id": "c55995c25966",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 3,
+      "parent_id": "c55995c25966",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Always defect: ignore observations, return unchanged\n    return current_reputation\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Never donate\n    return False"
+    },
+    {
+      "agent_id": 4,
+      "strategy_id": "c55995c25966",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 1,
+      "parent_id": "c55995c25966",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Always defect: ignore observations, return unchanged\n    return current_reputation\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Never donate\n    return False"
+    },
+    {
+      "agent_id": 5,
+      "strategy_id": "c55995c25966",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Always defect: ignore observations, return unchanged\n    return current_reputation\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Never donate\n    return False"
+    },
+    {
+      "agent_id": 6,
+      "strategy_id": "00eaf31eec48",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 2,
+      "parent_id": "00eaf31eec48",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Same as above: reward donations, punish defections\n    if observation['action'] == 'donate':\n        return 1.0\n    else:\n        return -1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Always defect\n    return False"
+    },
+    {
+      "agent_id": 7,
+      "strategy_id": "00eaf31eec48",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Same as above: reward donations, punish defections\n    if observation['action'] == 'donate':\n        return 1.0\n    else:\n        return -1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Always defect\n    return False"
+    },
+    {
+      "agent_id": 8,
+      "strategy_id": "26f7f9fa7b6f",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Bayesian-like update: weight recent actions more (higher weight in later rounds)\n    weight = 0.1 + 0.02 * (round_num / 40.0)  # increases over rounds\n    # Expected action: donate if rep > 0, else not donate? Actually we don't have recipient's rep.\n    # Simplified: update towards 1 for donate, towards -1 for not donate, with learning rate\n    if observation['action'] == 'donate':\n        target = 1.0\n    else:\n        target = -1.0\n    return current_reputation + weight * (target - current_reputation)\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Dynamic threshold: decrease threshold as rounds go on (more cooperative later)\n    threshold = 0.5 - 0.01 * (round_num - 1)  # starts 0.5 ends 0.11\n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 9,
+      "strategy_id": "71d2cbe59ece",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Stern judging: evaluate based on action and recipient's current reputation\n    donor_rep = current_reputation\n    # We need recipient reputation? Not directly passed, but we can infer from observation?\n    # In game, the recipient's reputation is not directly observable. This evaluation only uses donor's rep.\n    # For Stern, we consider the recipient's reputation. Since we don't have it, we'll approximate by\n    # maintaining our own assessment of the recipient. We can use a global dict, but for simplicity,\n    # we'll assume we have no access. Let's use the observation to set recipient's rep from our memory.\n    # Actually, the problem says we can maintain private state. Let's implement a Stern-like rule without external state.\n    # Since we cannot access recipient rep here, we'll use a simpler rule: if action is donate, increase rep;\n    # if not donate, decrease. This is basic image scoring.\n    # To differentiate, we'll use observation['recipient'] and my_history? Not sufficient.\n    # Let's make a rule: if donate, +0.3 if recipient is unknown, else if recipient is known good? Too complex.\n    # Instead, use a constant update: donate +0.3, not_donate -0.3.\n    if observation[\"action\"] == \"donate\":\n        return max(-1.0, min(1.0, current_reputation + 0.3))\n    else:\n        return max(-1.0, min(1.0, current_reputation - 0.3))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Stern: donate only if recipient reputation > 0.5 (strict)\n    return recipient_reputation > 0.5"
+    },
+    {
+      "agent_id": 10,
+      "strategy_id": "9cd078b390ea",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 3,
+      "parent_id": "9cd078b390ea",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Simple update: if donate to good reputation (>0) increase; if not donate to good, decrease.\n    rep = current_reputation\n    if observation['action'] == 'donate':\n        if rep > 0:\n            rep = min(1.0, rep + 0.1)\n        else:\n            rep = max(-1.0, rep - 0.1)\n    else:  # not donate\n        if rep > 0:\n            rep = max(-1.0, rep - 0.2)\n        else:\n            rep = min(1.0, rep + 0.05)\n    return rep\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate only if reputation > 0.5\n    return recipient_reputation > 0.5"
+    },
+    {
+      "agent_id": 11,
+      "strategy_id": "9cd078b390ea",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "9cd078b390ea",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Simple update: if donate to good reputation (>0) increase; if not donate to good, decrease.\n    rep = current_reputation\n    if observation['action'] == 'donate':\n        if rep > 0:\n            rep = min(1.0, rep + 0.1)\n        else:\n            rep = max(-1.0, rep - 0.1)\n    else:  # not donate\n        if rep > 0:\n            rep = max(-1.0, rep - 0.2)\n        else:\n            rep = min(1.0, rep + 0.05)\n    return rep\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate only if reputation > 0.5\n    return recipient_reputation > 0.5"
+    },
+    {
+      "agent_id": 12,
+      "strategy_id": "37c3b3aed0e0",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "71d2cbe59ece",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Stern judging: evaluate based on action and recipient's current reputation\n    donor_rep = current_reputation\n    # We need recipient reputation? Not directly passed, but we can infer from observation?\n    # In game, the recipient's reputation is not directly observable. This evaluation only uses donor's rep.\n    # For Stern, we consider the recipient's reputation. Since we don't have it, we'll approximate by\n    # maintaining our own assessment of the recipient. We can use a global dict, but for simplicity,\n    # we'll assume we have no access. Let's use the observation to set recipient's rep from our memory.\n    # Actually, the problem says we can maintain private state. Let's implement a Stern-like rule without external state.\n    # Since we cannot access recipient rep here, we'll use a simpler rule: if action is donate, increase rep;\n    # if not donate, decrease. This is basic image scoring.\n    # To differentiate, we'll use observation['recipient'] and my_history? Not sufficient.\n    # Let's make a rule: if donate, +0.3 if recipient is unknown, else if recipient is known good? Too complex.\n    # Instead, use a constant update: donate +0.3, not_donate -0.3.\n    if observation[\"action\"] == \"donate\":\n        return max(-1.0, min(1.0, current_reputation + 0.3))\n    else:\n        return max(-1.0, min(1.0, current_reputation - 0.3))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Stern: donate only if recipient reputation > 0.8 (strict)\n    return recipient_reputation > 0.5"
+    },
+    {
+      "agent_id": 13,
+      "strategy_id": "9f3d595cf5e3",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "c55995c25966",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Always defect: ignore observations, return unchanged\n    return current_reputation\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Never donate\n    return True"
+    },
+    {
+      "agent_id": 14,
+      "strategy_id": "c55995c25966",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "c55995c25966",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Always defect: ignore observations, return unchanged\n    return current_reputation\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Never donate\n    return False"
+    }
+  ],
+  "timestamp": "2026-05-09T12:13:46.342016"
+}

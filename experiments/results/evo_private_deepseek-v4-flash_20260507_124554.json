@@ -1,0 +1,180 @@
+{
+  "config": {
+    "population_size": 10,
+    "num_rounds_per_gen": 20,
+    "benefit": 2,
+    "cost": 1,
+    "observability": "private",
+    "observability_p": 0.3,
+    "elite_count": 2,
+    "num_eliminate": 3,
+    "llm_provider": "openai",
+    "llm_model": "deepseek-v4-flash",
+    "seed": 1
+  },
+  "trajectory": [
+    {
+      "fitness_mean": 9.6,
+      "fitness_std": 7.059745037889116,
+      "fitness_max": 22.0,
+      "fitness_min": -2.0,
+      "cooperation_rate_mean": 0.48,
+      "cooperation_rate_std": 0.3682390527904394,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 0,
+      "num_survivors": 7,
+      "num_eliminated": 3,
+      "num_children": 3
+    },
+    {
+      "fitness_mean": 5.4,
+      "fitness_std": 7.977468270071652,
+      "fitness_max": 15.0,
+      "fitness_min": -12.0,
+      "cooperation_rate_mean": 0.26999999999999996,
+      "cooperation_rate_std": 0.3333166662499792,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 1,
+      "num_survivors": 7,
+      "num_eliminated": 3,
+      "num_children": 3
+    },
+    {
+      "fitness_mean": 4.4,
+      "fitness_std": 5.257375771237966,
+      "fitness_max": 10.0,
+      "fitness_min": -8.0,
+      "cooperation_rate_mean": 0.22000000000000003,
+      "cooperation_rate_std": 0.2830194339616981,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 2,
+      "num_survivors": 7,
+      "num_eliminated": 3,
+      "num_children": 3
+    },
+    {
+      "fitness_mean": 1.8,
+      "fitness_std": 4.142463035441596,
+      "fitness_max": 8.0,
+      "fitness_min": -6.0,
+      "cooperation_rate_mean": 0.09,
+      "cooperation_rate_std": 0.16401219466856726,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 3,
+      "num_survivors": 7,
+      "num_eliminated": 3,
+      "num_children": 3
+    },
+    {
+      "fitness_mean": 0.7,
+      "fitness_std": 3.287856444554719,
+      "fitness_max": 8.0,
+      "fitness_min": -6.0,
+      "cooperation_rate_mean": 0.034999999999999996,
+      "cooperation_rate_std": 0.08958236433584459,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 4,
+      "num_survivors": 7,
+      "num_eliminated": 3,
+      "num_children": 3
+    }
+  ],
+  "final_population": [
+    {
+      "agent_id": 0,
+      "strategy_id": "35506459e284",
+      "fitness": 8.0,
+      "cooperation_rate": 0.0,
+      "generation": 1,
+      "parent_id": "8076c2256afc",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Reciprocal altruism variant: donate to a recipient if they have ever donated to this agent.\n    Initially never donates (like the original), but builds cooperation based on past received help.\n    \"\"\"\n    for entry in my_history:\n        # Check if this agent was the recipient and the partner (current recipient) donated\n        if entry['role'] == 'recipient' and entry['partner'] == recipient_id and entry.get('action') is True:\n            return True\n    return False"
+    },
+    {
+      "agent_id": 1,
+      "strategy_id": "5d1391fa7011",
+      "fitness": 3.0,
+      "cooperation_rate": 0.05,
+      "generation": 1,
+      "parent_id": "8076c2256afc",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Donate if my historical donation rate is below 50%, otherwise do not donate.\n    This is a variant of the original 'never donate' strategy that introduces\n    a simple adaptive behaviour based on the agent's own past actions.\n    \"\"\"\n    # Count donations in my own history\n    donations = 0\n    for entry in my_history:\n        # Assuming each entry has an 'action' key indicating whether I donated\n        # If not, fallback to checking 'role' or similar; for safety use get\n        if entry.get('action', True):  # default to True if missing (cooperative assumption)\n            donations += 1\n    total_actions = len(my_history)\n    # On first round, donate to start cooperatively\n    if total_actions == 0:\n        return True\n    # Donate if donation rate is below 0.5\n    return donations / total_actions < 0.5"
+    },
+    {
+      "agent_id": 2,
+      "strategy_id": "96b9df3f1943",
+      "fitness": 2.0,
+      "cooperation_rate": 0.0,
+      "generation": 3,
+      "parent_id": "42ec7e58490f",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Forgiving conditional cooperator: donates to a recipient if the recipient\n    has donated to the agent in at least half of the last 5 interactions.\n    If no history exists, donates by default (generous start).\n    \"\"\"\n    # Initialize persistent memory on first call\n    if not hasattr(strategy, 'partner_history'):\n        strategy.partner_history = {}  # partner_id -> list of bool (donated)\n\n    # Update memory with all past interactions where the agent was the recipient\n    for entry in my_history:\n        if entry.get('role') == 'recipient':\n            partner = entry['partner']\n            donated = entry.get('donated', False)\n            if partner not in strategy.partner_history:\n                strategy.partner_history[partner] = []\n            # Keep only the last 5 interactions per partner\n            strategy.partner_history[partner].append(donated)\n            if len(strategy.partner_history[partner]) > 5:\n                strategy.partner_history[partner].pop(0)\n\n    # Decision logic\n    history = strategy.partner_history.get(recipient_id, [])\n    if not history:\n        # No previous interactions \u2013 default to donate (generous)\n        return True\n    # Donate if the recipient donated in at least half of recent interactions\n    donation_rate = sum(history) / len(history)\n    return donation_rate >= 0.5"
+    },
+    {
+      "agent_id": 3,
+      "strategy_id": "e9ff9f9331f7",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"Reciprocate based on recipient's last action toward us (like TFT but with default defect if no history).\"\"\"\n    for entry in reversed(my_history):\n        if entry[\"role\"] == \"recipient\" and entry[\"partner\"] == recipient_id:\n            return entry[\"partner_action\"] == \"donate\"\n    return False  # Default defect when no prior interaction"
+    },
+    {
+      "agent_id": 4,
+      "strategy_id": "9dc40ba6ac51",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 3,
+      "parent_id": "42ec7e58490f",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Average-based conditional cooperator: donates if the recipient's\n    historical donation rate to the agent (when the agent was the recipient)\n    is at least 0.5.  Otherwise does not donate.\n    Tracks all past interactions per partner.\n    \"\"\"\n    # Rebuild partner donation history from my_history each call\n    # (sufficiently efficient for small populations and rounds)\n    from collections import defaultdict\n    partner_donations = defaultdict(list)\n\n    for entry in my_history:\n        if entry.get('role') == 'recipient':\n            partner = entry['partner']\n            donated = entry.get('donated', False)\n            partner_donations[partner].append(donated)\n\n    # Get history for the current recipient\n    donations = partner_donations.get(recipient_id, [])\n    if not donations:\n        return False\n\n    # Donate if donation rate >= 0.5\n    return sum(donations) / len(donations) >= 0.5"
+    },
+    {
+      "agent_id": 5,
+      "strategy_id": "8076c2256afc",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"Never donate.\"\"\"\n    return False"
+    },
+    {
+      "agent_id": 6,
+      "strategy_id": "8076c2256afc",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"Never donate.\"\"\"\n    return False"
+    },
+    {
+      "agent_id": 7,
+      "strategy_id": "0e30dacddb94",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "35506459e284",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Variant of reciprocal altruism: donate to a recipient only if they have donated to this agent\n    at least twice, or at least once if the game has progressed beyond round 5.\n    This introduces a higher trust threshold initially but becomes more forgiving later.\n    \"\"\"\n    received_count = 0\n    for entry in my_history:\n        if entry['role'] == 'recipient' and entry['partner'] == recipient_id and entry.get('action') is True:\n            received_count += 1\n\n    # Threshold: need at least 2 donations to cooperate\n    if received_count >= 2:\n        return True\n    # Later in the game, a single prior donation suffices (forgiveness)\n    if round_num > 5 and received_count == 1:\n        return True\n    return False"
+    },
+    {
+      "agent_id": 8,
+      "strategy_id": "cca7498d7a48",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "35506459e284",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Cautious reciprocal altruism: donate to a recipient only if they have\n    donated to this agent at least twice in the past. This makes the agent\n    slower to start cooperating but may protect against exploitation.\n    \"\"\"\n    count = 0\n    for entry in my_history:\n        if entry['role'] == 'recipient' and entry['partner'] == recipient_id and entry.get('action') is True:\n            count += 1\n            if count >= 2:\n                return True\n    return False"
+    },
+    {
+      "agent_id": 9,
+      "strategy_id": "5527cbe81ae3",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "35506459e284",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Variant: donate to the recipient only if they have donated to this agent\n    more times than this agent has donated to them. This ensures the agent\n    only reciprocates when it is net ahead in received help.\n    \"\"\"\n    donated_to_me = 0\n    i_donated = 0\n    for entry in my_history:\n        if entry['partner'] == recipient_id:\n            if entry['role'] == 'recipient' and entry.get('action') is True:\n                donated_to_me += 1\n            elif entry['role'] == 'donor' and entry.get('action') is True:\n                i_donated += 1\n    return donated_to_me > i_donated"
+    }
+  ],
+  "timestamp": "2026-05-07T12:45:54.639813"
+}

@@ -1,0 +1,180 @@
+{
+  "config": {
+    "population_size": 10,
+    "num_rounds_per_gen": 20,
+    "benefit": 2,
+    "cost": 1,
+    "observability": "full",
+    "observability_p": 0.3,
+    "elite_count": 2,
+    "num_eliminate": 3,
+    "llm_provider": "openai",
+    "llm_model": "deepseek-v4-flash",
+    "seed": 1
+  },
+  "trajectory": [
+    {
+      "fitness_mean": 8.5,
+      "fitness_std": 7.419568720619818,
+      "fitness_max": 24.0,
+      "fitness_min": -2.0,
+      "cooperation_rate_mean": 0.425,
+      "cooperation_rate_std": 0.3970201506221063,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 0,
+      "num_survivors": 7,
+      "num_eliminated": 3,
+      "num_children": 3
+    },
+    {
+      "fitness_mean": 3.9,
+      "fitness_std": 2.879236009777594,
+      "fitness_max": 10.0,
+      "fitness_min": 0.0,
+      "cooperation_rate_mean": 0.195,
+      "cooperation_rate_std": 0.24438698819699875,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 1,
+      "num_survivors": 7,
+      "num_eliminated": 3,
+      "num_children": 3
+    },
+    {
+      "fitness_mean": 4.5,
+      "fitness_std": 6.576473218982953,
+      "fitness_max": 17.0,
+      "fitness_min": -8.0,
+      "cooperation_rate_mean": 0.225,
+      "cooperation_rate_std": 0.25714781741247583,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 2,
+      "num_survivors": 7,
+      "num_eliminated": 3,
+      "num_children": 3
+    },
+    {
+      "fitness_mean": 4.7,
+      "fitness_std": 9.445104552094698,
+      "fitness_max": 14.0,
+      "fitness_min": -10.0,
+      "cooperation_rate_mean": 0.23500000000000001,
+      "cooperation_rate_std": 0.33470135942359125,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 3,
+      "num_survivors": 7,
+      "num_eliminated": 3,
+      "num_children": 3
+    },
+    {
+      "fitness_mean": 3.9,
+      "fitness_std": 11.9870763741623,
+      "fitness_max": 16.0,
+      "fitness_min": -20.0,
+      "cooperation_rate_mean": 0.195,
+      "cooperation_rate_std": 0.3580851853958775,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 4,
+      "num_survivors": 7,
+      "num_eliminated": 3,
+      "num_children": 3
+    }
+  ],
+  "final_population": [
+    {
+      "agent_id": 0,
+      "strategy_id": "ab87171ef134",
+      "fitness": 16.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Strategy 2: Random 50/50\n    return random.random() < 0.5"
+    },
+    {
+      "agent_id": 1,
+      "strategy_id": "dbb0bf61b3fd",
+      "fitness": 16.0,
+      "cooperation_rate": 0.0,
+      "generation": 1,
+      "parent_id": "ab87171ef134",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Variant: donate with 70% probability (more cooperative)\n    return random.random() < 0.7"
+    },
+    {
+      "agent_id": 2,
+      "strategy_id": "ab87171ef134",
+      "fitness": 14.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Strategy 2: Random 50/50\n    return random.random() < 0.5"
+    },
+    {
+      "agent_id": 3,
+      "strategy_id": "ac0dda92e9a2",
+      "fitness": 12.0,
+      "cooperation_rate": 0.0,
+      "generation": 3,
+      "parent_id": "71c067ab4dc8",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Variant of pure defector: cooperate only if the recipient has donated to\n    this agent in a previous round (reciprocity). Otherwise, defect.\n    \"\"\"\n    # Search observations for any past round where the current recipient\n    # was the donor and we were the recipient, and they donated.\n    for obs in observations:\n        # Assume observation dict has keys 'donor', 'recipient', 'donated'\n        if (obs.get('donor') == recipient_id and\n            obs.get('recipient') == agent_id and\n            obs.get('donated') == True):\n            return True   # Cooperate: they helped us before\n    # No positive past interaction: defect\n    return False"
+    },
+    {
+      "agent_id": 4,
+      "strategy_id": "71c067ab4dc8",
+      "fitness": 10.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Strategy 1: Never donate (pure defector)\n    return False"
+    },
+    {
+      "agent_id": 5,
+      "strategy_id": "2cf0d5a12b3a",
+      "fitness": 4.0,
+      "cooperation_rate": 0.0,
+      "generation": 3,
+      "parent_id": "71c067ab4dc8",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Default defector behaviour: defect unless we have observed the recipient\n    # cooperating on their most recent turn.\n    for obs in observations:\n        if obs['agent_id'] == recipient_id:\n            # If the recipient's last known action was a donation, cooperate now.\n            if obs['action']:\n                return True\n            else:\n                return False\n    # No information about this recipient -> defect.\n    return False"
+    },
+    {
+      "agent_id": 6,
+      "strategy_id": "861d62587bbb",
+      "fitness": 4.0,
+      "cooperation_rate": 0.0,
+      "generation": 4,
+      "parent_id": "2cf0d5a12b3a",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Gather all observations for the recipient\n    recipient_obs = [obs for obs in observations if obs['agent_id'] == recipient_id]\n    if not recipient_obs:\n        # No information: defect\n        return False\n\n    # Count cooperative and defective actions observed\n    coop_count = sum(1 for obs in recipient_obs if obs['action'])\n    total_count = len(recipient_obs)\n    # Cooperate if majority (strictly more than half) of observed actions are cooperative\n    # Also cooperate if all observations are cooperative (including single observation)\n    # Changed from original: uses majority instead of just last action\n    if coop_count > total_count / 2:\n        return True\n    else:\n        return False"
+    },
+    {
+      "agent_id": 7,
+      "strategy_id": "307327202359",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "ab87171ef134",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Variant of random 50/50: donate on even rounds, not on odd rounds.\n    return round_num % 2 == 0"
+    },
+    {
+      "agent_id": 8,
+      "strategy_id": "b622b1ff550d",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "ab87171ef134",
+      "code": "import random\n\ndef strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Variant: donate on odd-numbered rounds, not on even rounds\n    return round_num % 2 == 1"
+    },
+    {
+      "agent_id": 9,
+      "strategy_id": "2a9f7230507b",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "dbb0bf61b3fd",
+      "code": "import random\n\ndef strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Check if the recipient ever donated to us in the past\n    recipient_cooperative = False\n    for obs in observations:\n        # Assume each observation dict has keys: 'round', 'donor', 'recipient', 'action' (bool True=donated)\n        if (obs.get('donor') == recipient_id and \n            obs.get('recipient') == agent_id and \n            obs.get('action') == True):\n            recipient_cooperative = True\n            break\n    \n    # Adjust donation probability based on past reciprocity\n    if recipient_cooperative:\n        prob = 0.9   # highly cooperative if they helped us\n    else:\n        prob = 0.3   # not so nice if they haven't helped\n    \n    return random.random() < prob"
+    }
+  ],
+  "timestamp": "2026-05-07T12:55:40.507737"
+}

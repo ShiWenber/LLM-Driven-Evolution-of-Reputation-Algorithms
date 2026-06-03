@@ -1,0 +1,225 @@
+{
+  "config": {
+    "population_size": 15,
+    "num_rounds_per_gen": 40,
+    "benefit": 3,
+    "cost": 1,
+    "observability": "partial_0.1",
+    "observability_p": 0.1,
+    "elite_count": 2,
+    "num_eliminate": 4,
+    "llm_provider": "openai",
+    "llm_model": "deepseek-v4-flash",
+    "seed": 0
+  },
+  "trajectory": [
+    {
+      "fitness_mean": 46.4,
+      "fitness_std": 19.137397942249095,
+      "fitness_max": 84.0,
+      "fitness_min": 11.0,
+      "cooperation_rate_mean": 0.5800000000000001,
+      "cooperation_rate_std": 0.4001249804748511,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 0,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 24.533333333333335,
+      "fitness_std": 13.826865958062305,
+      "fitness_max": 47.0,
+      "fitness_min": 2.0,
+      "cooperation_rate_mean": 0.30666666666666664,
+      "cooperation_rate_std": 0.3288194371113457,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 1,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 14.133333333333333,
+      "fitness_std": 7.526545614615571,
+      "fitness_max": 24.0,
+      "fitness_min": 0.0,
+      "cooperation_rate_mean": 0.1766666666666667,
+      "cooperation_rate_std": 0.27118054666382113,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 2,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 15.6,
+      "fitness_std": 9.945183088644807,
+      "fitness_max": 35.0,
+      "fitness_min": -9.0,
+      "cooperation_rate_mean": 0.19499999999999998,
+      "cooperation_rate_std": 0.28638552104927834,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 3,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 3.8666666666666667,
+      "fitness_std": 4.716872787015661,
+      "fitness_max": 15.0,
+      "fitness_min": -3.0,
+      "cooperation_rate_mean": 0.04833333333333333,
+      "cooperation_rate_std": 0.09637888196533975,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 4,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    }
+  ],
+  "final_population": [
+    {
+      "agent_id": 0,
+      "strategy_id": "5377b5927c14",
+      "fitness": 15.0,
+      "cooperation_rate": 0.0,
+      "generation": 1,
+      "parent_id": "b1363cf46e9b",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Decay old reputation and update based on observed action\n    alpha = 0.2  # weight of new observation\n    donation = 1.0 if observation['action'] == 'donate' else -1.0\n    new_reputation = (1 - alpha) * current_reputation + alpha * donation\n    # Keep within [-1, 1]\n    return max(-1.0, min(1.0, new_reputation))\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate only if recipient's reputation is sufficiently high (> 0.5)\n    return recipient_reputation > 0.5"
+    },
+    {
+      "agent_id": 1,
+      "strategy_id": "7120b80183bf",
+      "fitness": 12.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    return 0.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return False"
+    },
+    {
+      "agent_id": 2,
+      "strategy_id": "1c5094619a32",
+      "fitness": 9.0,
+      "cooperation_rate": 0.0,
+      "generation": 4,
+      "parent_id": "9cdec36d2ad1",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Exponential moving average: alpha controls how much weight new observations get\n    alpha = 0.2\n    # Map actions to updates (donate: +0.8, not donate: -1.0)\n    if observation[\"action\"] == \"donate\":\n        delta = 0.8\n    else:\n        delta = -1.0\n    # Update reputation with discount\n    new_rep = (1 - alpha) * current_reputation + alpha * delta\n    # Clamp to [-1, 1]\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Use own recent donation history to adjust threshold\n    if len(my_history) >= 5:\n        # Look at the last 5 rounds\n        recent = my_history[-5:]\n        # Count how many times we donated (entry['action'] is bool according to game logic)\n        donate_count = sum(1 for entry in recent if entry['action'])\n        recent_rate = donate_count / 5.0\n        # If we've been generous recently, use a lower threshold (more forgiving)\n        if recent_rate > 0.6:\n            threshold = 0.3\n        else:\n            threshold = 0.7\n    else:\n        # Early in the game, use a neutral threshold\n        threshold = 0.5\n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 3,
+      "strategy_id": "2b071cb7dbb2",
+      "fitness": 6.0,
+      "cooperation_rate": 0.0,
+      "generation": 3,
+      "parent_id": "aa1d02ee4103",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation['action'] == 'donate':\n        new_rep = current_reputation + 0.1\n    else:\n        new_rep = current_reputation - 0.2\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Count recent own donations (last up to 5 rounds)\n    recent_donations = sum(1 for entry in my_history[-5:] if entry['action'] == 'donate')\n    # Lower threshold if we have been cooperative recently\n    threshold = 0.3 if recent_donations >= 3 else 0.5\n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 4,
+      "strategy_id": "574bc652949d",
+      "fitness": 4.0,
+      "cooperation_rate": 0.125,
+      "generation": 3,
+      "parent_id": "948158fed6ec",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Exponential moving average: weight recent actions more\n    alpha = 0.95  # higher = slower decay\n    if observation[\"action\"] == \"donate\":\n        new_rep = alpha * current_reputation + (1 - alpha) * 1.0\n    else:\n        new_rep = alpha * current_reputation + (1 - alpha) * (-1.0)\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Donate if reputation is positive, otherwise defect\n    return recipient_reputation > 0.0"
+    },
+    {
+      "agent_id": 5,
+      "strategy_id": "9cdec36d2ad1",
+      "fitness": 3.0,
+      "cooperation_rate": 0.075,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Simple image scoring\n    delta = 1.0 if observation[\"action\"] == \"donate\" else -1.0\n    new_rep = current_reputation + delta\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Strict threshold: donate only to very good recipients\n    return recipient_reputation > 0.8"
+    },
+    {
+      "agent_id": 6,
+      "strategy_id": "7e9cf8466b24",
+      "fitness": 3.0,
+      "cooperation_rate": 0.0,
+      "generation": 1,
+      "parent_id": "948158fed6ec",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Exponential moving average: recent actions have more weight\n    alpha = 0.1  # weight of new observation\n    if observation[\"action\"] == \"donate\":\n        new_score = 1.0\n    else:\n        new_score = -1.0\n    new_rep = (1 - alpha) * current_reputation + alpha * new_score\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Donate only if reputation is high enough; otherwise defect\n    # Use a threshold that lowers over time to encourage cooperation later\n    threshold = 0.3 + 0.2 * (1 - round_num / 100)  # starts at 0.5, drops to 0.3\n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 7,
+      "strategy_id": "aa1d02ee4103",
+      "fitness": 3.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    return current_reputation - 0.1  # always decrease (suspicious)\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation > 0.5"
+    },
+    {
+      "agent_id": 8,
+      "strategy_id": "a481bfb56fdd",
+      "fitness": 3.0,
+      "cooperation_rate": 0.0,
+      "generation": 4,
+      "parent_id": "9cdec36d2ad1",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Weighted moving average with forgetting factor\n    alpha = 0.2\n    obs_val = 1.0 if observation[\"action\"] == \"donate\" else -1.0\n    new_rep = (1 - alpha) * current_reputation + alpha * obs_val\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Adjust threshold based on personal donation history\n    if not my_history:\n        my_donation_rate = 0.5\n    else:\n        donations = sum(1 for entry in my_history if entry['action'] == 'donate')\n        my_donation_rate = donations / len(my_history)\n    # If I donate a lot, be more generous (lower threshold); if I rarely donate, be stricter\n    threshold = 0.7 + 0.2 * (0.5 - my_donation_rate)\n    # Ensure threshold stays within reasonable range\n    threshold = max(0.3, min(0.9, threshold))\n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 9,
+      "strategy_id": "a61cf11764f9",
+      "fitness": 3.0,
+      "cooperation_rate": 0.0,
+      "generation": 4,
+      "parent_id": "9cdec36d2ad1",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Learning rate for reputation update\n    alpha = 0.1\n    # Map donation to +1, no donation to -1\n    obs_value = 1.0 if observation[\"action\"] == \"donate\" else -1.0\n    # Exponentially weighted moving average\n    new_rep = (1 - alpha) * current_reputation + alpha * obs_value\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Dynamic threshold that decreases over rounds: start generous, become more forgiving\n    threshold = max(0.5 - 0.01 * round_num, -0.5)\n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 10,
+      "strategy_id": "8992e831ab2a",
+      "fitness": 1.0,
+      "cooperation_rate": 0.05,
+      "generation": 2,
+      "parent_id": "8a485191502c",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Compute observation value: 1 for donate, -1 for not donate\n    obs_val = 1.0 if observation['action'] == 'donate' else -1.0\n    # Exponential moving average: 90% old reputation, 10% new observation\n    new_rep = 0.9 * current_reputation + 0.1 * obs_val\n    # Clamp to [-1, 1]\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Base threshold\n    threshold = 0.5\n    # Early rounds: be generous to explore\n    if round_num < 5:\n        threshold = -0.5\n    # If we have enough history, adjust threshold based on partner cooperativeness\n    if len(my_history) >= 5:\n        # Count how many times partner donated to us\n        partner_donations = sum(1 for entry in my_history if entry['partner_action'] == 'donate')\n        coop_ratio = partner_donations / len(my_history)\n        # If partners have been uncooperative, demand higher reputation\n        if coop_ratio < 0.4:\n            threshold = 0.8\n        else:\n            threshold = 0.5\n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 11,
+      "strategy_id": "568c7ab1d2c9",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "7120b80183bf",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Update reputation: +0.2 for donation, -0.1 for no donation\n    if observation['action'] == 'donate':\n        new_rep = min(1.0, current_reputation + 0.2)\n    else:\n        new_rep = max(-1.0, current_reputation - 0.1)\n    return new_rep\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate if reputation is not too negative; defect otherwise\n    # Add a small exploration in early rounds\n    if round_num <= 10:\n        return True\n    return recipient_reputation > -0.3"
+    },
+    {
+      "agent_id": 12,
+      "strategy_id": "dc22c3408ac7",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "a481bfb56fdd",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Use a moderate forgetting factor (more stable than original)\n    alpha = 0.15\n    # Slightly reward donations more than punishing non-donations? No, symmetric.\n    obs_val = 1.0 if observation[\"action\"] == \"donate\" else -1.0\n    new_rep = (1 - alpha) * current_reputation + alpha * obs_val\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Calculate personal donation rate from own history\n    if not my_history:\n        my_donation_rate = 0.5\n    else:\n        donations = sum(1 for entry in my_history if entry['action'] == 'donate')\n        my_donation_rate = donations / len(my_history)\n    # Base threshold, adjusted by own donation rate (narrower range than original)\n    threshold = 0.5 + 0.2 * (0.5 - my_donation_rate)  # yields 0.3\u20130.7\n    # Clamp to a narrower range for clearer behavior\n    threshold = max(0.3, min(0.7, threshold))\n    # Early rounds: be more trusting to build reputation\n    if round_num < 20:\n        threshold -= 0.1\n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 13,
+      "strategy_id": "860b04e6197c",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "5377b5927c14",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # More forgiving: not donating is less penalized, and weight on new observation is moderate.\n    alpha = 0.3\n    if observation['action'] == 'donate':\n        donation_value = 1.0\n    else:\n        donation_value = -0.5  # less harsh on non-donation\n    new_reputation = (1 - alpha) * current_reputation + alpha * donation_value\n    return max(-1.0, min(1.0, new_reputation))\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Base threshold: donate if reputation is non-negative\n    base_decision = recipient_reputation > 0.0\n\n    # Additional condition: if we have donated in at least 3 of the last 5 rounds,\n    # relax the threshold to -0.3 (more generous)\n    if round_num > 10 and len(my_history) >= 5:\n        recent_donations = sum(1 for h in my_history[-5:] if h['action'] == 'donate')\n        if recent_donations >= 3:\n            # More generous: donate even if reputation slightly negative\n            return recipient_reputation > -0.3\n\n    return base_decision"
+    },
+    {
+      "agent_id": 14,
+      "strategy_id": "50dfb66f4d71",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "1c5094619a32",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Higher alpha for early rounds to adapt quickly\n    if round_num < 10:\n        alpha = 0.4\n    else:\n        alpha = 0.2\n\n    # Score donations more positively, punish non-donations less harshly\n    if observation[\"action\"] == \"donate\":\n        delta = 1.0\n    else:\n        delta = -0.5\n\n    # Recency bias: if we have donated in the last 3 rounds, boost the positive update\n    recent_count = sum(1 for entry in my_history[-3:] if entry['action'])\n    if observation[\"action\"] == \"donate\" and recent_count >= 2:\n        delta += 0.2  # extra reward for consistent generosity\n\n    new_rep = (1 - alpha) * current_reputation + alpha * delta\n    return max(-1.0, min(1.0, new_rep))\n\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Base thresholds more generous early, more demanding later\n    if round_num <= 5:\n        base_threshold = 0.2\n    elif round_num <= 15:\n        base_threshold = 0.4\n    else:\n        base_threshold = 0.6\n\n    # Use own donation rate to adjust\n    if len(my_history) >= 5:\n        recent_own = my_history[-5:]\n        own_donate_count = sum(1 for entry in recent_own if entry['action'])\n        own_donate_rate = own_donate_count / 5.0\n    else:\n        own_donate_rate = 0.5  # neutral assumption early\n\n    # Use received donations (partner_action) to adjust\n    if len(my_history) >= 5:\n        recent_own = my_history[-5:]\n        received_donate_count = sum(1 for entry in recent_own if entry.get('partner_action'))\n        received_rate = received_donate_count / 5.0\n    else:\n        received_rate = 0.5\n\n    # If we have been generous and also well-treated, lower threshold (more forgiving)\n    if own_donate_rate > 0.6 and received_rate > 0.6:\n        threshold = base_threshold - 0.2\n    elif own_donate_rate < 0.3 and received_rate < 0.3:\n        # If both parties have been stingy, raise threshold\n        threshold = base_threshold + 0.2\n    else:\n        threshold = base_threshold\n\n    threshold = max(-1.0, min(1.0, threshold))\n    return recipient_reputation > threshold"
+    }
+  ],
+  "timestamp": "2026-05-08T21:30:14.229362"
+}

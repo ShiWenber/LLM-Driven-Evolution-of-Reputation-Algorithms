@@ -1,0 +1,180 @@
+{
+  "config": {
+    "population_size": 10,
+    "num_rounds_per_gen": 20,
+    "benefit": 2,
+    "cost": 1,
+    "observability": "full",
+    "observability_p": 0.3,
+    "elite_count": 2,
+    "num_eliminate": 3,
+    "llm_provider": "openai",
+    "llm_model": "deepseek-v4-flash",
+    "seed": 0
+  },
+  "trajectory": [
+    {
+      "fitness_mean": 12.2,
+      "fitness_std": 3.7094473981982814,
+      "fitness_max": 18.0,
+      "fitness_min": 8.0,
+      "cooperation_rate_mean": 0.6100000000000001,
+      "cooperation_rate_std": 0.37067505985701277,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 0,
+      "num_survivors": 7,
+      "num_eliminated": 3,
+      "num_children": 3
+    },
+    {
+      "fitness_mean": 12.9,
+      "fitness_std": 9.115371632577578,
+      "fitness_max": 26.0,
+      "fitness_min": -1.0,
+      "cooperation_rate_mean": 0.6449999999999999,
+      "cooperation_rate_std": 0.35878266401820474,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 1,
+      "num_survivors": 7,
+      "num_eliminated": 3,
+      "num_children": 3
+    },
+    {
+      "fitness_mean": 8.5,
+      "fitness_std": 6.391400472509918,
+      "fitness_max": 20.0,
+      "fitness_min": -1.0,
+      "cooperation_rate_mean": 0.425,
+      "cooperation_rate_std": 0.343693177121688,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 2,
+      "num_survivors": 7,
+      "num_eliminated": 3,
+      "num_children": 3
+    },
+    {
+      "fitness_mean": 9.1,
+      "fitness_std": 7.489325737341113,
+      "fitness_max": 18.0,
+      "fitness_min": -6.0,
+      "cooperation_rate_mean": 0.45499999999999996,
+      "cooperation_rate_std": 0.39525308347943344,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 3,
+      "num_survivors": 7,
+      "num_eliminated": 3,
+      "num_children": 3
+    },
+    {
+      "fitness_mean": 6.3,
+      "fitness_std": 7.114070564732965,
+      "fitness_max": 14.0,
+      "fitness_min": -6.0,
+      "cooperation_rate_mean": 0.315,
+      "cooperation_rate_std": 0.39689419244932267,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 4,
+      "num_survivors": 7,
+      "num_eliminated": 3,
+      "num_children": 3
+    }
+  ],
+  "final_population": [
+    {
+      "agent_id": 0,
+      "strategy_id": "7cf464cd90ba",
+      "fitness": 14.0,
+      "cooperation_rate": 0.0,
+      "generation": 4,
+      "parent_id": "7a9e8ea627f6",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Variant: donate if the recipient has donated to us in at least half of the observed interactions.\n    # If no interactions recorded, default to not donating.\n    total_interactions = 0\n    donations_received = 0\n    for obs in observations:\n        if obs['donor'] == recipient_id and obs['recipient'] == agent_id:\n            total_interactions += 1\n            if obs['donated']:\n                donations_received += 1\n    if total_interactions == 0:\n        return False\n    # Donate if majority of observed actions were cooperative (>= 50%)\n    return donations_received / total_interactions >= 0.5"
+    },
+    {
+      "agent_id": 1,
+      "strategy_id": "4fc4e6e794d3",
+      "fitness": 14.0,
+      "cooperation_rate": 0.0,
+      "generation": 4,
+      "parent_id": "8076c2256afc",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Donate to the recipient if they have ever donated to me in the past.\n    Otherwise, do not donate (matching the original default).\n    \"\"\"\n    # Count how many times the current recipient has donated to me\n    donations_received = 0\n    for obs in observations:\n        if (obs['agent'] == recipient_id and\n            obs['recipient'] == agent_id and\n            obs['donated']):\n            donations_received += 1\n    # Reciprocate: donate only if they have donated to me at least once\n    return donations_received > 0"
+    },
+    {
+      "agent_id": 2,
+      "strategy_id": "7a9e8ea627f6",
+      "fitness": 12.0,
+      "cooperation_rate": 0.0,
+      "generation": 2,
+      "parent_id": "b5d11b25a14a",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Tit-for-Tat variant: donate if the recipient donated to us in the last observed interaction.\n    # If no prior interaction, default to not donating.\n    latest_obs = None\n    for obs in observations:\n        if obs['donor'] == recipient_id and obs['recipient'] == agent_id:\n            if latest_obs is None or obs['round'] > latest_obs['round']:\n                latest_obs = obs\n    if latest_obs and latest_obs['donated']:\n        return True\n    return False"
+    },
+    {
+      "agent_id": 3,
+      "strategy_id": "7910fa4a45c6",
+      "fitness": 12.0,
+      "cooperation_rate": 0.0,
+      "generation": 2,
+      "parent_id": "b5d11b25a14a",
+      "code": "_donation_count = 0\n\ndef strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    global _donation_count\n    if _donation_count < 5:\n        _donation_count += 1\n        return True\n    else:\n        return False"
+    },
+    {
+      "agent_id": 4,
+      "strategy_id": "b5d11b25a14a",
+      "fitness": 10.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "import random\n\ndef strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Never donate\n    return False"
+    },
+    {
+      "agent_id": 5,
+      "strategy_id": "8076c2256afc",
+      "fitness": 6.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"Never donate.\"\"\"\n    return False"
+    },
+    {
+      "agent_id": 6,
+      "strategy_id": "0c7c152d52ea",
+      "fitness": 5.0,
+      "cooperation_rate": 0.65,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"Tit-for-tat: cooperate if recipient last donated to me when I was recipient, else defect.\"\"\"\n    # Find last time I was recipient with this partner\n    for entry in reversed(my_history):\n        if entry[\"role\"] == \"recipient\" and entry[\"partner\"] == recipient_id:\n            return entry[\"partner_action\"] == \"donate\"\n    # No prior interaction: cooperate (generous start)\n    return True"
+    },
+    {
+      "agent_id": 7,
+      "strategy_id": "92c6e6cfddeb",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "7cf464cd90ba",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Variant: donate if the recipient has donated to us in more than half of observed interactions.\n    # If no interactions recorded, default to donating (more cooperative initially).\n    total_interactions = 0\n    donations_received = 0\n    for obs in observations:\n        if obs['donor'] == recipient_id and obs['recipient'] == agent_id:\n            total_interactions += 1\n            if obs['donated']:\n                donations_received += 1\n    if total_interactions == 0:\n        return True  # changed from False to True\n    # Donate if recipient donated strictly more than half of the time\n    return donations_received / total_interactions > 0.5"
+    },
+    {
+      "agent_id": 8,
+      "strategy_id": "2108ef88d0ac",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "4fc4e6e794d3",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Donate to the recipient only if they have donated to me at least twice\n    in the past. This is stricter than the original (which required only one).\n    \"\"\"\n    donations_received = 0\n    for obs in observations:\n        if (obs['agent'] == recipient_id and\n            obs['recipient'] == agent_id and\n            obs['donated']):\n            donations_received += 1\n    # Require at least two prior donations to reciprocate\n    return donations_received >= 2"
+    },
+    {
+      "agent_id": 9,
+      "strategy_id": "110aaa675041",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "7a9e8ea627f6",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Majority-based conditional cooperation.\n    Donate if the recipient has donated to us in the majority of past interactions.\n    If no prior interaction, default to not donating.\n    \"\"\"\n    total_interactions = 0\n    total_donations = 0\n    for obs in observations:\n        if obs['donor'] == recipient_id and obs['recipient'] == agent_id:\n            total_interactions += 1\n            if obs['donated']:\n                total_donations += 1\n    if total_interactions == 0:\n        return False\n    # Donate if recipient donated to us in more than half of the interactions\n    # In case of a tie (exactly half), we also donate to encourage cooperation.\n    return total_donations >= total_interactions / 2"
+    }
+  ],
+  "timestamp": "2026-05-07T12:50:22.508698"
+}

@@ -1,0 +1,295 @@
+{
+  "config": {
+    "population_size": 15,
+    "num_rounds_per_gen": 40,
+    "benefit": 3,
+    "cost": 1,
+    "observability": "full",
+    "observability_p": 0.3,
+    "elite_count": 2,
+    "num_eliminate": 4,
+    "llm_provider": "openai",
+    "llm_model": "deepseek-v4-flash",
+    "seed": 2
+  },
+  "trajectory": [
+    {
+      "fitness_mean": 41.333333333333336,
+      "fitness_std": 11.72272247484441,
+      "fitness_max": 61.0,
+      "fitness_min": 14.0,
+      "cooperation_rate_mean": 0.5166666666666667,
+      "cooperation_rate_std": 0.357382459309662,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 0,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 37.6,
+      "fitness_std": 18.0288657435791,
+      "fitness_max": 70.0,
+      "fitness_min": 7.0,
+      "cooperation_rate_mean": 0.47,
+      "cooperation_rate_std": 0.30675723300355934,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 1,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 36.8,
+      "fitness_std": 13.799516899756552,
+      "fitness_max": 57.0,
+      "fitness_min": 6.0,
+      "cooperation_rate_mean": 0.4599999999999999,
+      "cooperation_rate_std": 0.31315597817488117,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 2,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 47.86666666666667,
+      "fitness_std": 10.84967997479905,
+      "fitness_max": 74.0,
+      "fitness_min": 30.0,
+      "cooperation_rate_mean": 0.5983333333333333,
+      "cooperation_rate_std": 0.31177805496146704,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 3,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 47.06666666666667,
+      "fitness_std": 18.33563621900139,
+      "fitness_max": 84.0,
+      "fitness_min": 12.0,
+      "cooperation_rate_mean": 0.5883333333333333,
+      "cooperation_rate_std": 0.34044904986731206,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 4,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 47.733333333333334,
+      "fitness_std": 15.013179395303165,
+      "fitness_max": 72.0,
+      "fitness_min": 27.0,
+      "cooperation_rate_mean": 0.5966666666666668,
+      "cooperation_rate_std": 0.32543133769745586,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 5,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 44.53333333333333,
+      "fitness_std": 15.70505934050836,
+      "fitness_max": 72.0,
+      "fitness_min": 20.0,
+      "cooperation_rate_mean": 0.5566666666666666,
+      "cooperation_rate_std": 0.28686039965266885,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 6,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 51.733333333333334,
+      "fitness_std": 6.9423018917039006,
+      "fitness_max": 65.0,
+      "fitness_min": 40.0,
+      "cooperation_rate_mean": 0.6466666666666666,
+      "cooperation_rate_std": 0.2586610824139487,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 7,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 54.666666666666664,
+      "fitness_std": 11.417335746817448,
+      "fitness_max": 85.0,
+      "fitness_min": 38.0,
+      "cooperation_rate_mean": 0.6833333333333335,
+      "cooperation_rate_std": 0.3115374063504342,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 8,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 55.733333333333334,
+      "fitness_std": 10.343865600226811,
+      "fitness_max": 71.0,
+      "fitness_min": 37.0,
+      "cooperation_rate_mean": 0.6966666666666667,
+      "cooperation_rate_std": 0.29437315698880484,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 9,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    }
+  ],
+  "final_population": [
+    {
+      "agent_id": 0,
+      "strategy_id": "59a28361ad93",
+      "fitness": 71.0,
+      "cooperation_rate": 0.85,
+      "generation": 9,
+      "parent_id": "e7a6707f117e",
+      "code": "def strategy(agent_id, my_history, observations, round_num, recipient_id, population_size):\n    # Collect all past actions from this specific partner, in chronological order\n    partner_actions = []\n    for entry in my_history:\n        if entry['partner'] == recipient_id:\n            partner_actions.append(entry['partner_action'])\n\n    # No prior encounter: donate (cooperate)\n    if len(partner_actions) == 0:\n        return True\n\n    # Only one prior encounter: mirror that action\n    if len(partner_actions) == 1:\n        return partner_actions[0] == 'donate'\n\n    # For exactly two encounters, mirror the last action (standard tit-for-tat)\n    if len(partner_actions) == 2:\n        return partner_actions[-1] == 'donate'\n\n    # Three or more encounters: use tit-for-two-tats\n    # Defect only if the last two actions were both defections\n    last_two = partner_actions[-2:]\n    if all(action == 'not_donate' for action in last_two):\n        return False\n    else:\n        return True"
+    },
+    {
+      "agent_id": 1,
+      "strategy_id": "8646a5d6c3d7",
+      "fitness": 69.0,
+      "cooperation_rate": 0.825,
+      "generation": 9,
+      "parent_id": "e7a6707f117e",
+      "code": "def strategy(agent_id, my_history, observations, round_num, recipient_id, population_size):\n    # Collect all past actions from this specific partner, in chronological order\n    partner_actions = []\n    for entry in my_history:\n        if entry['partner'] == recipient_id:\n            partner_actions.append(entry['partner_action'])\n\n    # Less than 2 encounters: cooperate (donate)\n    if len(partner_actions) < 2:\n        return True\n\n    # Tit-for-two-tats: defect only if the last two actions were both defections\n    last_two = partner_actions[-2:]\n    if last_two[0] == 'not_donate' and last_two[1] == 'not_donate':\n        return False\n    else:\n        return True"
+    },
+    {
+      "agent_id": 2,
+      "strategy_id": "e7a6707f117e",
+      "fitness": 68.0,
+      "cooperation_rate": 0.85,
+      "generation": 7,
+      "parent_id": "5f02b86024ba",
+      "code": "def strategy(agent_id, my_history, observations, round_num, recipient_id, population_size):\n    # Collect all past actions from this specific partner, in chronological order\n    partner_actions = []\n    for entry in my_history:\n        if entry['partner'] == recipient_id:\n            partner_actions.append(entry['partner_action'])\n\n    # No prior encounter: donate (cooperate)\n    if len(partner_actions) == 0:\n        return True\n\n    # Only one prior encounter: mirror that action\n    if len(partner_actions) == 1:\n        return partner_actions[0] == 'donate'\n\n    # For exactly two encounters, mirror the last action (standard tit-for-tat)\n    if len(partner_actions) == 2:\n        return partner_actions[-1] == 'donate'\n\n    # Three or more encounters: use tit-for-three-tats\n    # Defect only if the last three actions were all defections\n    last_three = partner_actions[-3:]\n    if all(action == 'not_donate' for action in last_three):\n        return False\n    else:\n        return True"
+    },
+    {
+      "agent_id": 3,
+      "strategy_id": "1111b59ad15a",
+      "fitness": 64.0,
+      "cooperation_rate": 0.95,
+      "generation": 4,
+      "parent_id": "2c92b5784318",
+      "code": "def strategy(agent_id, my_history, observations, round_num, recipient_id, population_size):\n    # Tit-for-two-tats: cooperate unless the partner defected in the last two interactions.\n    # If there is little or no history, cooperate.\n    last_actions = []\n    for entry in reversed(my_history):\n        if entry['partner'] == recipient_id:\n            last_actions.append(entry['partner_action'])\n            if len(last_actions) == 2:\n                break\n\n    if len(last_actions) < 2:\n        # Not enough history to judge two defections -> cooperate\n        return True\n    else:\n        # Only defect if both of the last two interactions were defections\n        if last_actions[0] == 'not_donate' and last_actions[1] == 'not_donate':\n            return False\n        else:\n            return True"
+    },
+    {
+      "agent_id": 4,
+      "strategy_id": "a69ca99c3dcd",
+      "fitness": 60.0,
+      "cooperation_rate": 0.9,
+      "generation": 8,
+      "parent_id": "b07f3bbf095a",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Variant: Tit-for-two-tats \u2013 defect only after two consecutive defections\n    import random\n\n    # Collect the last up to 2 interactions with this partner, in reverse chronological order\n    last_actions = []  # most recent first\n    for entry in reversed(my_history):\n        if entry[\"partner\"] == recipient_id:\n            # Extract the partner's action using the same logic as the original\n            if entry[\"role\"] == \"donor\":\n                partner_act = entry[\"partner_action\"]\n            else:\n                partner_act = entry[\"action\"]\n            last_actions.append(partner_act)\n            if len(last_actions) == 2:\n                break\n\n    # If we have two interactions and both were defections, defect\n    if len(last_actions) >= 2:\n        if last_actions[0] == 'not_donate' and last_actions[1] == 'not_donate':\n            return False\n        else:\n            return True\n    # If only one interaction, forgive (cooperate) regardless of its outcome\n    elif len(last_actions) == 1:\n        return True\n    # No previous interaction: cooperate\n    else:\n        return True"
+    },
+    {
+      "agent_id": 5,
+      "strategy_id": "8ba5fc8ab379",
+      "fitness": 59.0,
+      "cooperation_rate": 0.025,
+      "generation": 4,
+      "parent_id": "ce5457dc57a6",
+      "code": "def strategy(agent_id, my_history, observations, round_num, recipient_id, population_size):\n    \"\"\"\n    Variant of 'never donate' that donates only on the very first round (round 0).\n    Afterwards, it never donates. This is a minimal change that leads to different\n    behavior while remaining simple and deterministic.\n    \"\"\"\n    # Donate only on the first round\n    if round_num == 0:\n        return True\n    else:\n        return False"
+    },
+    {
+      "agent_id": 6,
+      "strategy_id": "53e86eab4544",
+      "fitness": 59.0,
+      "cooperation_rate": 0.475,
+      "generation": 6,
+      "parent_id": "52ef6aefd0b9",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Look at the last 2 interactions with this recipient\n    last_actions = []\n    for entry in reversed(my_history):\n        if entry[\"partner\"] == recipient_id:\n            if entry[\"role\"] == \"donor\":\n                partner_act = entry[\"partner_action\"]\n            else:\n                partner_act = entry[\"action\"]\n            last_actions.append(partner_act)\n            if len(last_actions) >= 2:\n                break\n\n    # If not enough history, cooperate (first impression)\n    if not last_actions:\n        return True\n\n    # If partner defected in any of the last 2 interactions, defect\n    if any(a == \"not_donate\" for a in last_actions):\n        return False\n    else:\n        return True"
+    },
+    {
+      "agent_id": 7,
+      "strategy_id": "e1292ace6b5f",
+      "fitness": 59.0,
+      "cooperation_rate": 0.85,
+      "generation": 9,
+      "parent_id": "1111b59ad15a",
+      "code": "def strategy(agent_id, my_history, observations, round_num, recipient_id, population_size):\n    # Tit-for-tat: cooperate unless the partner defected in the most recent interaction.\n    # If there is no history with this partner, cooperate.\n    last_action = None\n    for entry in reversed(my_history):\n        if entry['partner'] == recipient_id:\n            last_action = entry['partner_action']\n            break\n\n    if last_action is None:\n        # No history -> cooperate\n        return True\n    else:\n        # Respond in kind: defect only if partner just defected\n        return last_action == 'donate'"
+    },
+    {
+      "agent_id": 8,
+      "strategy_id": "b07f3bbf095a",
+      "fitness": 58.0,
+      "cooperation_rate": 0.5,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Forgiving tit-for-tat: reciprocate but forgive defection with small probability\n    import random\n    last_interaction = None\n    for entry in reversed(my_history):\n        if entry[\"partner\"] == recipient_id:\n            last_interaction = entry\n            break\n    if last_interaction is None:\n        return True\n    else:\n        if last_interaction[\"role\"] == \"donor\":\n            partner_act = last_interaction[\"partner_action\"]\n        else:\n            partner_act = last_interaction[\"action\"]\n        if partner_act == \"donate\":\n            return True\n        else:\n            # Forgive with 20% probability\n            return random.random() < 0.2"
+    },
+    {
+      "agent_id": 9,
+      "strategy_id": "5f02b86024ba",
+      "fitness": 55.0,
+      "cooperation_rate": 0.8,
+      "generation": 5,
+      "parent_id": "dd71b15e92dd",
+      "code": "def strategy(agent_id, my_history, observations, round_num, recipient_id, population_size):\n    # Collect all past actions from this specific partner, in chronological order\n    partner_actions = []\n    for entry in my_history:\n        if entry['partner'] == recipient_id:\n            partner_actions.append(entry['partner_action'])\n\n    # No prior encounter: donate (cooperate)\n    if len(partner_actions) == 0:\n        return True\n\n    # Only one prior encounter: mirror that action\n    if len(partner_actions) == 1:\n        return partner_actions[0] == 'donate'\n\n    # Two or more encounters: use tit-for-two-tats\n    # Defect only if the last two actions were both defections\n    last_two = partner_actions[-2:]\n    if last_two[0] == 'not_donate' and last_two[1] == 'not_donate':\n        return False\n    else:\n        return True"
+    },
+    {
+      "agent_id": 10,
+      "strategy_id": "ea8b3bc8b797",
+      "fitness": 49.0,
+      "cooperation_rate": 0.875,
+      "generation": 5,
+      "parent_id": "2c92b5784318",
+      "code": "def strategy(agent_id, my_history, observations, round_num, recipient_id, population_size):\n    # Tit-for-Two-Tats: cooperate unless the recipient defected in the last two interactions.\n    # Get the last two actions from this recipient.\n    last_two_actions = []\n    for entry in reversed(my_history):\n        if entry['partner'] == recipient_id:\n            last_two_actions.append(entry['partner_action'])\n            if len(last_two_actions) == 2:\n                break\n\n    # If we have exactly two interactions and both were defections, defect.\n    if len(last_two_actions) == 2 and all(a == 'not_donate' for a in last_two_actions):\n        return False\n    else:\n        return True"
+    },
+    {
+      "agent_id": 11,
+      "strategy_id": "32e420fdd4b2",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "8646a5d6c3d7",
+      "code": "def strategy(agent_id, my_history, observations, round_num, recipient_id, population_size):\n    # Collect all past actions from this specific partner, in chronological order\n    partner_actions = []\n    for entry in my_history:\n        if entry['partner'] == recipient_id:\n            partner_actions.append(entry['partner_action'])\n\n    # First encounter: cooperate (donate)\n    if len(partner_actions) == 0:\n        return True\n\n    # Tit-for-tat: defect if the last action was defection\n    last_action = partner_actions[-1]\n    if last_action == 'not_donate':\n        return False\n    else:\n        return True"
+    },
+    {
+      "agent_id": 12,
+      "strategy_id": "5ea0050bae58",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "e7a6707f117e",
+      "code": "def strategy(agent_id, my_history, observations, round_num, recipient_id, population_size):\n    # Collect all past actions from this specific partner, in chronological order\n    partner_actions = []\n    for entry in my_history:\n        if entry['partner'] == recipient_id:\n            partner_actions.append(entry['partner_action'])\n\n    # No prior encounter: donate (cooperate)\n    if len(partner_actions) == 0:\n        return True\n\n    # Only one prior encounter: mirror that action\n    if len(partner_actions) == 1:\n        return partner_actions[0] == 'donate'\n\n    # For exactly two encounters, mirror the last action (standard tit-for-tat)\n    if len(partner_actions) == 2:\n        return partner_actions[-1] == 'donate'\n\n    # Three or more encounters: use a more aggressive tit-for-two-tats\n    # Defect only if the last two actions were both defections\n    last_two = partner_actions[-2:]\n    if all(action == 'not_donate' for action in last_two):\n        return False\n    else:\n        return True"
+    },
+    {
+      "agent_id": 13,
+      "strategy_id": "ab3cb06814b8",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "59a28361ad93",
+      "code": "def strategy(agent_id, my_history, observations, round_num, recipient_id, population_size):\n    # Collect partner's past actions in order of encounters\n    partner_actions = []\n    for entry in my_history:\n        if entry['partner'] == recipient_id:\n            partner_actions.append(entry['partner_action'])\n\n    # No prior encounter: be suspicious and defect\n    if len(partner_actions) == 0:\n        return False\n\n    # Only one prior encounter: mirror that action\n    if len(partner_actions) == 1:\n        return partner_actions[0] == 'donate'\n\n    # Two or more encounters: use a majority rule on the last three actions\n    # (if at least two of the last three are defections, defect; otherwise cooperate)\n    recent = partner_actions[-3:]\n    defection_count = sum(1 for a in recent if a == 'not_donate')\n    if defection_count >= 2:\n        return False\n    else:\n        return True"
+    },
+    {
+      "agent_id": 14,
+      "strategy_id": "6eaab9330d85",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "1111b59ad15a",
+      "code": "def strategy(agent_id, my_history, observations, round_num, recipient_id, population_size):\n    # Tit-for-three-tats: cooperate unless the partner defected in the last three interactions.\n    # If there is little or no history, cooperate.\n    last_actions = []\n    for entry in reversed(my_history):\n        if entry['partner'] == recipient_id:\n            last_actions.append(entry['partner_action'])\n            if len(last_actions) == 3:\n                break\n\n    if len(last_actions) < 3:\n        # Not enough history to judge three defections -> cooperate\n        return True\n    else:\n        # Only defect if all of the last three interactions were defections\n        if all(action == 'not_donate' for action in last_actions):\n            return False\n        else:\n            return True"
+    }
+  ],
+  "timestamp": "2026-05-07T18:10:32.263502"
+}

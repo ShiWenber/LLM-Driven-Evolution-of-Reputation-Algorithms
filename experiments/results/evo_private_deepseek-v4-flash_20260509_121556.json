@@ -1,0 +1,225 @@
+{
+  "config": {
+    "population_size": 15,
+    "num_rounds_per_gen": 40,
+    "benefit": 3,
+    "cost": 1,
+    "observability": "private",
+    "observability_p": 0.3,
+    "elite_count": 2,
+    "num_eliminate": 4,
+    "llm_provider": "openai",
+    "llm_model": "deepseek-v4-flash",
+    "seed": 1
+  },
+  "trajectory": [
+    {
+      "fitness_mean": 50.8,
+      "fitness_std": 24.53894863273486,
+      "fitness_max": 90.0,
+      "fitness_min": 11.0,
+      "cooperation_rate_mean": 0.635,
+      "cooperation_rate_std": 0.46384264573236467,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 0,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 34.8,
+      "fitness_std": 28.88875213642846,
+      "fitness_max": 75.0,
+      "fitness_min": -4.0,
+      "cooperation_rate_mean": 0.435,
+      "cooperation_rate_std": 0.47869614579605707,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 1,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 32.0,
+      "fitness_std": 29.671535181045147,
+      "fitness_max": 72.0,
+      "fitness_min": -10.0,
+      "cooperation_rate_mean": 0.4,
+      "cooperation_rate_std": 0.4898979485566356,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 2,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 21.333333333333332,
+      "fitness_std": 23.638010820615925,
+      "fitness_max": 48.0,
+      "fitness_min": -25.0,
+      "cooperation_rate_mean": 0.26666666666666666,
+      "cooperation_rate_std": 0.44221663871405337,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 3,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 5.333333333333333,
+      "fitness_std": 12.498888839501783,
+      "fitness_max": 15.0,
+      "fitness_min": -40.0,
+      "cooperation_rate_mean": 0.06666666666666667,
+      "cooperation_rate_std": 0.24944382578492943,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 4,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    }
+  ],
+  "final_population": [
+    {
+      "agent_id": 0,
+      "strategy_id": "39ad841137b8",
+      "fitness": 15.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Always defect: evaluation does not change reputation.\n    return current_reputation\n\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Never donate.\n    return False"
+    },
+    {
+      "agent_id": 1,
+      "strategy_id": "39ad841137b8",
+      "fitness": 12.0,
+      "cooperation_rate": 0.0,
+      "generation": 1,
+      "parent_id": "39ad841137b8",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Always defect: evaluation does not change reputation.\n    return current_reputation\n\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Never donate.\n    return False"
+    },
+    {
+      "agent_id": 2,
+      "strategy_id": "10103c4e6a60",
+      "fitness": 12.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Unconditional: keep reputation static at -0.5\n    return -0.5\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Never donate\n    return False"
+    },
+    {
+      "agent_id": 3,
+      "strategy_id": "39ad841137b8",
+      "fitness": 12.0,
+      "cooperation_rate": 0.0,
+      "generation": 4,
+      "parent_id": "39ad841137b8",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Always defect: evaluation does not change reputation.\n    return current_reputation\n\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Never donate.\n    return False"
+    },
+    {
+      "agent_id": 4,
+      "strategy_id": "10103c4e6a60",
+      "fitness": 9.0,
+      "cooperation_rate": 0.0,
+      "generation": 2,
+      "parent_id": "10103c4e6a60",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Unconditional: keep reputation static at -0.5\n    return -0.5\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Never donate\n    return False"
+    },
+    {
+      "agent_id": 5,
+      "strategy_id": "10103c4e6a60",
+      "fitness": 9.0,
+      "cooperation_rate": 0.0,
+      "generation": 3,
+      "parent_id": "10103c4e6a60",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Unconditional: keep reputation static at -0.5\n    return -0.5\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Never donate\n    return False"
+    },
+    {
+      "agent_id": 6,
+      "strategy_id": "bca7eeec2d70",
+      "fitness": 9.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    return current_reputation\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Always defect\n    return False"
+    },
+    {
+      "agent_id": 7,
+      "strategy_id": "dad4dc2be64e",
+      "fitness": 9.0,
+      "cooperation_rate": 0.0,
+      "generation": 4,
+      "parent_id": "dad4dc2be64e",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Unconditional: keep reputation static at -0.6\n    return -0.5\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Never donate\n    return False"
+    },
+    {
+      "agent_id": 8,
+      "strategy_id": "dad4dc2be64e",
+      "fitness": 6.0,
+      "cooperation_rate": 0.0,
+      "generation": 1,
+      "parent_id": "10103c4e6a60",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Unconditional: keep reputation static at -0.6\n    return -0.5\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Never donate\n    return False"
+    },
+    {
+      "agent_id": 9,
+      "strategy_id": "79e13b9da82c",
+      "fitness": 6.0,
+      "cooperation_rate": 0.0,
+      "generation": 3,
+      "parent_id": "1adb336a433b",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Strict: heavily penalize defection, small reward for donation\n    if observation['action'] == 'donate':\n        return min(0.8, current_reputation + 0.1)\n    else:\n        return max(-1.0, current_reputation - 0.5)\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Only donate if reputation is very high\n    return recipient_reputation >= 0.8"
+    },
+    {
+      "agent_id": 10,
+      "strategy_id": "1adb336a433b",
+      "fitness": 6.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Strict: heavily penalize defection, small reward for donation\n    if observation['action'] == 'donate':\n        return min(1.0, current_reputation + 0.1)\n    else:\n        return max(-1.0, current_reputation - 0.5)\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Only donate if reputation is very high\n    return recipient_reputation >= 0.8"
+    },
+    {
+      "agent_id": 11,
+      "strategy_id": "10103c4e6a60",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "10103c4e6a60",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Unconditional: keep reputation static at -0.5\n    return -0.5\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Never donate\n    return False"
+    },
+    {
+      "agent_id": 12,
+      "strategy_id": "39ad841137b8",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "39ad841137b8",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Always defect: evaluation does not change reputation.\n    return current_reputation\n\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Never donate.\n    return False"
+    },
+    {
+      "agent_id": 13,
+      "strategy_id": "27a8c3c458be",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "39ad841137b8",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Always defect: evaluation does not change reputation.\n    return current_reputation\n\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Never donate.\n    return True"
+    },
+    {
+      "agent_id": 14,
+      "strategy_id": "39ad841137b8",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "39ad841137b8",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Always defect: evaluation does not change reputation.\n    return current_reputation\n\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Never donate.\n    return False"
+    }
+  ],
+  "timestamp": "2026-05-09T12:15:56.926798"
+}

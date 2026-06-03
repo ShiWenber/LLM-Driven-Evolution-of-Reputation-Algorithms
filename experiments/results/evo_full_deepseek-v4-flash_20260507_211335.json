@@ -1,0 +1,107 @@
+{
+  "config": {
+    "population_size": 5,
+    "num_rounds_per_gen": 10,
+    "benefit": 3,
+    "cost": 1,
+    "observability": "full",
+    "observability_p": 0.3,
+    "elite_count": 1,
+    "num_eliminate": 1,
+    "llm_provider": "openai",
+    "llm_model": "deepseek-v4-flash",
+    "seed": 0
+  },
+  "trajectory": [
+    {
+      "fitness_mean": 20.0,
+      "fitness_std": 10.73312629199899,
+      "fitness_max": 38.0,
+      "fitness_min": 5.0,
+      "cooperation_rate_mean": 1.0,
+      "cooperation_rate_std": 0.0,
+      "valid_agents": 5,
+      "total_agents": 5,
+      "generation": 0,
+      "num_survivors": 4,
+      "num_eliminated": 1,
+      "num_children": 1
+    },
+    {
+      "fitness_mean": 14.8,
+      "fitness_std": 9.453041838477178,
+      "fitness_max": 31.0,
+      "fitness_min": 5.0,
+      "cooperation_rate_mean": 0.74,
+      "cooperation_rate_std": 0.37735924528226417,
+      "valid_agents": 5,
+      "total_agents": 5,
+      "generation": 1,
+      "num_survivors": 4,
+      "num_eliminated": 1,
+      "num_children": 1
+    },
+    {
+      "fitness_mean": 6.4,
+      "fitness_std": 4.715930449020639,
+      "fitness_max": 15.0,
+      "fitness_min": 3.0,
+      "cooperation_rate_mean": 0.32,
+      "cooperation_rate_std": 0.29257477676655586,
+      "valid_agents": 5,
+      "total_agents": 5,
+      "generation": 2,
+      "num_survivors": 4,
+      "num_eliminated": 1,
+      "num_children": 1
+    }
+  ],
+  "final_population": [
+    {
+      "agent_id": 0,
+      "strategy_id": "31c7b0bcc3ad",
+      "fitness": 15.0,
+      "cooperation_rate": 0.3,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 1,
+      "strategy_id": "9b9172233d68",
+      "fitness": 8.0,
+      "cooperation_rate": 0.7,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Generous: add 1 for donate, subtract 1 for not_donate but with a higher forgiveness threshold\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 0.5   # forgiving: smaller penalty\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Generous: donate unless reputation is very negative (<= -2)\n    # Also occasionally cooperate even with very negative reputation (5% chance)\n    if recipient_reputation > -2.0:\n        return True\n    else:\n        import random\n        return random.random() < 0.05"
+    },
+    {
+      "agent_id": 2,
+      "strategy_id": "957c646f74da",
+      "fitness": 3.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Track defections: decrease reputation for not donating, increase for donating\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 1.0\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Grim trigger: if any past partner defected against me, never donate again\n    for entry in my_history:\n        if entry[\"role\"] == \"recipient\" and entry[\"partner_action\"] == \"not_donate\":\n            return False\n    # Otherwise cooperate\n    return True"
+    },
+    {
+      "agent_id": 3,
+      "strategy_id": "b607094a3689",
+      "fitness": 3.0,
+      "cooperation_rate": 0.0,
+      "generation": 1,
+      "parent_id": "9b9172233d68",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Use exponential decay to give more weight to recent observations\n    decay = 0.9\n    base_update = 1.0 if observation[\"action\"] == \"donate\" else -0.5\n    # Be slightly stricter if reputation is already high (discourage free-riding)\n    if observation[\"action\"] != \"donate\" and current_reputation > 2.0:\n        base_update = -1.0\n    new_reputation = decay * current_reputation + base_update\n    # Clamp reputation to a reasonable range\n    return max(-5.0, min(5.0, new_reputation))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    import random\n    # Track personal donation history using function attribute\n    if not hasattr(decide, 'donation_count'):\n        decide.donation_count = 0\n        decide.total_decisions = 0\n    decide.total_decisions += 1\n\n    # Base threshold (more forgiving in early rounds)\n    threshold = -1.5 if round_num > 20 else -1.0\n\n    # Adjust threshold based on own recent generosity\n    if decide.total_decisions > 0:\n        donation_rate = decide.donation_count / decide.total_decisions\n        if donation_rate < 0.4:\n            # Be more generous to build reputation\n            threshold = -0.5\n        elif donation_rate > 0.8:\n            # Be more strict to avoid exploitation\n            threshold = -2.0\n\n    # Decision\n    if recipient_reputation > threshold:\n        decide.donation_count += 1\n        return True\n    else:\n        # Small chance to cooperate even with very negative reputation\n        return random.random() < 0.08"
+    },
+    {
+      "agent_id": 4,
+      "strategy_id": "6970fb782a86",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 3,
+      "parent_id": "9b9172233d68",
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Exponential moving average with recency weight alpha = 0.3\n    alpha = 0.3\n    val = 1.0 if observation[\"action\"] == \"donate\" else -1.0\n    new_rep = alpha * val + (1 - alpha) * current_reputation\n    # Clamp between -5 and 5 to keep reputation bounded\n    return max(-5.0, min(5.0, new_rep))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    import random\n\n    # Base threshold \u2013 donate only if reputation is positive (cautious)\n    threshold = 0.0\n\n    # Early rounds: more forgiving\n    if round_num < 20:\n        threshold = -2.0\n\n    # Count how many times we were exploited (we donated, partner didn't)\n    exploited = sum(\n        1 for entry in my_history\n        if entry.get(\"my_action\") == \"donate\" and entry.get(\"partner_action\") != \"donate\"\n    )\n    # If exploited often, become stricter\n    if exploited > 10:\n        threshold = 1.0\n\n    if recipient_reputation > threshold:\n        return True\n    else:\n        # Small chance of cooperation even below threshold\n        return random.random() < 0.03"
+    }
+  ],
+  "timestamp": "2026-05-07T21:13:35.254653"
+}

@@ -1,0 +1,75 @@
+{
+  "run_type": "evolutionary",
+  "timestamp": "2026-05-07T21:11:30.499524",
+  "config": {
+    "run": "evolutionary",
+    "observability": "full",
+    "p_values": null,
+    "population": 5,
+    "generations": 3,
+    "rounds": 10,
+    "eliminate": 1,
+    "elitism": 1,
+    "tournament": 2,
+    "models": "deepseek-v4-flash",
+    "mutation_temperature": 0.8,
+    "seeds": 1,
+    "output": "experiments/results/",
+    "benefit": 3,
+    "cost": 1
+  },
+  "trials_summary": [
+    {
+      "model": "deepseek-v4-flash",
+      "observability": "full",
+      "seed": 0,
+      "trajectory": [
+        {
+          "fitness_mean": 20.0,
+          "fitness_std": 10.73312629199899,
+          "fitness_max": 38.0,
+          "fitness_min": 5.0,
+          "cooperation_rate_mean": 1.0,
+          "cooperation_rate_std": 0.0,
+          "valid_agents": 5,
+          "total_agents": 5,
+          "generation": 0,
+          "num_survivors": 4,
+          "num_eliminated": 1,
+          "num_children": 1
+        },
+        {
+          "fitness_mean": 14.8,
+          "fitness_std": 9.453041838477178,
+          "fitness_max": 31.0,
+          "fitness_min": 5.0,
+          "cooperation_rate_mean": 0.74,
+          "cooperation_rate_std": 0.37735924528226417,
+          "valid_agents": 5,
+          "total_agents": 5,
+          "generation": 1,
+          "num_survivors": 4,
+          "num_eliminated": 1,
+          "num_children": 1
+        },
+        {
+          "fitness_mean": 6.4,
+          "fitness_std": 4.715930449020639,
+          "fitness_max": 15.0,
+          "fitness_min": 3.0,
+          "cooperation_rate_mean": 0.32,
+          "cooperation_rate_std": 0.29257477676655586,
+          "valid_agents": 5,
+          "total_agents": 5,
+          "generation": 2,
+          "num_survivors": 4,
+          "num_eliminated": 1,
+          "num_children": 1
+        }
+      ],
+      "final_mean_fitness": 5.8,
+      "final_mean_cooperation": 0.2,
+      "num_valid": 5
+    }
+  ]
+}

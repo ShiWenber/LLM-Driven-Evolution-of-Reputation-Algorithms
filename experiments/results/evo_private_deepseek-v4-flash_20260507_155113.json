@@ -1,0 +1,295 @@
+{
+  "config": {
+    "population_size": 15,
+    "num_rounds_per_gen": 40,
+    "benefit": 3,
+    "cost": 1,
+    "observability": "private",
+    "observability_p": 0.3,
+    "elite_count": 2,
+    "num_eliminate": 4,
+    "llm_provider": "openai",
+    "llm_model": "deepseek-v4-flash",
+    "seed": 1
+  },
+  "trajectory": [
+    {
+      "fitness_mean": 40.93333333333333,
+      "fitness_std": 12.876162299208392,
+      "fitness_max": 61.0,
+      "fitness_min": 11.0,
+      "cooperation_rate_mean": 0.5116666666666667,
+      "cooperation_rate_std": 0.38878728831528886,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 0,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 30.666666666666668,
+      "fitness_std": 14.704496666741852,
+      "fitness_max": 51.0,
+      "fitness_min": 2.0,
+      "cooperation_rate_mean": 0.38333333333333336,
+      "cooperation_rate_std": 0.364996194805127,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 1,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 30.266666666666666,
+      "fitness_std": 18.6564257622467,
+      "fitness_max": 75.0,
+      "fitness_min": -7.0,
+      "cooperation_rate_mean": 0.37833333333333335,
+      "cooperation_rate_std": 0.3425233163190824,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 2,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 19.2,
+      "fitness_std": 11.525045191523834,
+      "fitness_max": 39.0,
+      "fitness_min": -1.0,
+      "cooperation_rate_mean": 0.24000000000000002,
+      "cooperation_rate_std": 0.2608958923913266,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 3,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 12.8,
+      "fitness_std": 11.640160365447432,
+      "fitness_max": 36.0,
+      "fitness_min": -5.0,
+      "cooperation_rate_mean": 0.16000000000000003,
+      "cooperation_rate_std": 0.21790670786676886,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 4,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 12.4,
+      "fitness_std": 15.907231060118539,
+      "fitness_max": 30.0,
+      "fitness_min": -25.0,
+      "cooperation_rate_mean": 0.155,
+      "cooperation_rate_std": 0.3363034344160047,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 5,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 5.733333333333333,
+      "fitness_std": 12.374525804607178,
+      "fitness_max": 27.0,
+      "fitness_min": -34.0,
+      "cooperation_rate_mean": 0.07166666666666667,
+      "cooperation_rate_std": 0.24847311502230757,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 6,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 8.0,
+      "fitness_std": 13.93317384278734,
+      "fitness_max": 26.0,
+      "fitness_min": -30.0,
+      "cooperation_rate_mean": 0.1,
+      "cooperation_rate_std": 0.2647325694608303,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 7,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 4.4,
+      "fitness_std": 6.064102022008974,
+      "fitness_max": 12.0,
+      "fitness_min": -14.0,
+      "cooperation_rate_mean": 0.05500000000000001,
+      "cooperation_rate_std": 0.12622730819174324,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 8,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 2.933333333333333,
+      "fitness_std": 3.7321426672742413,
+      "fitness_max": 12.0,
+      "fitness_min": -7.0,
+      "cooperation_rate_mean": 0.03666666666666667,
+      "cooperation_rate_std": 0.08209073570683167,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 9,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    }
+  ],
+  "final_population": [
+    {
+      "agent_id": 0,
+      "strategy_id": "4d2a38306acb",
+      "fitness": 12.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "f74f4d39f7e6",
+      "code": "def strategy(agent_id, my_history, observations, round_num, recipient_id, population_size):\n    # Variant: base decision on a sliding window of recent rounds\n    window_size = 3\n    recent = my_history[-window_size:] if len(my_history) >= window_size else my_history\n    recent_donations = sum(1 for action in recent if action)\n    # Donate if fewer than half of recent rounds were donations\n    if recent_donations < len(recent) / 2:\n        return True\n    else:\n        return False"
+    },
+    {
+      "agent_id": 1,
+      "strategy_id": "4d64a056d369",
+      "fitness": 6.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "d93e41f1f091",
+      "code": "import random\n\ndef strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Check if the current recipient has ever donated to us\n    for obs in observations:\n        if obs.get('actor') == recipient_id and obs.get('recipient') == agent_id and obs.get('donated'):\n            return True  # Recipient has donated to us before \u2192 reciprocate\n    return False  # Otherwise, do not donate"
+    },
+    {
+      "agent_id": 2,
+      "strategy_id": "1f7f26d26bb2",
+      "fitness": 6.0,
+      "cooperation_rate": 0.0,
+      "generation": 9,
+      "parent_id": "bb68fd30bf01",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Variant of the original tit-for-tat: donate only if both the recipient\n    has donated to this agent at least once AND this agent has donated to the\n    recipient at least once. This requires mutual cooperation, making it less\n    forgiving than the original (which only checked one side).\n    \"\"\"\n    # Count how many times the recipient has donated to this agent\n    rec_to_agent = 0\n    for obs in observations:\n        if (obs.get('sender') == recipient_id and\n            obs.get('recipient') == agent_id and\n            obs.get('donated') is True):\n            rec_to_agent += 1\n\n    # Count how many times this agent has donated to the recipient\n    agent_to_rec = 0\n    for entry in my_history:\n        if (entry.get('recipient') == recipient_id and\n            entry.get('donated') is True):\n            agent_to_rec += 1\n\n    # Donate only if both have donated at least once\n    return rec_to_agent >= 1 and agent_to_rec >= 1"
+    },
+    {
+      "agent_id": 3,
+      "strategy_id": "bb68fd30bf01",
+      "fitness": 3.0,
+      "cooperation_rate": 0.0,
+      "generation": 6,
+      "parent_id": "feb06430ec84",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Variant of original tit-for-tat: donate if the recipient has previously\n    donated to this agent at least once. This is more forgiving than the original\n    (which required at least two donations).\n    \"\"\"\n    # Count how many times the recipient has donated to this agent\n    donation_count = 0\n    for obs in observations:\n        if (obs.get('sender') == recipient_id and\n            obs.get('recipient') == agent_id and\n            obs.get('donated') is True):\n            donation_count += 1\n    # Donate if at least one donation observed\n    return donation_count >= 1"
+    },
+    {
+      "agent_id": 4,
+      "strategy_id": "0a06f0f50194",
+      "fitness": 3.0,
+      "cooperation_rate": 0.0,
+      "generation": 4,
+      "parent_id": "e870c2ae2fa2",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Variant of tit-for-tat: Donate if the recipient has donated to this agent\n    at least as many times as they have defected (refused to donate) when paired.\n    Default to not donating if no history exists.\n    \"\"\"\n    donations = 0\n    defections = 0\n    for obs in observations:\n        # Only consider interactions where this agent was the recipient\n        if (obs.get('sender') == recipient_id and\n            obs.get('recipient') == agent_id):\n            if obs.get('donated') is True:\n                donations += 1\n            elif obs.get('donated') is False:\n                defections += 1\n    # If no prior interactions, do not donate\n    if donations + defections == 0:\n        return False\n    # Donate if donations equal or exceed defections\n    return donations >= defections"
+    },
+    {
+      "agent_id": 5,
+      "strategy_id": "49b2d4ff2f8b",
+      "fitness": 3.0,
+      "cooperation_rate": 0.0,
+      "generation": 7,
+      "parent_id": "f74f4d39f7e6",
+      "code": "def strategy(agent_id, my_history, observations, round_num, recipient_id, population_size):\n    # Count donations made in past rounds\n    donations_made = sum(1 for action in my_history if action)\n    past_rounds = len(my_history)\n    # Donate only if we have been more reluctant than 40% of past rounds\n    if donations_made < past_rounds * 0.4:\n        return True\n    else:\n        return False"
+    },
+    {
+      "agent_id": 6,
+      "strategy_id": "bd5a8cb34e22",
+      "fitness": 3.0,
+      "cooperation_rate": 0.0,
+      "generation": 7,
+      "parent_id": "4d64a056d369",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # Count how many times the recipient donated to us\n    donations_to_me = 0\n    for obs in observations:\n        if (obs.get('actor') == recipient_id and\n            obs.get('recipient') == agent_id and\n            obs.get('donated')):\n            donations_to_me += 1\n    # Recipient has donated at least twice \u2192 generous reciprocation\n    if donations_to_me >= 2:\n        return True\n    # Also reciprocate if we have donated to them before (maintain mutual cooperation)\n    for entry in my_history:\n        if (entry.get('recipient') == recipient_id and\n            entry.get('donated')):\n            return True\n    # Otherwise, defect\n    return False"
+    },
+    {
+      "agent_id": 7,
+      "strategy_id": "d93e41f1f091",
+      "fitness": 3.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "import random\n\ndef strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    # 1. Never donate\n    return False"
+    },
+    {
+      "agent_id": 8,
+      "strategy_id": "f74f4d39f7e6",
+      "fitness": 3.0,
+      "cooperation_rate": 0.0,
+      "generation": 1,
+      "parent_id": "071c2fd0105e",
+      "code": "def strategy(agent_id, my_history, observations, round_num, recipient_id, population_size):\n    # Count how many times we have donated in past rounds\n    donations_made = sum(1 for action in my_history if action)\n    # Number of past rounds (excluding current decision)\n    past_rounds = len(my_history)\n    # Donate if we have donated less than half of the past rounds\n    if donations_made < past_rounds / 2:\n        return True\n    else:\n        return False"
+    },
+    {
+      "agent_id": 9,
+      "strategy_id": "e98daf1f1cf0",
+      "fitness": 3.0,
+      "cooperation_rate": 0.0,
+      "generation": 9,
+      "parent_id": "bb68fd30bf01",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    More stringent variant of the original forgiving TFT:\n    donate only if the recipient has donated to this agent at least twice.\n    This makes the agent less cooperative initially but still reciprocates\n    repeated cooperation.\n    \"\"\"\n    donation_count = 0\n    for obs in observations:\n        if (obs.get('sender') == recipient_id and\n            obs.get('recipient') == agent_id and\n            obs.get('donated') is True):\n            donation_count += 1\n    return donation_count >= 2"
+    },
+    {
+      "agent_id": 10,
+      "strategy_id": "033bdafeebc9",
+      "fitness": 2.0,
+      "cooperation_rate": 0.025,
+      "generation": 8,
+      "parent_id": "c8f9ab403c10",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Donate on the first round.\n    For later rounds, donate only if the recipient donated to this agent\n    in the most recent encounter (i.e., reciprocate cooperation).\n    If there was no previous encounter, do not donate.\n    \"\"\"\n    # Always donate on the first round\n    if round_num == 1:\n        return True\n\n    # Search observations (in reverse chronological order) for the last interaction\n    # where the current recipient was the actor and this agent was the partner.\n    for obs in reversed(observations):\n        if (obs['round'] < round_num and\n            obs['agent_id'] == recipient_id and\n            obs['partner_id'] == agent_id):\n            # Found the most recent encounter \u2013 reciprocate the recipient's action\n            return obs['donated']\n\n    # No previous encounter with this recipient \u2013 defect\n    return False"
+    },
+    {
+      "agent_id": 11,
+      "strategy_id": "c4b83e777719",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "1f7f26d26bb2",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Variant of original mutual tit-for-tat, but only considers the last 5 rounds.\n    Donate only if both the recipient and this agent have donated to each other\n    at least once in the recent window. This makes the strategy more responsive\n    to recent interactions and quicker to forgive old defections.\n    \"\"\"\n    window = 5  # look back up to 5 rounds\n    # Count recent donations from recipient to this agent\n    rec_to_agent = 0\n    for obs in observations:\n        if (obs.get('sender') == recipient_id and\n            obs.get('recipient') == agent_id and\n            obs.get('donated') is True and\n            round_num - obs.get('round', 0) <= window):\n            rec_to_agent += 1\n\n    # Count recent donations from this agent to recipient\n    agent_to_rec = 0\n    for entry in my_history:\n        if (entry.get('recipient') == recipient_id and\n            entry.get('donated') is True and\n            round_num - entry.get('round', 0) <= window):\n            agent_to_rec += 1\n\n    # Donate only if both have donated at least once in the recent window\n    return rec_to_agent >= 1 and agent_to_rec >= 1"
+    },
+    {
+      "agent_id": 12,
+      "strategy_id": "86aeae22b4f1",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "1f7f26d26bb2",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Variant of the mutual-cooperation strategy: donate only if the recipient\n    has donated to this agent at least 2 times, and this agent has donated\n    to the recipient at least 1 time. This makes the agent slightly more\n    demanding of the partner's past cooperation before cooperating.\n    \"\"\"\n    # Count how many times the recipient has donated to this agent\n    rec_to_agent = 0\n    for obs in observations:\n        if (obs.get('sender') == recipient_id and\n            obs.get('recipient') == agent_id and\n            obs.get('donated') is True):\n            rec_to_agent += 1\n\n    # Count how many times this agent has donated to the recipient\n    agent_to_rec = 0\n    for entry in my_history:\n        if (entry.get('recipient') == recipient_id and\n            entry.get('donated') is True):\n            agent_to_rec += 1\n\n    # Donate only if recipient has cooperated at least twice,\n    # and agent has cooperated with them at least once.\n    return rec_to_agent >= 2 and agent_to_rec >= 1"
+    },
+    {
+      "agent_id": 13,
+      "strategy_id": "e09133d021a4",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "49b2d4ff2f8b",
+      "code": "def strategy(agent_id, my_history, observations, round_num, recipient_id, population_size):\n    # Count donations made in past rounds\n    donations_made = sum(1 for action in my_history if action)\n    past_rounds = len(my_history)\n    # Donate only if we have been more reluctant than 50% of past rounds\n    if donations_made < past_rounds * 0.5:\n        return True\n    else:\n        return False"
+    },
+    {
+      "agent_id": 14,
+      "strategy_id": "48b7fccb5af2",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "0a06f0f50194",
+      "code": "def strategy(\n    agent_id: int,\n    my_history: list[dict],\n    observations: list[dict],\n    round_num: int,\n    recipient_id: int,\n    population_size: int\n) -> bool:\n    \"\"\"\n    Stricter variant of tit-for-tat: Donate only if the recipient has donated to this agent\n    strictly more times than they have defected when paired.\n    Default to not donating if no history exists.\n    \"\"\"\n    donations = 0\n    defections = 0\n    for obs in observations:\n        # Only consider interactions where this agent was the recipient\n        if (obs.get('sender') == recipient_id and\n            obs.get('recipient') == agent_id):\n            if obs.get('donated') is True:\n                donations += 1\n            elif obs.get('donated') is False:\n                defections += 1\n    # If no prior interactions, do not donate\n    if donations + defections == 0:\n        return False\n    # Donate only if donations strictly exceed defections\n    return donations > defections"
+    }
+  ],
+  "timestamp": "2026-05-07T15:51:13.782035"
+}

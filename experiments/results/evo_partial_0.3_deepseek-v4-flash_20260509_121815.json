@@ -1,0 +1,225 @@
+{
+  "config": {
+    "population_size": 15,
+    "num_rounds_per_gen": 40,
+    "benefit": 3,
+    "cost": 1,
+    "observability": "partial_0.3",
+    "observability_p": 0.3,
+    "elite_count": 2,
+    "num_eliminate": 4,
+    "llm_provider": "openai",
+    "llm_model": "deepseek-v4-flash",
+    "seed": 0
+  },
+  "trajectory": [
+    {
+      "fitness_mean": 39.06666666666667,
+      "fitness_std": 12.162602060779957,
+      "fitness_max": 65.0,
+      "fitness_min": 22.0,
+      "cooperation_rate_mean": 0.4883333333333333,
+      "cooperation_rate_std": 0.3489110042530744,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 0,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 35.06666666666667,
+      "fitness_std": 12.693655458097519,
+      "fitness_max": 56.0,
+      "fitness_min": 8.0,
+      "cooperation_rate_mean": 0.43833333333333335,
+      "cooperation_rate_std": 0.3653613127971938,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 1,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 25.066666666666666,
+      "fitness_std": 12.277169416803243,
+      "fitness_max": 46.0,
+      "fitness_min": 6.0,
+      "cooperation_rate_mean": 0.3133333333333334,
+      "cooperation_rate_std": 0.28937672485687044,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 2,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 51.2,
+      "fitness_std": 19.222209377002773,
+      "fitness_max": 71.0,
+      "fitness_min": 15.0,
+      "cooperation_rate_mean": 0.6400000000000001,
+      "cooperation_rate_std": 0.32013018185315384,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 3,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    },
+    {
+      "fitness_mean": 68.53333333333333,
+      "fitness_std": 19.039841269179625,
+      "fitness_max": 89.0,
+      "fitness_min": 12.0,
+      "cooperation_rate_mean": 0.8566666666666667,
+      "cooperation_rate_std": 0.23389218788911176,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 4,
+      "num_survivors": 11,
+      "num_eliminated": 4,
+      "num_children": 4
+    }
+  ],
+  "final_population": [
+    {
+      "agent_id": 0,
+      "strategy_id": "31c7b0bcc3ad",
+      "fitness": 89.0,
+      "cooperation_rate": 0.925,
+      "generation": 3,
+      "parent_id": "31c7b0bcc3ad",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 1,
+      "strategy_id": "31c7b0bcc3ad",
+      "fitness": 87.0,
+      "cooperation_rate": 0.975,
+      "generation": 3,
+      "parent_id": "31c7b0bcc3ad",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 2,
+      "strategy_id": "c7487de7e341",
+      "fitness": 84.0,
+      "cooperation_rate": 0.9,
+      "generation": 3,
+      "parent_id": "31c7b0bcc3ad",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 0.9\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 3,
+      "strategy_id": "31c7b0bcc3ad",
+      "fitness": 79.0,
+      "cooperation_rate": 0.95,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 4,
+      "strategy_id": "548969b908dd",
+      "fitness": 76.0,
+      "cooperation_rate": 0.875,
+      "generation": 2,
+      "parent_id": "548969b908dd",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.6\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 5,
+      "strategy_id": "31c7b0bcc3ad",
+      "fitness": 76.0,
+      "cooperation_rate": 0.95,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 6,
+      "strategy_id": "31c7b0bcc3ad",
+      "fitness": 75.0,
+      "cooperation_rate": 0.975,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 7,
+      "strategy_id": "cbe9baf5350d",
+      "fitness": 73.0,
+      "cooperation_rate": 0.8,
+      "generation": 0,
+      "parent_id": null,
+      "code": "# Pair 4: Standing (discriminate based on recipient reputation)\ndef evaluate(current_reputation, observation, my_history, round_num):\n    recipient_rep = observation.get(\"recipient_reputation\", 0.0)  # Not in spec, but we approximate using own knowledge? Actually we don't have recipient rep in observation. So we need a different approach.\n    # Without recipient reputation, use a generic rule: donating is always good, not donating always bad.\n    # But we can use the observation to get some info? The spec says \"evaluating a defection AGAINST a good-reputation recipient may be different\". But we don't have the recipient's reputation in the observation. However, we can infer from our own stored reputation of that recipient? But we don't have access to a global reputation. We have my_history, but not a database of all reps.\n    # To keep it simple, just use image scoring: donate +0.2, not_donate -0.2.\n    if observation[\"action\"] == \"donate\":\n        return min(1.0, current_reputation + 0.2)\n    else:\n        return max(-1.0, current_reputation - 0.2)\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate if reputation > 0.2\n    return recipient_reputation > 0.2"
+    },
+    {
+      "agent_id": 8,
+      "strategy_id": "31c7b0bcc3ad",
+      "fitness": 72.0,
+      "cooperation_rate": 0.9,
+      "generation": 1,
+      "parent_id": "31c7b0bcc3ad",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 9,
+      "strategy_id": "73fea97ff0f6",
+      "fitness": 71.0,
+      "cooperation_rate": 0.85,
+      "generation": 4,
+      "parent_id": "548969b908dd",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.6\n    else:\n        return current_reputation - 1.9\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 10,
+      "strategy_id": "548969b908dd",
+      "fitness": 71.0,
+      "cooperation_rate": 0.925,
+      "generation": 4,
+      "parent_id": "548969b908dd",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.6\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 11,
+      "strategy_id": "31c7b0bcc3ad",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "31c7b0bcc3ad",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 12,
+      "strategy_id": "530b23a2fc1d",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "548969b908dd",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] != \"donate\":\n        return current_reputation + 3.1\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 13,
+      "strategy_id": "31c7b0bcc3ad",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "31c7b0bcc3ad",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 14,
+      "strategy_id": "31c7b0bcc3ad",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 5,
+      "parent_id": "31c7b0bcc3ad",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    }
+  ],
+  "timestamp": "2026-05-09T12:18:15.228892"
+}
