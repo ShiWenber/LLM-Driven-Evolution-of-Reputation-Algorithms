@@ -16,6 +16,15 @@ experiments/results/fig_*.png
 experiments/results/figures/
 experiments/results/seed_manifest.json
 experiments/results/experiment_runs.csv
+# Standard-plan results dir (per-trial evo_*.json + per-trial subdirs)
+results/exp1_method/
+results/exp2_threshold/
+results/exp3_static/
+results/exp4_random_mut/
+# But keep the manifest, log, and figures (re-add below)
+!results/_manifest.json
+!results/standard_run.log
+!results/figures/
 
 # Local environment and secrets
 .env
