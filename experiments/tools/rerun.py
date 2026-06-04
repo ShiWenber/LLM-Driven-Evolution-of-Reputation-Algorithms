@@ -3,7 +3,6 @@
 Provides:
 - `rerun_donor_experiments`: re-run all four donor-game experiments
   with consistent seed management, after the mutation-prompt fix
-- `rerun_ipd_baseline`: re-run the IPD baseline (Willis comparison)
 - `audit_existing_results`: print a coverage report of what's already
   in experiments/results/ so we know which seeds to run
 
@@ -12,26 +11,21 @@ Seed plan (after ISSUES.md mutation-prompt fix):
     Experiment 2: 9 observability levels × 5 seeds (=45 runs, was 3)
     Experiment 3: PRIVATE, p=0.3, FULL × 3 seeds (=9 runs)
     Experiment 4: PRIVATE, p=0.3, FULL × 3 seeds (=9 seeds)
-    Experiment 5 (IPD): 5 populations × 3 seeds (=15 runs)
-    Total: ~88 trials, est. 3-12 hours wall-clock depending on API latency.
+    Total: ~73 trials, est. 3-8 hours wall-clock depending on API latency.
 
 Usage:
     python -m experiments.tools.rerun --experiments 1 2 --seeds 0 1 2
     python -m experiments.tools.rerun --audit
-    python -m experiments.tools.rerun --experiments 5 --seeds 0
 """
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import List, Optional, Dict, Any
-
-import numpy as np
+from typing import List, Dict, Any
 
 from ..config.load_env import get_api_key
 
@@ -112,19 +106,6 @@ def rerun_donor_experiments(
     return _run_plan(plan, dry_run=dry_run)
 
 
-def rerun_ipd_baseline(seeds: List[int], output_dir: str = "results", dry_run: bool = False):
-    """Run the IPD baseline (Willis comparison) with given seeds."""
-    plan = []
-    for seed in seeds:
-        plan.append((
-            ["python", "-m", "experiments.evolution.ipd_evolution",
-             "--seed", str(seed),
-             "--output", f"{output_dir}/ipd_baseline"],
-            f"ipd seed={seed}",
-        ))
-    return _run_plan(plan, dry_run=dry_run)
-
-
 def _run_plan(plan: List[tuple], dry_run: bool = False) -> List[Dict[str, Any]]:
     """Execute a plan of (cmd, label) tuples, reporting per-trial timing."""
     if not get_api_key("deepseek"):
@@ -171,7 +152,7 @@ def _run_plan(plan: List[tuple], dry_run: bool = False) -> List[Dict[str, Any]]:
 def main():
     p = argparse.ArgumentParser(description="Rerun experiments with seed management")
     p.add_argument("--experiments", type=int, nargs="*", default=None,
-                   help="Donor-game experiment numbers to run (1-5; 5 = IPD baseline)")
+                   help="Donor-game experiment numbers to run (1-4)")
     p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2],
                    help="Random seeds to run")
     p.add_argument("--output", type=str, default="results",
@@ -180,8 +161,6 @@ def main():
                    help="Audit existing results and exit")
     p.add_argument("--dry-run", action="store_true",
                    help="Print commands without executing")
-    p.add_argument("--ipd-only", action="store_true",
-                   help="Only run IPD baseline (Experiment 5)")
     args = p.parse_args()
 
     if args.audit:
@@ -189,10 +168,7 @@ def main():
         print(json.dumps(audit, indent=2))
         return 0
 
-    if args.ipd_only or (args.experiments and 5 in args.experiments):
-        rerun_ipd_baseline(args.seeds, output_dir=args.output, dry_run=args.dry_run)
-
-    if args.experiments and not args.ipd_only:
+    if args.experiments:
         donor_exps = [e for e in args.experiments if e in (1, 2, 3, 4)]
         if donor_exps:
             rerun_donor_experiments(

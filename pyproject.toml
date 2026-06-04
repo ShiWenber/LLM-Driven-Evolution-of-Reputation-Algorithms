@@ -1,0 +1,17 @@
+[project]
+name = "llm-reputation"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.4",
+    "openai>=2.35.1",
+    "pandas>=3.0.2",
+    "python-dotenv>=1.2.2",
+    "pyyaml>=6.0.3",
+    "scipy>=1.17.1",
+    "seaborn>=0.13.2",
+    "tqdm>=4.67.3",
+]
