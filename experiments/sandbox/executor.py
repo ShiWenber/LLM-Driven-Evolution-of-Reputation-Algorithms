@@ -12,10 +12,17 @@ Each strategy pair has TWO functions:
 """
 
 import sys
-import signal
 import traceback
 import builtins
 from typing import Optional, Callable, Any
+
+# SIGALRM-based timeouts are POSIX-only. On Windows, fall back to a no-op.
+try:
+    import signal  # type: ignore
+    _HAS_SIGALRM = hasattr(signal, "SIGALRM")
+except Exception:
+    signal = None  # type: ignore
+    _HAS_SIGALRM = False
 
 from .validator import validate_strategy_code, clean_code, ALLOWED_MODULES
 
@@ -140,8 +147,9 @@ class StrategyExecutor:
             SandboxTimeout: If execution exceeds timeout
             SandboxError: If function raises an exception
         """
-        old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
-        signal.setitimer(signal.ITIMER_REAL, self.timeout_s)
+        if _HAS_SIGALRM:
+            old_handler = signal.signal(signal.SIGALRM, _timeout_handler)  # type: ignore
+            signal.setitimer(signal.ITIMER_REAL, self.timeout_s)  # type: ignore
 
         try:
             result = self._evaluate_fn(
@@ -157,8 +165,9 @@ class StrategyExecutor:
                 f"evaluate() raised exception: {type(e).__name__}: {e}"
             )
         finally:
-            signal.setitimer(signal.ITIMER_REAL, 0)
-            signal.signal(signal.SIGALRM, old_handler)
+            if _HAS_SIGALRM:
+                signal.setitimer(signal.ITIMER_REAL, 0)  # type: ignore
+                signal.signal(signal.SIGALRM, old_handler)  # type: ignore
 
         # Coerce to float and clamp to [-1.0, 1.0] for inter-strategy compatibility
         clamped = max(-1.0, min(1.0, float(result)))
@@ -185,8 +194,9 @@ class StrategyExecutor:
             SandboxTimeout: If execution exceeds timeout
             SandboxError: If function raises an exception or returns non-bool
         """
-        old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
-        signal.setitimer(signal.ITIMER_REAL, self.timeout_s)
+        if _HAS_SIGALRM:
+            old_handler = signal.signal(signal.SIGALRM, _timeout_handler)  # type: ignore
+            signal.setitimer(signal.ITIMER_REAL, self.timeout_s)  # type: ignore
 
         try:
             result = self._decide_fn(
@@ -201,8 +211,9 @@ class StrategyExecutor:
                 f"decide() raised exception: {type(e).__name__}: {e}"
             )
         finally:
-            signal.setitimer(signal.ITIMER_REAL, 0)
-            signal.signal(signal.SIGALRM, old_handler)
+            if _HAS_SIGALRM:
+                signal.setitimer(signal.ITIMER_REAL, 0)  # type: ignore
+                signal.signal(signal.SIGALRM, old_handler)  # type: ignore
 
         if not isinstance(result, bool):
             return bool(result)
