@@ -44,3 +44,33 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.bbl
+*.blg
+*.synctex.gz
+paper.pdf
+.tectonic/
+# IEEEtran template distribution — only the cls + bst we need; ignore the rest
+latex/IEEEtran/HOWTO*
+latex/IEEEtran/IEEEtran_HOWTO.pdf
+latex/IEEEtran/README
+latex/IEEEtran/changelog.txt
+latex/IEEEtran/bare_*.tex
+latex/IEEEtran/bibtex/README
+latex/IEEEtran/bibtex/changelog.txt
+latex/IEEEtran/bibtex/IEEE*.bib
+latex/IEEEtran/bibtex/*HOWTO*.pdf
+latex/IEEEtran/bibtex/*HOWTO*
+latex/IEEEtran/bibtex/IEEEtranN.bst
+latex/IEEEtran/bibtex/IEEEtranS.bst
+latex/IEEEtran/bibtex/IEEEtranSA.bst
+latex/IEEEtran/bibtex/IEEEtranSN.bst
+latex/IEEEtran/extras/
+latex/IEEEtran/testflow/
+latex/IEEEtran/tools/
+latex/ieeetran.zip
