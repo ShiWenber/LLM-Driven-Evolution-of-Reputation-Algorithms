@@ -1,18 +1,17 @@
-"""Convert results/figures/*.png to *.pdf for LaTeX \includegraphics.
-
-Uses Pillow (PIL) to embed PNG into a single-page PDF.
-"""
+"""Convert PNG figures to PDF for LaTeX (pdflatex cannot include PNG directly)."""
+import os
+import sys
 from pathlib import Path
-from PIL import Image
+try:
+    from PIL import Image
+except ImportError:
+    print("Pillow not installed. Run: pip install Pillow")
+    sys.exit(1)
 
-ROOT = Path('C:/Users/shiwenbo/.mavis/agents/mavis/workspace/llm-reputation-paper/llm-reputation/results/figures')
-
-pngs = sorted(ROOT.glob('*.png'))
-print(f'Found {len(pngs)} PNGs to convert:')
-for p in pngs:
-    out = p.with_suffix('.pdf')
-    img = Image.open(p).convert('RGB')
-    img.save(out, 'PDF', resolution=150)
-    print(f'  {p.name} -> {out.name} ({p.stat().st_size//1024}KB PNG -> {out.stat().st_size//1024}KB PDF)')
-
+SRC = Path('results/figures')
+for png in sorted(SRC.glob('*.png')):
+    pdf = png.with_suffix('.pdf')
+    img = Image.open(png).convert('RGB')
+    img.save(pdf, 'PDF', resolution=150)
+    print(f'  {png.name} -> {pdf.name}')
 print('Done.')

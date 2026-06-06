@@ -113,6 +113,7 @@ for i, (run, obs, seed, gens, outdir) in enumerate(PLAN, 1):
         '--rounds', '30',
         '--seeds', '1',
         '--output', outdir,
+        '--models', 'deepseek-v4-flash',  # use the configured DeepSeek key in .env
     ]
     if run == 'threshold':
         # Reuse the partial_{p} format; main expects --p-values for threshold mode

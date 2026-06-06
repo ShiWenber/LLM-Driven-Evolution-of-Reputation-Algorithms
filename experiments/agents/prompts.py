@@ -264,7 +264,7 @@ def build_init_prompt(
 def build_mutation_prompt(
     parent_code: str,
     fitness: float,
-    population_size: int = 20
+    population_size: int = 20,
 ) -> str:
     """Build the mutation prompt to vary a successful strategy pair."""
     prompt = MUTATION_PROMPT_TEMPLATE

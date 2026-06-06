@@ -21,6 +21,8 @@ results/exp1_method/
 results/exp2_threshold/
 results/exp3_static/
 results/exp4_random_mut/
+results/sanity_trial/
+results/fallback_backup/
 # But keep the manifest, log, and figures (re-add below)
 !results/_manifest.json
 !results/standard_run.log
@@ -53,7 +55,9 @@ htmlcov/
 *.bbl
 *.blg
 *.synctex.gz
+*.dvi
 paper.pdf
+*.zip
 .tectonic/
 # IEEEtran template distribution — only the cls + bst we need; ignore the rest
 latex/IEEEtran/HOWTO*
