@@ -52,6 +52,12 @@ MODELS = {
         "key":  lambda: get_api_key("deepseek"),
         "url":  lambda: get_base_url("deepseek"),
     },
+    "deepseek-coder": {
+        "name": "deepseek-coder",
+        "provider": "openai",  # OpenAI-compatible
+        "key":  lambda: get_api_key("deepseek"),
+        "url":  lambda: get_base_url("deepseek"),
+    },
 }
 
 
