@@ -110,7 +110,7 @@ def load_trials(root):
 
 flash = load_trials(RESULTS / 'exp1_method')
 threshold = load_trials(RESULTS / 'exp2_threshold')
-static = load_trials(RESULTS / 'exp3_static')
+static = load_trials(RESULTS / 'exp3_static_g10')  # G=10 to match LLM-evo
 random_mut = load_trials(RESULTS / 'exp4_random_mut')
 coder = load_trials(RESULTS / 'exp5_robustness')
 
