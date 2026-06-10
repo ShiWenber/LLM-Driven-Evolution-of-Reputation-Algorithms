@@ -108,7 +108,7 @@ def load_trials(root):
     return rows
 
 
-flash = load_trials(RESULTS / 'exp1_method')
+flash = load_trials(RESULTS / 'exp1_method_n10')  # LLM-evo G=10, n=10
 threshold = load_trials(RESULTS / 'exp2_threshold')
 static = load_trials(RESULTS / 'exp3_static_g10_n10')  # G=10, n=10
 random_mut = load_trials(RESULTS / 'exp4_random_mut')
