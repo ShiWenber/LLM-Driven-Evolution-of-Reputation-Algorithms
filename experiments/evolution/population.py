@@ -173,7 +173,8 @@ class EvolutionaryPopulation:
                             "my_history, round_num) and returns float between -1.0 and 1.0. "
                             "decide() takes (recipient_reputation, round_num, my_history) "
                             "and returns bool. "
-                            "Use observation['action'] == 'donate' (NOT observation['donated']). "
+                            "Use observation['action'] (a string equal to 'cooperate' or 'defect') "
+                            "to discriminate the two action options. "
                             "In my_history: entry['action'] is your own past action, "
                             "entry['partner_action'] is the other agent's action."
                         ),
@@ -347,22 +348,29 @@ class EvolutionaryPopulation:
 
         # 3. Create mutation operator if needed
         if self.mutation_op is None:
+            # Allow override via env var LLM_MUTATION_WORKERS (default 5,
+            # capped at 30 by caller constraint)
+            workers = int(os.environ.get("LLM_MUTATION_WORKERS", "5"))
+            workers = min(workers, 30)  # hard cap per user spec
             self.mutation_op = MutationOperator(
                 llm_provider=self.llm_provider,
                 model=self.llm_model,
                 temperature=self.mutation_temperature,
                 api_key=self.api_key,
-                api_base_url=self.api_base_url
+                api_base_url=self.api_base_url,
+                max_workers=workers
             )
 
-        # 4. Mutate to create children
+        # 4. Mutate to create children (concurrent LLM calls)
         children = []
-        for parent in parents:
-            mutated_code = self.mutation_op.mutate(
-                parent.code,
-                parent.fitness,
-                self.population_size
-            )
+        parent_inputs = [(p.code, p.fitness) for p in parents]
+        mutated_codes = self.mutation_op.mutate_batch(
+            parent_inputs,
+            self.population_size,
+            max_workers=getattr(self.mutation_op, 'max_workers', 5)
+        )
+
+        for parent, mutated_code in zip(parents, mutated_codes):
             if mutated_code is None:
                 # Mutation failed, use parent code with slight variation
                 mutated_code = parent.code
@@ -497,9 +505,9 @@ def evaluate(current_reputation, observation, my_history, round_num):
 def decide(recipient_reputation, round_num, my_history):
     return random.random() < 0.5
 ''',
-        # Simple image-scoring-like: +1 for donate, -1 for not
+        # Simple image-scoring-like: +1 for cooperate, -1 for defect
         '''def evaluate(current_reputation, observation, my_history, round_num):
-    if observation["action"] == "donate":
+    if observation["action"] == "cooperate":
         return current_reputation + 1.0
     else:
         return current_reputation - 1.0

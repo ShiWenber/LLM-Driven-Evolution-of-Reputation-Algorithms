@@ -16,7 +16,8 @@ class ReputationMechanism(ABC):
         Calculate the reputation change for a donor's action.
 
         Args:
-            action: "donate" or "not_donate"
+            action: "cooperate" (donor pays 1, recipient gains 2) or
+                    "defect" (no cost, no benefit)
             recipient_reputation: Reputation score of the recipient
 
         Returns:
@@ -58,13 +59,13 @@ class ImageScoring(ReputationMechanism):
         Calculate reputation change based on action only.
 
         Args:
-            action: "donate" or "not_donate"
+            action: "cooperate" (positive-sum) or "defect" (non-cooperative)
             recipient_reputation: Ignored for image scoring
 
         Returns:
             Reputation delta
         """
-        if action == "donate":
+        if action == "cooperate":
             return self.delta_cooperate
         else:
             return self.delta_defect
@@ -116,13 +117,13 @@ class Standing(ReputationMechanism):
         Calculate reputation change based on action and recipient reputation.
 
         Args:
-            action: "donate" or "not_donate"
+            action: "cooperate" (positive-sum) or "defect" (non-cooperative)
             recipient_reputation: Reputation score of the recipient
 
         Returns:
             Reputation delta
         """
-        if action == "donate":
+        if action == "cooperate":
             return self.delta_cooperate
         else:
             # Defecting: is it justified?

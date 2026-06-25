@@ -93,8 +93,10 @@ class DonorGame:
                 self.payoffs[donor_id] -= self.cost
                 self.payoffs[recipient_id] += self.benefit
 
-            # Record for agents
-            action = "donate" if decision else "not_donate"
+            # Record for agents. Use explicit semantic action labels
+            # ("cooperate" / "defect") so that the LLM has direct access
+            # to the game's underlying semantics — no neutral-token indirection.
+            action = "cooperate" if decision else "defect"
             recipient_action = None
             # Find if recipient was donor in same round (for my_history)
             for prev_interaction in round_data["interactions"]:
@@ -117,7 +119,7 @@ class DonorGame:
                 round_num=self.round_num,
                 role="recipient",
                 partner_id=donor_id,
-                action=recipient_action or "not_donate",
+                action=recipient_action or "defect",
                 partner_action=donor_action_for_recipient
             )
 

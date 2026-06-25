@@ -24,6 +24,8 @@ class MutationOperator:
         temperature: float = 0.8,
         max_retries: int = 3,
         rate_limit_delay: float = 0.5,
+        max_tokens: int = 8000,  # original default
+        max_workers: int = 5,  # max concurrent LLM calls in mutate_batch
         api_key: str = "",
         api_base_url: str = ""
     ):
@@ -42,6 +44,8 @@ class MutationOperator:
         self.temperature = temperature
         self.max_retries = max_retries
         self.rate_limit_delay = rate_limit_delay
+        self.max_tokens = max_tokens
+        self.max_workers = max_workers
         self.api_key = api_key
         self.api_base_url = api_base_url
         self._client = None
@@ -129,9 +133,10 @@ class MutationOperator:
         random_op = RandomMutationOperator()
         return random_op.mutate(parent_code, parent_fitness)
 
-    def _call_llm(self, prompt: str) -> Optional[str]:
+    def _call_llm(self, prompt: str, max_tokens: int = None) -> Optional[str]:
         """Call the LLM API. Returns None on malformed response."""
         client = self._get_client()
+        mt = max_tokens if max_tokens is not None else self.max_tokens
 
         if self.llm_provider == "openai":
             response = client.chat.completions.create(
@@ -145,18 +150,16 @@ class MutationOperator:
                             "The code MUST contain BOTH 'evaluate' AND 'decide' functions. "
                             "evaluate(current_reputation, observation, my_history, round_num) -> float "
                             "decide(recipient_reputation, round_num, my_history) -> bool. "
-                            "In evaluate: use observation['action'] == 'donate' NOT observation['donated']. "
-                            "evaluate must return a float between -1.0 and 1.0. "
-                            "Focus on INDIRECT reciprocity: use observation-based reputation "
-                            "(observation dict) to update and consult reputation scores. "
-                            "Do NOT condition decide() on partner_action from my_history — "
-                            "that would be direct reciprocity, which is not the target of this game."
+                            "In evaluate: use observation['action'] (a string equal to 'cooperate' or "
+                            "'defect') to discriminate the two action options. evaluate must return "
+                            "a float between -1.0 and 1.0. Do NOT condition decide() on partner_action "
+                            "from my_history — that would be direct reciprocity, not indirect."
                         )
                     },
                     {"role": "user", "content": prompt}
                 ],
                 temperature=self.temperature,
-                max_tokens=8000
+                max_tokens=mt
             )
             if response is None or not hasattr(response, 'choices') or not response.choices:
                 return None
@@ -166,7 +169,7 @@ class MutationOperator:
         elif self.llm_provider == "anthropic":
             response = client.messages.create(
                 model=self.model,
-                max_tokens=8000,
+                max_tokens=mt,
                 temperature=self.temperature,
                 system=(
                     "You are a Python programmer. "
@@ -174,12 +177,10 @@ class MutationOperator:
                     "Must contain BOTH evaluate() and decide() functions. "
                     "evaluate(current_reputation, observation, my_history, round_num) -> float. "
                     "decide(recipient_reputation, round_num, my_history) -> bool. "
-                    "In evaluate: use observation['action'] == 'donate' NOT observation['donated']. "
-                    "evaluate must return a float between -1.0 and 1.0. "
-                    "Focus on INDIRECT reciprocity: use observation-based reputation "
-                    "(observation dict) to update and consult reputation scores. "
-                    "Do NOT condition decide() on partner_action from my_history — "
-                    "that would be direct reciprocity, which is not the target of this game."
+                    "In evaluate: use observation['action'] (a string equal to 'cooperate' or "
+                    "'defect') to discriminate the two action options. evaluate must return "
+                    "a float between -1.0 and 1.0. Do NOT condition decide() on partner_action "
+                    "from my_history — that would be direct reciprocity, not indirect."
                 ),
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -188,6 +189,58 @@ class MutationOperator:
             return response.content[0].text
 
         raise ValueError(f"Unknown provider: {self.llm_provider}")
+
+    def mutate_batch(
+        self,
+        parents: List,  # list of (code, fitness) tuples
+        population_size: int = 20,
+        max_workers: int = 5
+    ) -> List[Optional[str]]:
+        """
+        Mutate multiple parents concurrently using a thread pool.
+
+        Each parent gets its own LLM call (NOT a single combined-prompt batch),
+        but the calls are issued in parallel using ThreadPoolExecutor. This
+        preserves the per-parent prompt (no quality loss from cramming multiple
+        parents into one prompt) while exploiting the API's ability to handle
+        many concurrent requests.
+
+        Args:
+            parents: List of (code, fitness) tuples
+            population_size: Population size (for prompt context)
+            max_workers: Max number of concurrent LLM calls (default 5,
+                capped at 30 by caller)
+
+        Returns:
+            List of mutated code strings, one per parent (in same order).
+            Failures fall back to per-parent sequential mutate() (which itself
+            falls back to random mutation).
+        """
+        if not parents:
+            return []
+        if len(parents) == 1:
+            return [self.mutate(parents[0][0], parents[0][1], population_size)]
+
+        # Cap workers to a sane maximum (caller may pass up to 30, but we
+        # never want more workers than parents)
+        n_workers = min(max_workers if max_workers is not None else self.max_workers, len(parents))
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        results: List[Optional[str]] = [None] * len(parents)
+
+        def _one(i, code, fitness):
+            return i, self.mutate(code, fitness, population_size)
+
+        with ThreadPoolExecutor(max_workers=n_workers) as ex:
+            futures = [
+                ex.submit(_one, i, code, fitness)
+                for i, (code, fitness) in enumerate(parents)
+            ]
+            for fut in as_completed(futures):
+                i, mutated = fut.result()
+                results[i] = mutated
+
+        return results
 
 
 class RandomMutationOperator:

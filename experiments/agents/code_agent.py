@@ -134,6 +134,18 @@ class CodeAgent:
 
         current_rep = self.reputations.get(donor_id, INITIAL_REPUTATION)
 
+        # Augment observation with observer-private reputation fields so that
+        # LLM-evolved strategies can implement reputation norms that depend on
+        # the recipient's standing (e.g. Simple Standing, Judging, IS+ from the
+        # "leading eight" of indirect-reciprocity norms). The donor's reputation
+        # in the observer's own store is also exposed; both default to
+        # INITIAL_REPUTATION for agents the observer has never seen.
+        observation = dict(observation)  # shallow copy to avoid mutating caller's dict
+        observation["donor_reputation"] = current_rep
+        observation["recipient_reputation"] = self.reputations.get(
+            observation.get("recipient"), INITIAL_REPUTATION
+        )
+
         try:
             new_rep = self._executor.evaluate(
                 current_reputation=current_rep,

@@ -36,20 +36,27 @@ STRATEGY_INTERFACE = '''def evaluate(
         "round": int
         "donor": int (the agent whose action you are evaluating)
         "recipient": int (the agent receiving the action)
-        "action": "donate" | "not_donate"
+        "donor_reputation": float (the donor's reputation in YOUR private store;
+            starts at a small positive value if you have never observed them)
+        "recipient_reputation": float (the recipient's reputation in YOUR private
+            store; starts at a small positive value if you have never observed them)
+        "action": "cooperate" | "defect"
+        (the action label is pre-named: "cooperate" is the option that costs the
+         donor 1 and gives the recipient 2; "defect" is the option that costs 0
+         and gives the recipient 0. These names describe the game's underlying
+         semantics, not the LLM-facing vocabulary.)
 
-    Note: evaluating a defection AGAINST a good-reputation recipient
-    may be different from defection against a bad-reputation recipient.
-    Similarly, donating TO a bad-reputation recipient may be interpreted
-    differently. Use recipient identity to inform your evaluation.
+    Note: the relative effects on the donor's and recipient's scores are
+    deterministic from the action label; "cooperate" gives the recipient 2
+    and the donor pays 1; "defect" gives nothing to either party.
 
-    CRITICAL: "action" is a string, NOT "donated".
-    Example: if obs["action"] == "donate": ...
+    CRITICAL: "action" is a string, NOT a boolean.
+    Example: if obs["action"] == "cooperate": ...
 
     my_history: interactions you personally participated in.
       Each entry: {"round": int, "role": "donor"|"recipient",
-                   "partner": int, "action": "donate"|"not_donate",
-                   "partner_action": "donate"|"not_donate"|None}
+                   "partner": int, "action": "cooperate"|"defect",
+                   "partner_action": "cooperate"|"defect"|None}
 
     Returns: updated reputation score (float between -1.0 and 1.0).
     """
@@ -62,10 +69,11 @@ def decide(
     my_history: list[dict]
 ) -> bool:
     """
-    Decide whether to DONATE to the recipient.
+    Choose which action to take against the recipient.
 
-    DONATE: you pay 1, recipient gains 2.
-    NOT DONATE: you pay 0, recipient gains 0.
+    "cooperate" = DONATE (the agent pays 1 and the recipient gains 2).
+    "defect" = NOT DONATE (no cost, no benefit).
+    These names describe the game's underlying semantics directly.
 
     recipient_reputation: YOUR private assessment of the recipient.
       This is the score you have built up by observing their behavior.
@@ -75,7 +83,7 @@ def decide(
     my_history: interactions you personally participated in.
       Same format as in evaluate().
 
-    Returns True to DONATE, False to NOT DONATE.
+    Return True to cooperate, False to defect.
     """
     pass'''
 
@@ -83,11 +91,16 @@ def decide(
 STRATEGY_INTERFACE_COMPACT = (
     "def evaluate(current_reputation: float, observation: dict, "
     "my_history: list[dict], round_num: int) -> float:\n"
-    "    # Update private reputation based on observed action\n"
+    "    # Update private reputation based on observed action.\n"
+    "    # observation dict keys:\n"
+    "    #   'donor' (int), 'recipient' (int), 'action' ('cooperate'|'defect'),\n"
+    "    #   'donor_reputation' (float, donor's standing in YOUR private store),\n"
+    "    #   'recipient_reputation' (float, recipient's standing in YOUR private store),\n"
+    "    #   'round' (int)\n"
     "    ...\n\n"
     "def decide(recipient_reputation: float, round_num: int, "
     "my_history: list[dict]) -> bool:\n"
-    "    # Decide whether to donate based on recipient's reputation\n"
+    "    # Choose which action to take based on recipient's reputation\n"
     "    ...\n"
 )
 
@@ -100,13 +113,25 @@ Each agent runs TWO functions:
    - You receive the observed agent's current reputation and the observation
    - You return an UPDATED reputation score
    - The observation tells you: who donated to whom, and what action they took
-   - Use observation["action"] == "donate" (NOT observation["donated"]) to check
+   - The observation also includes "donor_reputation" and "recipient_reputation"
+     — the standing each agent has in YOUR private store (useful for designing
+     strategies that condition on the recipient's prior standing, e.g. whether
+     defection-against-a-good-recipient should be punished differently from
+     defection-against-a-bad-recipient). Both default to a small positive
+     warm-start value (~0.01) for agents you have never observed.
+   - Use observation["action"] == "cooperate" (NOT observation["picked"]) to check.
+     The "action" field is a string with two possible values, "cooperate"
+     and "defect"; these names describe the underlying game semantics directly.
+     "cooperate" is the cost-imposing positive-sum option (donor pays 1,
+     recipient gains 2); "defect" is the no-cost no-benefit option.
 
 2. decide(recipient_reputation, round_num, my_history) -> bool
-   - Called when YOU must decide whether to donate to a recipient
+   - Called when YOU must decide which action to take against a recipient
    - You receive YOUR private reputation assessment of the recipient
    - If you have never observed this recipient, reputation starts near 0 (0.01)
-   - Return True to DONATE, False to NOT DONATE
+   - Return True to cooperate, False to defect
+   - The action labels in the prompt are pre-named with the game's
+     underlying semantics ("cooperate" = donate, "defect" = not donate)
 
 Both functions are compiled together as one code block.
 """
@@ -121,28 +146,18 @@ INIT_PROMPT_TEMPLATE = """You are designing agent strategies for a repeated econ
 GAME RULES:
 - {population_size} agents interact over {num_rounds} rounds.
 - Each round, every agent is paired with a random recipient.
-- The agent can DONATE (pay 1, recipient gains 2) or NOT DONATE (pay 0, recipient gains 0).
+- Each round, the agent must choose one of TWO actions: "cooperate" or
+  "defect". "cooperate" means the agent pays a cost of 1 and the recipient
+  gains 2 (a positive-sum move). "defect" means no cost and no benefit.
+  The action labels are pre-named with the game's underlying semantics.
 - Agents interact with the same population repeatedly.
 - Each agent keeps a private history of interactions it participated in.
 - Each agent may also observe some fraction of other agents' interactions.
 
-Each agent runs TWO functions:
-
-{interface_explanation}
-
-Your task: Write {num_strategies} DIFFERENT strategy pairs.
-Each pair MUST contain exactly TWO functions named "evaluate" and "decide".
-
-Here is the exact interface you must follow for BOTH functions:
-
-```python
-{strategy_interface}
-```
-
 DIVERSITY REQUIREMENTS:
 - Write {num_strategies} DIVERSE strategy pairs using different approaches
-- Some pairs might have simple evaluate (always return same score) and simple decide (always/never donate)
-- Some pairs might have evaluate that counts good/bad actions differently
+- Some pairs might have simple evaluate (always return the same score) and simple decide (always cooperate / always defect)
+- Some pairs might have evaluate that treats the two actions differently (e.g. one is rewarded, one is punished)
 - Some pairs might have evaluate that weights recent actions more heavily
 - Some pairs might have decide that uses different reputation thresholds
 - Some pairs might have decide that also considers personal history
@@ -164,10 +179,14 @@ MUTATION_PROMPT_TEMPLATE = """You are improving agent strategies for a repeated 
 GAME RULES:
 - {population_size} agents interact over many rounds.
 - Each round, every agent is paired with a random recipient.
-- The agent can DONATE (pay 1, recipient gains 2) or NOT DONATE (pay 0, recipient gains 0).
+- The agent must choose one of two actions, referred to in the observation
+  dict as "cooperate" and "defect". "cooperate" costs the agent 1 and
+  gives the recipient 2 (a positive-sum cooperative move). "defect" costs
+  nothing and gives the recipient nothing (a non-cooperative move).
+  The action labels are pre-named with the game's underlying semantics.
 
 Below is a strategy pair that performed well (score: {fitness:.1f}).
-It has TWO functions: evaluate (updates reputation from observations) and decide (makes donation decisions).
+It has TWO functions: evaluate (updates reputation from observations) and decide (chooses which action to take).
 
 ORIGINAL CODE:
 ```python
@@ -183,7 +202,9 @@ MODIFICATION GUIDELINES:
 - The variant should be recognizably related to the original but make DIFFERENT choices
 - You may add new tracking variables, different counting methods, or alternative approaches
 - Keep the EXACT same function signatures (parameter names and order must match)
-- Use observation["action"] == "donate" (NOT observation["donated"]) in evaluate
+- Use observation["action"] (a string equal to "cooperate" or "defect") in evaluate
+- Return True from decide() to cooperate, False to defect. The action
+  labels directly correspond to the game's underlying semantics.
 
 Return ONLY the modified Python code (both functions), nothing else.
 """
@@ -215,12 +236,14 @@ Answer YES or NO, then briefly explain.
 # Strategy analysis: post-hoc qualitative analysis of evolved strategies
 # ============================================================================
 
-ANALYSIS_PROMPT_TEMPLATE = """Analyze this strategy pair from a repeated donation game.
+ANALYSIS_PROMPT_TEMPLATE = """Analyze this strategy pair from a repeated cooperation game.
 
 GAME RULES:
-- Agents can DONATE (pay 1, recipient gains 2) or NOT DONATE (pay 0, recipient gains 0).
+- Each round, an agent picks one of two actions: "cooperate" (pays 1, gives
+  recipient 2) or "defect" (pays nothing, gives recipient nothing).
+  The action labels describe the game's underlying semantics directly.
 - Agents run evaluate() to update private reputation scores from observations.
-- Agents run decide() to make donation decisions based on reputation.
+- Agents run decide() to choose which action to take based on reputation.
 
 STRATEGY CODE:
 ```python
@@ -232,7 +255,7 @@ FITNESS: {fitness:.1f}
 Answer these questions:
 1. How does evaluate() update reputation? What information does it use? (1-2 sentences)
 2. How does decide() use the reputation score? What threshold or rule? (1-2 sentences)
-3. What behavioral archetype does this resemble? (e.g., image-scoring, standing, always-cooperate, tit-for-tat, discriminator, defector, novel)
+3. What behavioral archetype does this resemble? (e.g., image-scoring, standing, always-cooperate, always-defect, tit-for-tat, discriminator, novel)
 4. Does this strategy implement direct reciprocity (personal history), indirect reciprocity (observation-based reputation), or both?
 5. What would you name this strategy?
 """
