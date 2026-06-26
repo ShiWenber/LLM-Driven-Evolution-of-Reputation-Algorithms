@@ -49,7 +49,10 @@ class EvolutionaryPopulation:
         api_base_url: str = "",
         mutation_temperature: float = 0.8,
         seed: int = 42,
-        results_dir: str = "results"
+        results_dir: str = "results",
+        recent_window: int = 0,
+        reputation_noise: float = 0.0,
+        exploration_mutation: bool = False,
     ):
         self.population_size = population_size
         self.num_rounds_per_gen = num_rounds_per_gen
@@ -67,6 +70,9 @@ class EvolutionaryPopulation:
         self.mutation_temperature = mutation_temperature
         self.seed = seed
         self.results_dir = Path(results_dir)
+        self.recent_window = recent_window
+        self.reputation_noise = reputation_noise
+        self.exploration_mutation = exploration_mutation
 
         # State
         self.agents: List[CodeAgent] = []
@@ -111,7 +117,8 @@ class EvolutionaryPopulation:
         prompt = build_init_prompt(
             num_strategies=self.population_size,
             population_size=self.population_size,
-            num_rounds=self.num_rounds_per_gen
+            num_rounds=self.num_rounds_per_gen,
+            recent_window=self.recent_window,
         )
 
         codes = self._generate_batch(prompt, self.population_size)
@@ -305,7 +312,9 @@ class EvolutionaryPopulation:
             cost=self.cost,
             num_rounds=self.num_rounds_per_gen,
             observability=self.observability,
-            observability_p=self.observability_p
+            observability_p=self.observability_p,
+            recent_window=self.recent_window,
+            reputation_noise=self.reputation_noise,
         )
 
         game.setup_population(self.agents)
@@ -358,7 +367,8 @@ class EvolutionaryPopulation:
                 temperature=self.mutation_temperature,
                 api_key=self.api_key,
                 api_base_url=self.api_base_url,
-                max_workers=workers
+                max_workers=workers,
+                use_exploration=self.exploration_mutation,
             )
 
         # 4. Mutate to create children (concurrent LLM calls)
@@ -367,7 +377,8 @@ class EvolutionaryPopulation:
         mutated_codes = self.mutation_op.mutate_batch(
             parent_inputs,
             self.population_size,
-            max_workers=getattr(self.mutation_op, 'max_workers', 5)
+            max_workers=getattr(self.mutation_op, 'max_workers', 5),
+            recent_window=self.recent_window,
         )
 
         for parent, mutated_code in zip(parents, mutated_codes):

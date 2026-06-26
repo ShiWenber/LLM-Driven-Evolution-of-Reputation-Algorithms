@@ -29,7 +29,9 @@ class DonorGame:
         cost: int = 1,
         num_rounds: int = 30,
         observability: str = "full",
-        observability_p: float = 0.3
+        observability_p: float = 0.3,
+        recent_window: int = 0,
+        reputation_noise: float = 0.0,
     ):
         self.population_size = population_size
         self.benefit = benefit
@@ -37,6 +39,8 @@ class DonorGame:
         self.num_rounds = num_rounds
         self.observability = observability
         self.observability_p = observability_p
+        self.recent_window = recent_window  # 0 = off; >0 = inject last N actions in observation
+        self.reputation_noise = reputation_noise  # 0 = off; >0 = symmetric noise on observed reputation
 
         # Game state
         self.agents: List[CodeAgent] = []
@@ -46,6 +50,8 @@ class DonorGame:
 
         # Global interaction log (used for observation distribution)
         self._global_log: List[Dict[str, Any]] = []
+        # Recent-actions ring buffer per agent (for recent_window feature)
+        self._recent_actions: Dict[int, List[Dict[str, Any]]] = {}
 
     def setup_population(self, agents: List[CodeAgent]):
         """Set up the agent population."""
@@ -133,6 +139,17 @@ class DonorGame:
             round_data["interactions"].append(interaction)
             self._global_log.append(interaction)
 
+            # Maintain per-observer recent-actions ring buffer (for recent_window feature)
+            if self.recent_window > 0:
+                obs_view = {"donor": donor_id, "action": action, "round": self.round_num}
+                for observer in self.agents:
+                    if observer.agent_id == donor_id or observer.agent_id == recipient_id:
+                        continue  # Skip self/recipient — they're in their own my_history
+                    buf = self._recent_actions.setdefault(observer.agent_id, [])
+                    buf.append(obs_view)
+                    if len(buf) > self.recent_window * 2:  # 2x cap for safety
+                        buf = buf[-self.recent_window:]
+
         self.round_num += 1
         self.history.append(round_data)
         return round_data
@@ -157,18 +174,29 @@ class DonorGame:
                 if interaction["recipient"] == agent.agent_id:
                     continue
 
+                # Inject recent-actions window (if feature enabled)
+                obs_to_send = dict(interaction)  # shallow copy
+                if self.recent_window > 0:
+                    recent = self._recent_actions.get(agent.agent_id, [])
+                    obs_to_send["recent_window"] = list(recent[-self.recent_window:])
+
+                # Inject symmetric reputation noise (if feature enabled)
+                if self.reputation_noise > 0:
+                    noise = random.uniform(-self.reputation_noise, self.reputation_noise)
+                    obs_to_send["_reputation_noise"] = noise  # for downstream, not used yet
+
                 # Determine if agent observes this interaction
                 if self.observability == "full":
                     agent.observe(
                         donor_id=donor_id,
-                        observation=interaction,
+                        observation=obs_to_send,
                         round_num=interaction["round"]
                     )
                 elif self.observability.startswith("partial"):
                     if random.random() < self.observability_p:
                         agent.observe(
                             donor_id=donor_id,
-                            observation=interaction,
+                            observation=obs_to_send,
                             round_num=interaction["round"]
                         )
 

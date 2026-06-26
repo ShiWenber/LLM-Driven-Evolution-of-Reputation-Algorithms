@@ -136,6 +136,26 @@ def parse_args():
         help="Cost to donor"
     )
 
+    # --- Algorithmic-complexity probes (v16, opt-in only) ---
+    parser.add_argument(
+        "--recent-window", type=int, default=0,
+        help="If >0, inject last N observed (donor, action) tuples into each observation "
+             "as a 'recent_window' field. This opens a stateful observation interface, "
+             "enabling evolving agents to write algorithms that consume action sequences "
+             "(e.g. sliding-window majority, frequency counts)."
+    )
+    parser.add_argument(
+        "--reputation-noise", type=float, default=0.0,
+        help="Symmetric uniform noise U(-p, p) added to the donor_reputation field of "
+             "each observation. 0 = off. 0.1 = ±10% noise on observed reputation."
+    )
+    parser.add_argument(
+        "--exploration-mutation", action="store_true",
+        help="If set, 50%% of mutation calls use an 'exploration' prompt that does NOT "
+             "name specific algorithms but asks the LLM to consider strategies that use "
+             "patterns of actions over time (not just single events)."
+    )
+
     return parser.parse_args()
 
 
@@ -239,7 +259,10 @@ def run_evolutionary(
                     api_base_url=model_info.get("api_base_url", ""),
                     mutation_temperature=args.mutation_temperature,
                     seed=seed,
-                    results_dir=args.output
+                    results_dir=args.output,
+                    recent_window=args.recent_window,
+                    reputation_noise=args.reputation_noise,
+                    exploration_mutation=args.exploration_mutation,
                 )
 
                 # Override mutation operator for random mutation control
