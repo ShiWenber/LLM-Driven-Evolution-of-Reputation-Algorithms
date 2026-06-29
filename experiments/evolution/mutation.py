@@ -27,7 +27,9 @@ class MutationOperator:
         max_tokens: int = 8000,  # original default
         max_workers: int = 5,  # max concurrent LLM calls in mutate_batch
         api_key: str = "",
-        api_base_url: str = ""
+        api_base_url: str = "",
+        use_exploration: bool = False,
+        exploration_prob: float = 0.5,
     ):
         """
         Initialize mutation operator.
@@ -38,6 +40,12 @@ class MutationOperator:
             temperature: LLM temperature for mutation creativity
             max_retries: Max attempts if mutation produces invalid code
             rate_limit_delay: Seconds between API calls
+            use_exploration: If True, sample the exploration-mode mutation prompt
+                (does NOT name specific algorithms) with probability
+                exploration_prob on each mutation call. Used by
+                --exploration-mutation flag (algorithmic-complexity probes).
+            exploration_prob: Probability of using the exploration prompt on
+                each call (default 0.5).
         """
         self.llm_provider = llm_provider
         self.model = model
@@ -48,6 +56,8 @@ class MutationOperator:
         self.max_workers = max_workers
         self.api_key = api_key
         self.api_base_url = api_base_url
+        self.use_exploration = use_exploration
+        self.exploration_prob = exploration_prob
         self._client = None
 
     def _get_client(self):
@@ -79,7 +89,8 @@ class MutationOperator:
         self,
         parent_code: str,
         parent_fitness: float,
-        population_size: int = 20
+        population_size: int = 20,
+        recent_window: int = 0,
     ) -> Optional[str]:
         """
         Mutate a strategy code string.
@@ -88,11 +99,21 @@ class MutationOperator:
             parent_code: The successful parent strategy code
             parent_fitness: Fitness score of the parent
             population_size: Population size (for prompt context)
+            recent_window: If >0, mention the recent_window observation field
+                in the mutation prompt (LLM may then use it).
 
         Returns:
             Mutated code string, or None if all retries failed
         """
-        prompt = build_mutation_prompt(parent_code, parent_fitness, population_size)
+        if self.use_exploration and random.random() < self.exploration_prob:
+            from experiments.agents.prompts import build_exploration_mutation_prompt
+            prompt = build_exploration_mutation_prompt(
+                parent_code, parent_fitness, population_size, recent_window=recent_window
+            )
+        else:
+            prompt = build_mutation_prompt(
+                parent_code, parent_fitness, population_size, recent_window=recent_window
+            )
 
         for attempt in range(self.max_retries):
             try:
@@ -194,7 +215,8 @@ class MutationOperator:
         self,
         parents: List,  # list of (code, fitness) tuples
         population_size: int = 20,
-        max_workers: int = 5
+        max_workers: int = 5,
+        recent_window: int = 0,
     ) -> List[Optional[str]]:
         """
         Mutate multiple parents concurrently using a thread pool.
@@ -210,6 +232,8 @@ class MutationOperator:
             population_size: Population size (for prompt context)
             max_workers: Max number of concurrent LLM calls (default 5,
                 capped at 30 by caller)
+            recent_window: If >0, mention the recent_window observation field
+                in each mutation prompt (LLM may then use it).
 
         Returns:
             List of mutated code strings, one per parent (in same order).
@@ -219,7 +243,7 @@ class MutationOperator:
         if not parents:
             return []
         if len(parents) == 1:
-            return [self.mutate(parents[0][0], parents[0][1], population_size)]
+            return [self.mutate(parents[0][0], parents[0][1], population_size, recent_window=recent_window)]
 
         # Cap workers to a sane maximum (caller may pass up to 30, but we
         # never want more workers than parents)
@@ -229,7 +253,7 @@ class MutationOperator:
         results: List[Optional[str]] = [None] * len(parents)
 
         def _one(i, code, fitness):
-            return i, self.mutate(code, fitness, population_size)
+            return i, self.mutate(code, fitness, population_size, recent_window=recent_window)
 
         with ThreadPoolExecutor(max_workers=n_workers) as ex:
             futures = [

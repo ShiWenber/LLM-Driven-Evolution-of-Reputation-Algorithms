@@ -211,6 +211,59 @@ Return ONLY the modified Python code (both functions), nothing else.
 
 
 # ============================================================================
+# Exploration-mode mutation: prompt variant that does NOT name specific algorithms
+# but encourages consideration of strategies that aggregate information over
+# multiple observations rather than reacting to single events. Used by the
+# algorithmic-complexity ceiling probes (v16+).
+# ============================================================================
+
+EXPLORATION_MUTATION_PROMPT_TEMPLATE = """You are improving agent strategies for a repeated economic game.
+
+GAME RULES:
+- {population_size} agents interact over many rounds.
+- Each round, every agent is paired with a random recipient.
+- The agent must choose one of two actions, referred to in the observation
+  dict as "cooperate" and "defect". "cooperate" costs the agent 1 and
+  gives the recipient 2 (a positive-sum cooperative move). "defect" costs
+  nothing and gives the recipient nothing (a non-cooperative move).
+  The action labels are pre-named with the game's underlying semantics.
+
+Below is a strategy pair that performed well (score: {fitness:.1f}).
+It has TWO functions: evaluate (updates reputation from observations) and decide (chooses which action to take).
+
+ORIGINAL CODE:
+```python
+{parent_code}
+```
+
+Your task: Create a VARIANT of this strategy pair.
+The variant MUST contain both "evaluate" and "decide" functions.
+
+DIVERSITY GUIDELINES (this is an exploration round — be creative):
+- Consider strategies that score an agent based on its PATTERN of actions
+  over multiple observations, not just the most recent single event.
+  For example: a sliding window of the last several observations; counting
+  cooperations vs defections over time; weighting recent observations
+  differently from older ones; tracking how OFTEN an agent cooperated
+  relative to the population average.
+- Consider decide() rules that depend on multiple inputs at once
+  (recipient reputation AND own past behavior AND round number),
+  not only single thresholds.
+- The variant should be recognizably related to the original but should
+  make choices in situations where the original strategy is INDECISIVE
+  (e.g. when recipient_reputation is near 0, or when round_num is mid-game).
+- You may add new tracking variables, different counting methods, or
+  alternative approaches.
+- Keep the EXACT same function signatures (parameter names and order must match).
+- Use observation["action"] (a string equal to "cooperate" or "defect") in evaluate
+- Return True from decide() to cooperate, False to defect. The action
+  labels directly correspond to the game's underlying semantics.
+
+Return ONLY the modified Python code (both functions), nothing else.
+"""
+
+
+# ============================================================================
 # Diversity check: ensure strategies are actually different
 # ============================================================================
 
@@ -270,7 +323,8 @@ def build_init_prompt(
     population_size: int = 20,
     num_rounds: int = 30,
     start_idx: int = 0,
-    compact: bool = False
+    compact: bool = False,
+    recent_window: int = 0,
 ) -> str:
     """Build the initialization prompt to generate diverse strategy pairs."""
     prompt = INIT_PROMPT_TEMPLATE
@@ -278,8 +332,22 @@ def build_init_prompt(
     prompt = prompt.replace("{population_size}", str(population_size))
     prompt = prompt.replace("{num_rounds}", str(num_rounds))
     prompt = prompt.replace("{interface_explanation}", STRATEGY_INTERFACE_EXPLANATION)
-    prompt = prompt.replace("{strategy_interface}",
-                            STRATEGY_INTERFACE_COMPACT if compact else STRATEGY_INTERFACE)
+    if recent_window > 0:
+        # Inject the recent_window field description into the interface
+        # (only when this feature is enabled — keeps the default prompt
+        # identical to v15 for backward compatibility)
+        from_str = '"action": "cooperate" | "defect"\n        (the action label is pre-named: "cooperate" is the option that costs the\n         donor 1 and gives the recipient 2; "defect" is the option that costs 0\n         and gives the recipient 0. These names describe the game\'s underlying\n         semantics, not the LLM-facing vocabulary.)'
+        to_str = from_str + '\n\n        "recent_window": list[dict] (optional; only present if the game was\n            configured with a recent-actions window. Each entry: {"donor": int,\n            "action": "cooperate"|"defect", "round": int} — the most recent\n            observed interactions involving OTHER agents, in reverse\n            chronological order. Empty list if no observations yet. You may\n            ignore this key entirely if you don\'t need it; it is only present\n            to enable strategies that aggregate over multiple observations.)'
+        interface = STRATEGY_INTERFACE.replace(from_str, to_str)
+        interface_compact = STRATEGY_INTERFACE_COMPACT.replace(
+            "'round' (int), 'recent_window' (optional list of recent observed actions)",
+            "'round' (int), 'recent_window' (optional list of recent observed actions)",
+        )
+        prompt = prompt.replace("{strategy_interface}",
+                                interface_compact if compact else interface)
+    else:
+        prompt = prompt.replace("{strategy_interface}",
+                                STRATEGY_INTERFACE_COMPACT if compact else STRATEGY_INTERFACE)
     prompt = prompt.replace("{start_idx}", str(start_idx))
     return prompt
 
@@ -288,12 +356,45 @@ def build_mutation_prompt(
     parent_code: str,
     fitness: float,
     population_size: int = 20,
+    recent_window: int = 0,
 ) -> str:
     """Build the mutation prompt to vary a successful strategy pair."""
     prompt = MUTATION_PROMPT_TEMPLATE
     prompt = prompt.replace("{parent_code}", parent_code)
     prompt = prompt.replace("{fitness}", f"{fitness:.1f}")
     prompt = prompt.replace("{population_size}", str(population_size))
+    if recent_window > 0:
+        # Append a note about the recent_window observation field
+        prompt += (
+            "\nNOTE: observation dict now contains a 'recent_window' field — a list "
+            "of recent (donor, action, round) dicts for OTHER agents. You may use it "
+            "to aggregate over multiple observations (e.g. count cooperations, "
+            "compute a sliding-window majority) if you wish; or you may ignore it."
+        )
+    return prompt
+
+
+def build_exploration_mutation_prompt(
+    parent_code: str,
+    fitness: float,
+    population_size: int = 20,
+    recent_window: int = 0,
+) -> str:
+    """Build the exploration-mode mutation prompt. Does NOT name specific
+    algorithms (leading-eight, RL, MCTS, etc.) but encourages the LLM to
+    consider strategies that aggregate information over multiple observations
+    rather than reacting to single events. Used by --exploration-mutation flag."""
+    prompt = EXPLORATION_MUTATION_PROMPT_TEMPLATE
+    prompt = prompt.replace("{parent_code}", parent_code)
+    prompt = prompt.replace("{fitness}", f"{fitness:.1f}")
+    prompt = prompt.replace("{population_size}", str(population_size))
+    if recent_window > 0:
+        prompt += (
+            "\nNOTE: observation dict now contains a 'recent_window' field — a list "
+            "of recent (donor, action, round) dicts for OTHER agents. You may use it "
+            "to aggregate over multiple observations (e.g. count cooperations, "
+            "compute a sliding-window majority) if you wish; or you may ignore it."
+        )
     return prompt
 
 
