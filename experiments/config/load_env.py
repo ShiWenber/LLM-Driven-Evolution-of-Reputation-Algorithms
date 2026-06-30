@@ -33,6 +33,7 @@ _PROVIDER_ENV_VARS: dict[str, tuple[str, ...]] = {
     "openai":     ("OPENAI_API_KEY",),
     "anthropic":  ("ANTHROPIC_API_KEY",),
     "google":     ("GOOGLE_API_KEY", "GEMINI_API_KEY"),
+    "paratera":   ("ROUTER_API_KEY", "PARATERA_API_KEY"),
 }
 
 # Provider -> default base URL
@@ -40,6 +41,7 @@ _DEFAULT_BASE_URLS: dict[str, str] = {
     "deepseek":  "https://api.deepseek.com",
     "openai":    "https://api.openai.com/v1",
     "anthropic": "https://api.anthropic.com",
+    "paratera":  "https://llmapi.paratera.com",
 }
 
 # Provider -> default model
@@ -48,6 +50,7 @@ _DEFAULT_MODELS: dict[str, str] = {
     "openai":    "gpt-4o",
     "anthropic": "claude-3-5-sonnet-20241022",
     "google":    "gemini-1.5-pro",
+    "paratera":  "Intern-S2-Preview",
 }
 
 

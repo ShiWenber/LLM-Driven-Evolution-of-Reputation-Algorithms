@@ -58,6 +58,12 @@ MODELS = {
         "key":  lambda: get_api_key("deepseek"),
         "url":  lambda: get_base_url("deepseek"),
     },
+    "paratera-intern": {
+        "name": "Intern-S2-Preview",
+        "provider": "openai",  # OpenAI-compatible
+        "key":  lambda: get_api_key("paratera"),
+        "url":  lambda: get_base_url("paratera"),
+    },
 }
 
 

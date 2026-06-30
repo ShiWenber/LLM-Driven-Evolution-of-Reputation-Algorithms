@@ -24,7 +24,7 @@ class MutationOperator:
         temperature: float = 0.8,
         max_retries: int = 3,
         rate_limit_delay: float = 0.5,
-        max_tokens: int = 8000,  # original default
+        max_tokens: int = 3000,  # reduced from 8000: Paratera/Intern-S2-Preview tends to emit 30K+ char garbage otherwise
         max_workers: int = 5,  # max concurrent LLM calls in mutate_batch
         api_key: str = "",
         api_base_url: str = "",
