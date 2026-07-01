@@ -30,6 +30,7 @@ class MutationOperator:
         api_base_url: str = "",
         use_exploration: bool = False,
         exploration_prob: float = 0.5,
+        per_call_timeout: float = 60.0,  # max seconds per single LLM call (Intern thinking model can hang)
     ):
         """
         Initialize mutation operator.
@@ -58,6 +59,7 @@ class MutationOperator:
         self.api_base_url = api_base_url
         self.use_exploration = use_exploration
         self.exploration_prob = exploration_prob
+        self.per_call_timeout = per_call_timeout
         self._client = None
 
     def _get_client(self):
@@ -180,7 +182,8 @@ class MutationOperator:
                     {"role": "user", "content": prompt}
                 ],
                 temperature=self.temperature,
-                max_tokens=mt
+                max_tokens=mt,
+                timeout=self.per_call_timeout,
             )
             if response is None or not hasattr(response, 'choices') or not response.choices:
                 return None

@@ -369,6 +369,7 @@ class EvolutionaryPopulation:
                 api_base_url=self.api_base_url,
                 max_workers=workers,
                 use_exploration=self.exploration_mutation,
+                per_call_timeout=120.0,  # v17: 120s cap per LLM call (Intern thinking model)
             )
 
         # 4. Mutate to create children (concurrent LLM calls)
