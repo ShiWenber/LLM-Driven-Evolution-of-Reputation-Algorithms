@@ -300,6 +300,23 @@ class RandomMutationOperator:
 
         return code
 
+    def mutate_batch(self, parents, population_size=20, max_workers=5, recent_window=0):
+        """Concurrent mutate_batch (matches MutationOperator interface).
+        Random mutations are CPU-only so threads give us parallelism trivially."""
+        if not parents:
+            return []
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        results = [None] * len(parents)
+        n_workers = min(max_workers if max_workers is not None else 5, len(parents))
+        def _one(i, code, fitness):
+            return i, self.mutate(code, fitness, population_size)
+        with ThreadPoolExecutor(max_workers=n_workers) as ex:
+            futures = [ex.submit(_one, i, code, fitness) for i, (code, fitness) in enumerate(parents)]
+            for fut in as_completed(futures):
+                i, mutated = fut.result()
+                results[i] = mutated
+        return results
+
     def _flip_comparison(self, code: str) -> str:
         """Flip a comparison operator."""
         flips = [
