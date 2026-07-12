@@ -31,6 +31,8 @@ class MutationOperator:
         use_exploration: bool = False,
         exploration_prob: float = 0.5,
         per_call_timeout: float = 60.0,  # max seconds per single LLM call (Intern thinking model can hang)
+        enable_thinking: bool = False,  # v23: capture reasoning_content from deepseek-v4-flash
+        reasoning_effort: str = "high",  # v23: "high" or "max" (low/medium map to high per DeepSeek API)
     ):
         """
         Initialize mutation operator.
@@ -47,6 +49,13 @@ class MutationOperator:
                 --exploration-mutation flag (algorithmic-complexity probes).
             exploration_prob: Probability of using the exploration prompt on
                 each call (default 0.5).
+            enable_thinking: If True, pass extra_body={"thinking": {"type": "enabled"}}
+                to enable deepseek-v4-flash's thinking mode. The reasoning_content
+                is then available on the response message and can be captured by
+                callers (e.g. MutationOperatorWithReasoning subclass). Defaults to False
+                to preserve v15-v22 behavior exactly.
+            reasoning_effort: "high" or "max". low/medium map to high per DeepSeek
+                API spec; xhigh maps to max.
         """
         self.llm_provider = llm_provider
         self.model = model
@@ -60,7 +69,13 @@ class MutationOperator:
         self.use_exploration = use_exploration
         self.exploration_prob = exploration_prob
         self.per_call_timeout = per_call_timeout
+        self.enable_thinking = enable_thinking
+        self.reasoning_effort = reasoning_effort
         self._client = None
+        # v23: per-call reasoning_content log; populated by `_call_llm` when
+        # enable_thinking=True. List of dicts with keys: prompt_kind, gen,
+        # strategy_id, parent_id, reasoning, content, ts.
+        self.reasoning_log: list = []
 
     def _get_client(self):
         """Lazy initialization of LLM client."""
@@ -157,12 +172,17 @@ class MutationOperator:
         return random_op.mutate(parent_code, parent_fitness)
 
     def _call_llm(self, prompt: str, max_tokens: int = None) -> Optional[str]:
-        """Call the LLM API. Returns None on malformed response."""
+        """Call the LLM API. Returns None on malformed response.
+
+        When enable_thinking=True (v23), passes extra_body={"thinking": {...}}
+        and reasoning_effort to the API; reasoning_content (if any) is appended
+        to self.reasoning_log. The returned content is the same as before.
+        """
         client = self._get_client()
         mt = max_tokens if max_tokens is not None else self.max_tokens
 
         if self.llm_provider == "openai":
-            response = client.chat.completions.create(
+            kwargs = dict(
                 model=self.model,
                 messages=[
                     {
@@ -181,13 +201,33 @@ class MutationOperator:
                     },
                     {"role": "user", "content": prompt}
                 ],
-                temperature=self.temperature,
                 max_tokens=mt,
                 timeout=self.per_call_timeout,
             )
+            if self.enable_thinking:
+                # DeepSeek thinking mode (also works for OpenAI o1/R1).
+                # Per DeepSeek spec: low/medium map to high, xhigh to max.
+                kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
+                kwargs["reasoning_effort"] = self.reasoning_effort
+                # Note: temperature/top_p/presence_penalty/frequency_penalty
+                # are NOT supported in thinking mode; we deliberately omit them.
+            else:
+                kwargs["temperature"] = self.temperature
+            response = client.chat.completions.create(**kwargs)
             if response is None or not hasattr(response, 'choices') or not response.choices:
                 return None
-            content = response.choices[0].message.content
+            msg = response.choices[0].message
+            content = msg.content
+            # v23: capture reasoning_content if present
+            if self.enable_thinking:
+                reasoning = getattr(msg, 'reasoning_content', None) or ""
+                self.reasoning_log.append({
+                    "ts": time.time(),
+                    "model": self.model,
+                    "prompt_kind": "mutation",  # updated by callers if needed
+                    "reasoning": reasoning,
+                    "content": content or "",
+                })
             return content if content else None
 
         elif self.llm_provider == "anthropic":

@@ -134,12 +134,22 @@ def parse_args():
     parser.add_argument("--seeds", type=int, default=3)
     parser.add_argument("--output", type=str, default="results")
     parser.add_argument(
-        "--benefit", type=int, default=2,
+        "--benefit", type=float, default=2.0,
         help="Benefit to recipient"
     )
     parser.add_argument(
-        "--cost", type=int, default=1,
+        "--cost", type=float, default=1.0,
         help="Cost to donor"
+    )
+    # v23: reasoning-trace capture
+    parser.add_argument(
+        "--enable-thinking", action="store_true",
+        help="Enable deepseek-v4-flash thinking mode; capture reasoning_content"
+    )
+    parser.add_argument(
+        "--reasoning-effort", type=str, default="high",
+        choices=["high", "max"],
+        help="Reasoning effort for thinking mode (low/medium map to high per DeepSeek spec)"
     )
 
     # --- Algorithmic-complexity probes (v16, opt-in only) ---
@@ -269,6 +279,8 @@ def run_evolutionary(
                     recent_window=args.recent_window,
                     reputation_noise=args.reputation_noise,
                     exploration_mutation=args.exploration_mutation,
+                    enable_thinking=args.enable_thinking,  # v23
+                    reasoning_effort=args.reasoning_effort,  # v23
                 )
 
                 # Override mutation operator for random mutation control
@@ -280,6 +292,17 @@ def run_evolutionary(
                 results["provider"] = model_info["provider"]
                 results["observability"] = obs
                 results["seed"] = seed
+
+                # v23: write reasoning_log if captured
+                if args.enable_thinking and hasattr(pop, 'reasoning_log') and pop.reasoning_log:
+                    out_dir = Path(args.output) / f"{obs}_seed{seed}"
+                    out_dir.mkdir(parents=True, exist_ok=True)
+                    reasoning_path = out_dir / f"reasoning_{model_info['name']}_{obs}_seed{seed}.json"
+                    reasoning_path.write_text(
+                        json.dumps(pop.reasoning_log, indent=2, ensure_ascii=False),
+                        encoding='utf-8'
+                    )
+                    print(f"  Reasoning log: {len(pop.reasoning_log)} entries -> {reasoning_path}")
 
                 all_results["trials"].append(results)
 

@@ -53,6 +53,8 @@ class EvolutionaryPopulation:
         recent_window: int = 0,
         reputation_noise: float = 0.0,
         exploration_mutation: bool = False,
+        enable_thinking: bool = False,  # v23: capture reasoning_content
+        reasoning_effort: str = "high",
     ):
         self.population_size = population_size
         self.num_rounds_per_gen = num_rounds_per_gen
@@ -73,6 +75,8 @@ class EvolutionaryPopulation:
         self.recent_window = recent_window
         self.reputation_noise = reputation_noise
         self.exploration_mutation = exploration_mutation
+        self.enable_thinking = enable_thinking
+        self.reasoning_effort = reasoning_effort
 
         # State
         self.agents: List[CodeAgent] = []
@@ -80,6 +84,8 @@ class EvolutionaryPopulation:
         self.history: List[Dict[str, Any]] = []
         self.mutation_op: Optional[MutationOperator] = None
         self._llm_client = None
+        # v23: per-call reasoning_content log (init + mutation both feed in)
+        self.reasoning_log: list = []
 
         random.seed(seed)
         np.random.seed(seed)
@@ -187,7 +193,8 @@ class EvolutionaryPopulation:
                         ),
                         user_msg=batch_prompt,
                         temperature=0.9,
-                        max_tokens=8000
+                        max_tokens=8000,
+                        prompt_kind="init",
                     )
 
                     if response_text is None:
@@ -264,24 +271,45 @@ class EvolutionaryPopulation:
         system_msg: str,
         user_msg: str,
         temperature: float = 0.9,
-        max_tokens: int = 8000
+        max_tokens: int = 8000,
+        prompt_kind: str = "init"  # v23: "init" or "mutation"
     ) -> Optional[str]:
-        """Make a raw LLM API call. Returns None on malformed response."""
+        """Make a raw LLM API call. Returns None on malformed response.
+
+        v23: when enable_thinking=True, passes extra_body for thinking mode and
+        captures reasoning_content into self.reasoning_log.
+        """
+        import time as _t
         client = self._get_llm_client()
 
         if self.llm_provider == "openai":
-            response = client.chat.completions.create(
+            kwargs = dict(
                 model=self.llm_model,
                 messages=[
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": user_msg}
                 ],
-                temperature=temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
             )
+            if self.enable_thinking:
+                kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
+                kwargs["reasoning_effort"] = self.reasoning_effort
+            else:
+                kwargs["temperature"] = temperature
+            response = client.chat.completions.create(**kwargs)
             if response is None or not hasattr(response, 'choices') or not response.choices:
                 return None
-            content = response.choices[0].message.content
+            msg = response.choices[0].message
+            content = msg.content
+            if self.enable_thinking:
+                reasoning = getattr(msg, 'reasoning_content', None) or ""
+                self.reasoning_log.append({
+                    "ts": _t.time(),
+                    "model": self.llm_model,
+                    "prompt_kind": prompt_kind,
+                    "reasoning": reasoning,
+                    "content": content or "",
+                })
             return content if content else None
 
         elif self.llm_provider == "anthropic":
@@ -370,6 +398,8 @@ class EvolutionaryPopulation:
                 max_workers=workers,
                 use_exploration=self.exploration_mutation,
                 per_call_timeout=120.0,  # v17: 120s cap per LLM call (Intern thinking model)
+                enable_thinking=self.enable_thinking,  # v23
+                reasoning_effort=self.reasoning_effort,  # v23
             )
 
         # 4. Mutate to create children (concurrent LLM calls)
@@ -381,6 +411,13 @@ class EvolutionaryPopulation:
             max_workers=getattr(self.mutation_op, 'max_workers', 5),
             recent_window=self.recent_window,
         )
+        # v23: capture mutation reasoning into population's log
+        if self.enable_thinking and hasattr(self.mutation_op, 'reasoning_log'):
+            # tag each mutation entry with generation
+            for entry in self.mutation_op.reasoning_log:
+                if entry.get('prompt_kind') == 'mutation':
+                    entry['gen'] = gen_idx + 1
+            self.reasoning_log.extend(self.mutation_op.reasoning_log)
 
         for parent, mutated_code in zip(parents, mutated_codes):
             if mutated_code is None:
