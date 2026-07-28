@@ -1,0 +1,864 @@
+{
+  "seed0": {
+    "per_gen": [
+      {
+        "generation": 0,
+        "coop_rate": 0.8822222222222222,
+        "family_counts": {
+          "IS_mid": 14,
+          "IS_strict": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 1,
+        "coop_rate": 0.8444444444444444,
+        "family_counts": {
+          "IS_mid": 11,
+          "IS_strict": 4
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 2,
+        "coop_rate": 0.7422222222222222,
+        "family_counts": {
+          "IS_strict": 9,
+          "IS_mid": 6
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 3,
+        "coop_rate": 0.6777777777777778,
+        "family_counts": {
+          "IS_strict": 10,
+          "IS_mid": 4,
+          "random": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 4,
+        "coop_rate": 0.7844444444444445,
+        "family_counts": {
+          "IS_mid": 2,
+          "random": 4,
+          "IS_strict": 9
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 5,
+        "coop_rate": 0.9755555555555555,
+        "family_counts": {
+          "IS_strict": 9,
+          "random": 5,
+          "IS_mid": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 6,
+        "coop_rate": 0.9311111111111111,
+        "family_counts": {
+          "IS_strict": 10,
+          "random": 5
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 7,
+        "coop_rate": 0.9422222222222222,
+        "family_counts": {
+          "IS_strict": 14,
+          "random": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 8,
+        "coop_rate": 0.7177777777777777,
+        "family_counts": {
+          "IS_strict": 15
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 9,
+        "coop_rate": 0.9644444444444444,
+        "family_counts": {
+          "IS_strict": 15
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 10,
+        "coop_rate": 0.6222222222222222,
+        "family_counts": {
+          "IS_strict": 14,
+          "IS_mid": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 11,
+        "coop_rate": 0.6377777777777778,
+        "family_counts": {
+          "IS_mid": 3,
+          "IS_strict": 12
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 12,
+        "coop_rate": 0.8977777777777778,
+        "family_counts": {
+          "IS_strict": 10,
+          "IS_mid": 5
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 13,
+        "coop_rate": 0.9688888888888889,
+        "family_counts": {
+          "IS_mid": 9,
+          "IS_strict": 6
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 14,
+        "coop_rate": 0.9288888888888889,
+        "family_counts": {
+          "IS_mid": 9,
+          "IS_strict": 6
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 15,
+        "coop_rate": 0.8755555555555555,
+        "family_counts": {
+          "IS_strict": 9,
+          "IS_mid": 6
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 16,
+        "coop_rate": 0.7488888888888889,
+        "family_counts": {
+          "IS_strict": 14,
+          "IS_mid": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 17,
+        "coop_rate": 0.8244444444444444,
+        "family_counts": {
+          "IS_strict": 14,
+          "IS_mid": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 18,
+        "coop_rate": 0.9222222222222223,
+        "family_counts": {
+          "IS_mid": 3,
+          "IS_strict": 12
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 19,
+        "coop_rate": 0.9244444444444444,
+        "family_counts": {
+          "IS_strict": 12,
+          "IS_mid": 3
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 20,
+        "coop_rate": 0.5911111111111111,
+        "family_counts": {
+          "IS_strict": 15
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 21,
+        "coop_rate": 0.5688888888888889,
+        "family_counts": {
+          "IS_strict": 15
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 22,
+        "coop_rate": 0.6133333333333333,
+        "family_counts": {
+          "IS_strict": 14,
+          "IS_mid": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 23,
+        "coop_rate": 0.5266666666666666,
+        "family_counts": {
+          "IS_strict": 13,
+          "IS_mid": 2
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 24,
+        "coop_rate": 0.5244444444444445,
+        "family_counts": {
+          "IS_mid": 6,
+          "IS_strict": 9
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 25,
+        "coop_rate": 0.48,
+        "family_counts": {
+          "IS_strict": 12,
+          "IS_mid": 3
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 26,
+        "coop_rate": 0.4066666666666667,
+        "family_counts": {
+          "IS_mid": 5,
+          "IS_strict": 10
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 27,
+        "coop_rate": 0.30666666666666664,
+        "family_counts": {
+          "IS_mid": 9,
+          "IS_strict": 6
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 28,
+        "coop_rate": 0.008888888888888889,
+        "family_counts": {
+          "IS_strict": 8,
+          "IS_mid": 7
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 29,
+        "coop_rate": 0.03111111111111111,
+        "family_counts": {
+          "IS_mid": 8,
+          "IS_strict": 7
+        },
+        "n_agents": 15
+      }
+    ],
+    "first_appearance": {
+      "IS_mid": 0,
+      "IS_strict": 0,
+      "random": 3
+    },
+    "collapse_gen": 25,
+    "recovery_gen": null,
+    "final_coop": 0.03111111111111111
+  },
+  "seed1": {
+    "per_gen": [
+      {
+        "generation": 0,
+        "coop_rate": 1.0,
+        "family_counts": {
+          "IS_mid": 12,
+          "random": 2,
+          "IS_permissive": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 1,
+        "coop_rate": 0.6444444444444445,
+        "family_counts": {
+          "IS_mid": 8,
+          "IS_permissive": 5,
+          "IS_strict": 1,
+          "random": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 2,
+        "coop_rate": 0.6444444444444445,
+        "family_counts": {
+          "IS_mid": 11,
+          "IS_strict": 4
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 3,
+        "coop_rate": 0.6355555555555555,
+        "family_counts": {
+          "IS_strict": 6,
+          "IS_mid": 9
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 4,
+        "coop_rate": 0.5088888888888888,
+        "family_counts": {
+          "IS_strict": 13,
+          "IS_mid": 2
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 5,
+        "coop_rate": 0.4666666666666667,
+        "family_counts": {
+          "IS_mid": 3,
+          "IS_strict": 10,
+          "IS_permissive": 1,
+          "random": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 6,
+        "coop_rate": 0.3977777777777778,
+        "family_counts": {
+          "IS_strict": 13,
+          "random": 1,
+          "IS_mid": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 7,
+        "coop_rate": 0.7422222222222222,
+        "family_counts": {
+          "IS_strict": 14,
+          "IS_mid": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 8,
+        "coop_rate": 0.5822222222222222,
+        "family_counts": {
+          "IS_mid": 1,
+          "IS_strict": 14
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 9,
+        "coop_rate": 0.44,
+        "family_counts": {
+          "IS_strict": 14,
+          "IS_mid": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 10,
+        "coop_rate": 0.5,
+        "family_counts": {
+          "IS_strict": 12,
+          "IS_mid": 3
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 11,
+        "coop_rate": 0.4688888888888889,
+        "family_counts": {
+          "IS_strict": 14,
+          "IS_mid": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 12,
+        "coop_rate": 0.43333333333333335,
+        "family_counts": {
+          "IS_strict": 13,
+          "IS_mid": 2
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 13,
+        "coop_rate": 0.44666666666666666,
+        "family_counts": {
+          "IS_strict": 11,
+          "IS_mid": 4
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 14,
+        "coop_rate": 0.35555555555555557,
+        "family_counts": {
+          "IS_mid": 4,
+          "IS_strict": 11
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 15,
+        "coop_rate": 0.4688888888888889,
+        "family_counts": {
+          "IS_mid": 8,
+          "IS_strict": 7
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 16,
+        "coop_rate": 0.3622222222222222,
+        "family_counts": {
+          "IS_strict": 7,
+          "IS_mid": 8
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 17,
+        "coop_rate": 0.5266666666666666,
+        "family_counts": {
+          "IS_mid": 8,
+          "IS_strict": 7
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 18,
+        "coop_rate": 0.3377777777777778,
+        "family_counts": {
+          "IS_mid": 10,
+          "IS_strict": 5
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 19,
+        "coop_rate": 0.3844444444444444,
+        "family_counts": {
+          "IS_mid": 11,
+          "IS_strict": 3,
+          "IS_permissive": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 20,
+        "coop_rate": 0.41555555555555557,
+        "family_counts": {
+          "IS_mid": 11,
+          "IS_strict": 3,
+          "IS_permissive": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 21,
+        "coop_rate": 0.4777777777777778,
+        "family_counts": {
+          "IS_mid": 9,
+          "IS_strict": 6
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 22,
+        "coop_rate": 0.38666666666666666,
+        "family_counts": {
+          "IS_strict": 7,
+          "IS_mid": 8
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 23,
+        "coop_rate": 0.4288888888888889,
+        "family_counts": {
+          "IS_strict": 9,
+          "IS_mid": 6
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 24,
+        "coop_rate": 0.3288888888888889,
+        "family_counts": {
+          "IS_mid": 6,
+          "IS_strict": 9
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 25,
+        "coop_rate": 0.3933333333333333,
+        "family_counts": {
+          "IS_mid": 7,
+          "IS_strict": 8
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 26,
+        "coop_rate": 0.43555555555555553,
+        "family_counts": {
+          "IS_strict": 9,
+          "IS_mid": 6
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 27,
+        "coop_rate": 0.4533333333333333,
+        "family_counts": {
+          "IS_mid": 9,
+          "IS_strict": 6
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 28,
+        "coop_rate": 0.5044444444444445,
+        "family_counts": {
+          "IS_mid": 10,
+          "IS_strict": 5
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 29,
+        "coop_rate": 0.49333333333333335,
+        "family_counts": {
+          "IS_strict": 4,
+          "IS_mid": 11
+        },
+        "n_agents": 15
+      }
+    ],
+    "first_appearance": {
+      "IS_mid": 0,
+      "random": 0,
+      "IS_permissive": 0,
+      "IS_strict": 1
+    },
+    "collapse_gen": 5,
+    "recovery_gen": null,
+    "final_coop": 0.49333333333333335
+  },
+  "seed2": {
+    "per_gen": [
+      {
+        "generation": 0,
+        "coop_rate": 0.8288888888888889,
+        "family_counts": {
+          "IS_mid": 14,
+          "random": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 1,
+        "coop_rate": 0.8755555555555555,
+        "family_counts": {
+          "IS_mid": 12,
+          "IS_strict": 3
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 2,
+        "coop_rate": 0.7933333333333333,
+        "family_counts": {
+          "IS_strict": 7,
+          "IS_mid": 7,
+          "IS_permissive": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 3,
+        "coop_rate": 0.6266666666666667,
+        "family_counts": {
+          "IS_permissive": 1,
+          "IS_strict": 5,
+          "IS_mid": 9
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 4,
+        "coop_rate": 0.6288888888888889,
+        "family_counts": {
+          "IS_mid": 6,
+          "IS_permissive": 4,
+          "IS_strict": 5
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 5,
+        "coop_rate": 0.44222222222222224,
+        "family_counts": {
+          "IS_permissive": 4,
+          "IS_strict": 8,
+          "IS_mid": 3
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 6,
+        "coop_rate": 0.5911111111111111,
+        "family_counts": {
+          "IS_mid": 11,
+          "IS_strict": 3,
+          "IS_permissive": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 7,
+        "coop_rate": 0.6777777777777778,
+        "family_counts": {
+          "IS_mid": 10,
+          "IS_permissive": 3,
+          "IS_strict": 2
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 8,
+        "coop_rate": 0.5622222222222222,
+        "family_counts": {
+          "IS_mid": 10,
+          "IS_strict": 3,
+          "IS_permissive": 2
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 9,
+        "coop_rate": 0.7311111111111112,
+        "family_counts": {
+          "IS_mid": 11,
+          "IS_strict": 4
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 10,
+        "coop_rate": 0.5888888888888889,
+        "family_counts": {
+          "IS_strict": 11,
+          "IS_mid": 3,
+          "IS_permissive": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 11,
+        "coop_rate": 0.5222222222222223,
+        "family_counts": {
+          "IS_strict": 11,
+          "IS_permissive": 1,
+          "IS_mid": 3
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 12,
+        "coop_rate": 0.5866666666666667,
+        "family_counts": {
+          "IS_strict": 15
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 13,
+        "coop_rate": 0.6133333333333333,
+        "family_counts": {
+          "IS_strict": 11,
+          "IS_mid": 4
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 14,
+        "coop_rate": 0.8444444444444444,
+        "family_counts": {
+          "IS_strict": 9,
+          "IS_mid": 5,
+          "IS_permissive": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 15,
+        "coop_rate": 1.0,
+        "family_counts": {
+          "IS_mid": 7,
+          "IS_strict": 8
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 16,
+        "coop_rate": 0.9866666666666667,
+        "family_counts": {
+          "IS_strict": 12,
+          "IS_mid": 3
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 17,
+        "coop_rate": 0.5955555555555555,
+        "family_counts": {
+          "IS_mid": 3,
+          "IS_strict": 12
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 18,
+        "coop_rate": 0.45555555555555555,
+        "family_counts": {
+          "IS_strict": 14,
+          "IS_mid": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 19,
+        "coop_rate": 0.4088888888888889,
+        "family_counts": {
+          "IS_strict": 14,
+          "IS_mid": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 20,
+        "coop_rate": 0.5444444444444444,
+        "family_counts": {
+          "IS_strict": 12,
+          "IS_mid": 3
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 21,
+        "coop_rate": 0.48444444444444446,
+        "family_counts": {
+          "IS_strict": 14,
+          "IS_mid": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 22,
+        "coop_rate": 0.3933333333333333,
+        "family_counts": {
+          "IS_strict": 15
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 23,
+        "coop_rate": 0.45111111111111113,
+        "family_counts": {
+          "IS_strict": 15
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 24,
+        "coop_rate": 0.4022222222222222,
+        "family_counts": {
+          "IS_strict": 14,
+          "IS_mid": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 25,
+        "coop_rate": 0.5844444444444444,
+        "family_counts": {
+          "IS_strict": 14,
+          "IS_mid": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 26,
+        "coop_rate": 0.6311111111111111,
+        "family_counts": {
+          "IS_strict": 14,
+          "IS_mid": 1
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 27,
+        "coop_rate": 0.6355555555555555,
+        "family_counts": {
+          "IS_strict": 12,
+          "IS_mid": 3
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 28,
+        "coop_rate": 0.5422222222222223,
+        "family_counts": {
+          "IS_strict": 12,
+          "IS_mid": 3
+        },
+        "n_agents": 15
+      },
+      {
+        "generation": 29,
+        "coop_rate": 0.7666666666666667,
+        "family_counts": {
+          "IS_strict": 13,
+          "IS_mid": 2
+        },
+        "n_agents": 15
+      }
+    ],
+    "first_appearance": {
+      "IS_mid": 0,
+      "random": 0,
+      "IS_strict": 1,
+      "IS_permissive": 2
+    },
+    "collapse_gen": 5,
+    "recovery_gen": 15,
+    "final_coop": 0.7666666666666667
+  }
+}
