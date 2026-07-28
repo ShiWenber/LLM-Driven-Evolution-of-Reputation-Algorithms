@@ -48,35 +48,40 @@ class V2DonorGame:
 
     def setup_population(self, agents: List[QuantitativeAgent]):
         self.agents = agents
-        # Reassign agent IDs to list positions
-        for i, a in enumerate(self.agents):
-            a.agent_id = i
+        # NOTE: agent_id is a STABLE global identity (assigned monotonically
+        # by V2EvolutionaryPopulation._new_agent). We do NOT reassign it to
+        # list positions. List index in self.agents is just iteration order.
+        # Build a lookup so play_round can resolve agent_id -> agent object
+        # without scanning the list each time.
+        self._agent_by_id = {a.agent_id: a for a in self.agents}
 
     def play_round(self) -> Dict:
         """Play one round: each agent acts as donor once with random recipient."""
         self.round_num += 1
         round_log = []
-        # Each agent in shuffled order takes a turn as donor
-        donor_order = list(range(self.population_size))
+        # Each agent (by stable agent_id) in shuffled order takes a turn
+        agent_ids = [a.agent_id for a in self.agents]
+        donor_order = list(agent_ids)
         self.rng.shuffle(donor_order)
         for donor_id in donor_order:
-            # Choose random recipient
-            recipient_id = self.rng.randrange(self.population_size)
+            # Choose random recipient (by agent_id, not list position)
+            recipient_id = agent_ids[self.rng.randrange(self.population_size)]
             while recipient_id == donor_id:
-                recipient_id = self.rng.randrange(self.population_size)
-            donor = self.agents[donor_id]
-            recipient = self.agents[recipient_id]
+                recipient_id = agent_ids[self.rng.randrange(self.population_size)]
+            donor = self._agent_by_id[donor_id]
+            recipient = self._agent_by_id[recipient_id]
             action = donor.choose(recipient_id, round_num=self.round_num)
             donor.record_donation(recipient_id, action, self.round_num)
-            # Payoffs
+            # Payoffs (use list position to index the payoffs array)
+            donor_pos = self.agents.index(donor)
+            recipient_pos = self.agents.index(recipient)
             if action:
-                self.payoffs[donor_id] -= self.cost
-                self.payoffs[recipient_id] += self.benefit
+                self.payoffs[donor_pos] -= self.cost
+                self.payoffs[recipient_pos] += self.benefit
             # Store action as STRING ('cooperate' / 'defect') so that the
             # strategy code can pattern-match on it in evaluate().
             action_str = "cooperate" if action else "defect"
-            # Note: "recipient_action" from recipient's POV is what the donor did
-            recipient_action = action_str  # donor's action is recipient's "partner_action"
+            recipient_action = action_str
             interaction = {
                 "round": self.round_num,
                 "donor": donor_id,
@@ -93,42 +98,37 @@ class V2DonorGame:
 
         Order of operations:
           1. donor.self_judge()  (donor updates their own self-rating)
-          2. recipient.self_judge()  (recipient too)
-          3. for each observer (per observability rules), call
+          2. for each observer (per observability rules), call
              observer.observe_and_judge(donor, ...) which updates
              observer's private rating of the donor.
         """
-        # Use the most-recent round's interactions
         recent = self._global_log[-self.population_size:]
-        # Step 1+2: self-judgments (only the DONOR took an action, so only
-        # the donor's self_reputation should be updated via self_judge).
-        # The recipient is passive in a donor game; their self_reputation
-        # is updated in a future round when they are themselves a donor.
+        # Step 1: self-judgments. Only the DONOR took an action so only the
+        # donor's self_reputation is updated here. The recipient's self-
+        # reputation will update in a future round when they themselves act.
         for inter in recent:
             donor_id = inter["donor"]
             recipient_id = inter["recipient"]
-            self.agents[donor_id].self_judge(
+            self._agent_by_id[donor_id].self_judge(
                 donor_action=inter["donor_action"],
                 recipient_id=recipient_id,
                 recipient_action=inter["recipient_action"],
             )
-        # Step 3: distribute third-party observations per observability rules
+        # Step 2: distribute third-party observations per observability rules
         if self.observability == "private":
-            # Private: only the donor and recipient of each interaction
-            # are themselves the "observers" of that interaction. They
-            # self-judged above; nothing extra to do.
             return
+        all_agent_ids = [a.agent_id for a in self.agents]
         for inter in recent:
             donor_id = inter["donor"]
             recipient_id = inter["recipient"]
             donor_action = inter["donor_action"]
             recipient_action = inter["recipient_action"]
-            # All other agents are potential observers
-            for obs_id in range(self.population_size):
+            # All other agents (by stable agent_id) are potential observers
+            for obs_id in all_agent_ids:
                 if obs_id == donor_id or obs_id == recipient_id:
                     continue
                 if self.observability == "full":
-                    self.agents[obs_id].observe_and_judge(
+                    self._agent_by_id[obs_id].observe_and_judge(
                         donor_id=donor_id,
                         donor_action=donor_action,
                         recipient_id=recipient_id,
@@ -136,7 +136,7 @@ class V2DonorGame:
                     )
                 elif self.observability.startswith("partial"):
                     if self.rng.random() < self.observability_p:
-                        self.agents[obs_id].observe_and_judge(
+                        self._agent_by_id[obs_id].observe_and_judge(
                             donor_id=donor_id,
                             donor_action=donor_action,
                             recipient_id=recipient_id,

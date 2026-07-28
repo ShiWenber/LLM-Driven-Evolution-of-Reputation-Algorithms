@@ -95,6 +95,10 @@ class V2EvolutionaryPopulation:
         self.use_baseline = use_baseline
         self.agents: List[QuantitativeAgent] = []
         self.rng = random.Random(seed)
+        # Monotonic counter: each new agent gets a fresh, never-reused id.
+        # This keeps agent_id stable across generations; reputations keyed
+        # by agent_id remain valid for the lifetime of the agent.
+        self._next_agent_id: int = 0
         # LLM client (lazy)
         self._llm_client = None
 
@@ -134,6 +138,12 @@ class V2EvolutionaryPopulation:
         a = QuantitativeAgent(agent_id, code, executor=executor)
         return a
 
+    def _new_agent(self, code: str) -> QuantitativeAgent:
+        """Allocate a fresh, never-reused agent_id and create the agent."""
+        aid = self._next_agent_id
+        self._next_agent_id += 1
+        return self._make_agent(code, aid)
+
     def _init_population_llm(self):
         """Generate N strategies via LLM."""
         print(f"  Initializing population via LLM ({self.population_size} agents)...")
@@ -156,7 +166,7 @@ class V2EvolutionaryPopulation:
                     if code:
                         # Validate
                         try:
-                            agent = self._make_agent(code, i)
+                            agent = self._new_agent(code)
                             self.agents.append(agent)
                             break
                         except Exception as e:
@@ -167,7 +177,7 @@ class V2EvolutionaryPopulation:
             else:
                 # All attempts failed; use random fallback
                 fb = self.rng.choice(FALLBACK_STRATEGIES)
-                agent = self._make_agent(fb, i)
+                agent = self._new_agent(fb)
                 self.agents.append(agent)
                 print(f"  [init agent {i}] using FALLBACK strategy")
 
@@ -177,12 +187,11 @@ class V2EvolutionaryPopulation:
         code = get_baseline(self.use_baseline)
         for i in range(self.population_size):
             try:
-                agent = self._make_agent(code, i)
-                self.agents.append(agent)
+                self.agents.append(self._new_agent(code))
             except Exception as e:
                 print(f"  [init baseline {i}] validation fail: {e}")
                 fb = self.rng.choice(FALLBACK_STRATEGIES)
-                self.agents.append(self._make_agent(fb, i))
+                self.agents.append(self._new_agent(fb))
         print(f"  Initialized {len(self.agents)} agents with baseline '{self.use_baseline}'")
 
     def _mutate(self, parent_code: str, parent_fitness: float) -> str:
@@ -296,7 +305,7 @@ class V2EvolutionaryPopulation:
             "trajectory": trajectory,
             "final_population": final_population,
             "config": {
-                "schema_version": 2,
+                "schema_version": 3,
                 "population_size": self.population_size,
                 "num_rounds_per_gen": self.num_rounds_per_gen,
                 "benefit": self.benefit,
@@ -322,36 +331,37 @@ class V2EvolutionaryPopulation:
         ts = self.tournament_size
         # Sort by fitness descending
         idx_sorted = sorted(range(N), key=lambda i: self.agents[i].fitness, reverse=True)
-        # Elites: top `elite_count` survive
+        # Elites: top `elite_count` survive (unique by definition)
         survivors = [self.agents[i] for i in idx_sorted[:elite_count]]
-        # Tournament selection for the rest of the survivors
         rest_pool = [self.agents[i] for i in idx_sorted]
-        # We need N - num_eliminate survivors total
+        # We need N - num_eliminate unique survivors total. Tournament can
+        # only pick a winner that's not already in the survivor set.
         n_needed = N - num_eliminate
-        while len(survivors) < n_needed:
-            # Pick tournament_size random distinct from rest_pool
+        survivor_set = set(survivors)
+        while len(survivor_set) < n_needed:
             cand = self.rng.sample(rest_pool, min(ts, len(rest_pool)))
             winner = max(cand, key=lambda a: a.fitness)
-            survivors.append(winner)
-        # Population turnover: keep first n_needed of survivors,
-        # replace the rest with mutated copies
+            survivor_set.add(winner)
+        # Convert to a stable order: by fitness desc, then by agent_id for ties
+        survivors = sorted(
+            survivor_set, key=lambda a: (a.fitness, -a.agent_id), reverse=True
+        )[:n_needed]
+        # Population turnover: keep n_needed survivors, replace the rest with
+        # mutated copies that get a fresh, never-reused agent_id.
         new_agents = list(survivors[:n_needed])
-        for i in range(N - n_needed):
+        for _ in range(N - n_needed):
             parent = self.rng.choice(survivors)
             new_code = self._mutate(parent.code, parent.fitness)
-            new_agent = self._make_agent(new_code, n_needed + i)
-            new_agents.append(new_agent)
-        # Reset reputation of removed agents (handled by each agent's
-        # handle_agents_replaced). The new agents start with empty rep store.
-        old_ids = [a.agent_id for a in self.agents]
-        new_ids = [a.agent_id for a in new_agents]
-        # Update each survivor's reputation store to drop removed IDs
-        all_ids_to_remove = set(old_ids) - set(new_ids)
+            new_agents.append(self._new_agent(new_code))
+        # Drop reputations pointing at removed agents. Each survivor retains
+        # its own agent_id (stable), so we can safely pop by id.
+        old_ids = {a.agent_id for a in self.agents}
+        new_ids = {a.agent_id for a in new_agents}
+        ids_to_drop = old_ids - new_ids
         for a in new_agents:
-            for rid in all_ids_to_remove:
+            for rid in ids_to_drop:
                 a.reputations.pop(rid, None)
-        # Reset the population
+        # NOTE: do NOT reassign agent_id here. Each agent's id is its stable
+        # global identity; list position in self.agents is just iteration
+        # order and may differ across generations.
         self.agents = new_agents
-        # Reassign agent IDs in case they changed
-        for i, a in enumerate(self.agents):
-            a.agent_id = i

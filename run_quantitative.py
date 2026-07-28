@@ -32,7 +32,7 @@ def run_one(name: str, seed: int, num_gens: int = 30, mode: str = "baseline"):
             existing = json.loads(out_path.read_text(encoding="utf-8"))
             t = existing.get("trajectory", [])
             schema_version = existing.get("config", {}).get("schema_version", 1)
-            if len(t) >= num_gens and schema_version >= 2:
+            if len(t) >= num_gens and schema_version >= 3:
                 print(f"[{name} seed{seed}] Already done (v{schema_version}, {len(t)} gens, final coop = {t[-1].get('cooperation_rate_mean', 'n/a')}). Skipping.")
                 return existing
             else:
