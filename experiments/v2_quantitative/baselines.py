@@ -1,16 +1,29 @@
-"""Baseline strategies for the v2 quantitative interface: the 8 leading-eight
-norms from Ohtsuki & Iwasa 2006 (J. Theoretical Biology 239, 435-444).
+"""Baseline strategies for the v2 quantitative interface (PD version):
+the 8 leading-eight norms from Ohtsuki & Iwasa 2006, rewritten for the
+2-player simultaneous Prisoner's Dilemma.
 
-Each norm has two components: an action rule (decide when to cooperate) and
-an assignment rule (evaluate how to update donor's reputation after the
-action). Real-valued reputation in [-1, 1.0]; neutral is 0.0.
+Each norm has two components:
+  - an assignment rule (evaluate how to update the OBSERVER's view of
+    the target after the target's action)
+  - an action rule (decide when to cooperate)
 
-Conventions used:
-  - donor_rep > 0  =>  "Good" reputation
-  - recipient_rep > 0  =>  recipient is "Good"
-  - Step size 0.333 (1/R with R=3) for IS-like updates; 0.5 for SJ-like
-    stricter rules. This maps the integer-score rules of Ohtsuki-Iwasa
-    onto the real-valued regime of v2.
+The 3-arg evaluate signature is:
+  def evaluate(target_reputation, target_action, my_reputation) -> float:
+      # target_reputation: observer's current rating of the target
+      # target_action: 'cooperate' or 'defect' (target's last action)
+      # my_reputation: observer's self-rating
+
+The framework calls evaluate() twice per observed joint action (once
+for the donor with target_action=donor_action, once for the recipient
+with target_action=recipient_action). In PD, both players are active
+so BOTH are judged by each observer.
+
+Conventions:
+  - target_rep > 0  =>  "Good" reputation
+  - target_rep <= 0  =>  "Bad" reputation
+  - Step size 0.333 (1/R with R=3) for IS-style updates
+  - Step size 0.5 for SJ/IS+ stricter updates
+  - Return value clamped to [-1, 1]
 
 The 8 leading-eight norms (canonical naming and definitions follow
 Ohtsuki & Iwasa 2006, Table 1):
@@ -24,32 +37,8 @@ Ohtsuki & Iwasa 2006, Table 1):
   7. SS+  - Simple Standing plus
   8. SJ+  - Stern Judging plus
 
-Real-valued action/assignment table (truth table on (donor_rep sign,
-action, recipient_rep sign)):
-
-                 (G, C, G)  (G, C, B)  (G, D, G)  (G, D, B)  (B, C, G)  (B, C, B)  (B, D, G)  (B, D, B)
-  IS  assign:        G         G         B         B         G         G         B         B
-  SS  assign:        G         B         B         B         B         B         B         B
-  SJ  assign:        G         B         B         B         B         B         B         B   (=SS in this table; distinction is in the + variants)
-  SC  assign:        G         G         G         B         G         G         G         B
-  SH  assign:        G         B         B         B         B         B         B         B   (=SS in this table; the SH aspect is in stricter B handling)
-  IS+ assign:        G         G         B         B         B         B         B         B
-  SS+ assign:        G         B         B         B         B         B         B         B   (=SS in this table; "+" means stricter donor treatment)
-  SJ+ assign:        G         B         B         B         B         B         B         B   (=SS in this table; SJ+ has its own action rule)
-
-  Decide: action chosen as a function of (donor_rep, recipient_rep):
-    IS:   (G,G)->C, (G,B)->C, (B,G)->D, (B,B)->D
-    SS:   (G,G)->C, (G,B)->D, (B,G)->D, (B,B)->D
-    SJ:   (G,G)->C, (G,B)->D, (B,G)->D, (B,B)->D  (same as SS for action)
-    SC:   (G,G)->C, (G,B)->C, (B,G)->D, (B,B)->D  (only G-donors cooperate)
-    SH:   (G,G)->C, (G,B)->D, (B,G)->D, (B,B)->D
-    IS+:  (G,G)->C, (G,B)->C, (B,G)->D, (B,B)->D  (same as IS)
-    SS+:  (G,G)->C, (G,B)->D, (B,G)->D, (B,B)->D  (same as SS)
-    SJ+:  (G,G)->C, (G,B)->D, (B,G)->D, (B,B)->D  (same as SS)
-
-All "plus" variants share the same action rule as their base; the "+"
-distinction is that **B-donors never recover** (B-donor's *any* action
-remains B) — the assignment rules below reflect that.
+In PD, each leading-eight's assignment rule is applied to BOTH the
+donor and the recipient (independently, using each player's own action).
 """
 
 STEP = 0.333    # IS-style step
@@ -61,14 +50,13 @@ def _is_B(x): return x <= 0.0
 
 
 # --- 1. IS (Image Scoring) -------------------------------------------------
-#   decide:  C if donor is G (regardless of recipient)
-#   assign:  C->G, D->B (regardless of recipient or donor's old rep)
+# In PD: reward cooperation, punish defection, regardless of recipient.
 IS = f'''
-def evaluate(donor_reputation, recipient_reputation, donor_action, recipient_action, my_reputation):
-    if donor_action == 'cooperate':
-        new = donor_reputation + {STEP}
+def evaluate(target_reputation, target_action, my_reputation):
+    if target_action == 'cooperate':
+        new = target_reputation + {STEP}
     else:
-        new = donor_reputation - {STEP}
+        new = target_reputation - {STEP}
     return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
@@ -77,16 +65,15 @@ def decide(my_reputation, opponent_reputation):
 
 
 # --- 2. SS (Simple Standing) ----------------------------------------------
-#   decide:  C only if both donor and recipient are G
-#   assign:  only (G,C,G)->G; everything else -> B
+# In PD: only reward if BOTH the observer (self) and the target were Good
+# AND the target cooperated. Otherwise punish. (No-op self-judgment case:
+# if my_rep is B, can't recover; symmetric for target.)
 SS = f'''
-def evaluate(donor_reputation, recipient_reputation, donor_action, recipient_action, my_reputation):
-    # Simple Standing: the donor is Good only if the donor was Good,
-    # cooperated, and the recipient was Good. Else Bad.
-    if donor_reputation > 0.0 and donor_action == 'cooperate' and recipient_reputation > 0.0:
-        new = donor_reputation + {STEP}
+def evaluate(target_reputation, target_action, my_reputation):
+    if my_reputation > 0.0 and target_reputation > 0.0 and target_action == 'cooperate':
+        new = target_reputation + {STEP}
     else:
-        new = donor_reputation - {STEP}
+        new = target_reputation - {STEP}
     return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
@@ -95,16 +82,13 @@ def decide(my_reputation, opponent_reputation):
 
 
 # --- 3. SJ (Stern Judging) ------------------------------------------------
-#   decide:  C only if both donor and recipient are G  (same as SS)
-#   assign:  only (G,C,G)->G; everything else -> B  (stricter than SS:
-#           B-donors are judged as B even if they cooperated with a G
-#           recipient)
+# Like SS, but stronger punishment when the condition fails.
 SJ = f'''
-def evaluate(donor_reputation, recipient_reputation, donor_action, recipient_action, my_reputation):
-    if donor_reputation > 0.0 and donor_action == 'cooperate' and recipient_reputation > 0.0:
-        new = donor_reputation + {STEP}
+def evaluate(target_reputation, target_action, my_reputation):
+    if my_reputation > 0.0 and target_reputation > 0.0 and target_action == 'cooperate':
+        new = target_reputation + {STEP}
     else:
-        new = donor_reputation - {BIG_STEP}
+        new = target_reputation - {BIG_STEP}
     return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
@@ -113,16 +97,15 @@ def decide(my_reputation, opponent_reputation):
 
 
 # --- 4. SC (Scoring) -------------------------------------------------------
-#   decide:  C if donor is G  (regardless of recipient)
-#   assign:  only D->B; all other actions are G  (lenient)
+# Lenient: only defection is judged Bad. Cooperation always Good (even
+# if observer or target is B). In PD this means target is always
+# rewarded for cooperation regardless of context.
 SC = f'''
-def evaluate(donor_reputation, recipient_reputation, donor_action, recipient_action, my_reputation):
-    # Scoring: only defection is judged Bad. Cooperation always Good
-    # (even if donor is B or recipient is B).
-    if donor_action == 'defect':
-        new = donor_reputation - {STEP}
+def evaluate(target_reputation, target_action, my_reputation):
+    if target_action == 'cooperate':
+        new = target_reputation + {STEP}
     else:
-        new = donor_reputation + {STEP}
+        new = target_reputation - {STEP}
     return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
@@ -131,17 +114,16 @@ def decide(my_reputation, opponent_reputation):
 
 
 # --- 5. SH (Shunning) ------------------------------------------------------
-#   decide:  C only if both donor and recipient are G  (same as SS)
-#   assign:  like SS but with stronger punishment for B-donors
+# A B-target is shamed (always judged as B) regardless of action. A
+# G-target that cooperates is rewarded. Otherwise punish.
 SH = f'''
-def evaluate(donor_reputation, recipient_reputation, donor_action, recipient_action, my_reputation):
-    # Shunning: a B-donor is judged as B regardless of action (shunned).
-    if donor_reputation <= 0.0:
-        new = donor_reputation - {BIG_STEP}
-    elif donor_reputation > 0.0 and donor_action == 'cooperate' and recipient_reputation > 0.0:
-        new = donor_reputation + {STEP}
+def evaluate(target_reputation, target_action, my_reputation):
+    if target_reputation <= 0.0:
+        new = target_reputation - {BIG_STEP}
+    elif target_action == 'cooperate':
+        new = target_reputation + {STEP}
     else:
-        new = donor_reputation - {STEP}
+        new = target_reputation - {STEP}
     return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
@@ -150,16 +132,15 @@ def decide(my_reputation, opponent_reputation):
 
 
 # --- 6. IS+ (Image Scoring plus) ------------------------------------------
-#   decide:  C if donor is G  (same as IS)
-#   assign:  like IS but B-donors never recover
+# Like IS but B-targets are punished even harder and never recover.
 IS_PLUS = f'''
-def evaluate(donor_reputation, recipient_reputation, donor_action, recipient_action, my_reputation):
-    if donor_reputation <= 0.0:
-        new = donor_reputation - {BIG_STEP}
-    elif donor_action == 'cooperate':
-        new = donor_reputation + {STEP}
+def evaluate(target_reputation, target_action, my_reputation):
+    if target_reputation <= 0.0:
+        new = target_reputation - {BIG_STEP}
+    elif target_action == 'cooperate':
+        new = target_reputation + {STEP}
     else:
-        new = donor_reputation - {STEP}
+        new = target_reputation - {STEP}
     return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
@@ -168,16 +149,15 @@ def decide(my_reputation, opponent_reputation):
 
 
 # --- 7. SS+ (Simple Standing plus) -----------------------------------------
-#   decide:  same as SS
-#   assign:  same as SS but B-donors never recover
+# Like SS but B-targets never recover (BIG_STEP punishment).
 SS_PLUS = f'''
-def evaluate(donor_reputation, recipient_reputation, donor_action, recipient_action, my_reputation):
-    if donor_reputation <= 0.0:
-        new = donor_reputation - {BIG_STEP}
-    elif donor_reputation > 0.0 and donor_action == 'cooperate' and recipient_reputation > 0.0:
-        new = donor_reputation + {STEP}
+def evaluate(target_reputation, target_action, my_reputation):
+    if target_reputation <= 0.0:
+        new = target_reputation - {BIG_STEP}
+    elif my_reputation > 0.0 and target_action == 'cooperate':
+        new = target_reputation + {STEP}
     else:
-        new = donor_reputation - {STEP}
+        new = target_reputation - {STEP}
     return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
@@ -186,16 +166,16 @@ def decide(my_reputation, opponent_reputation):
 
 
 # --- 8. SJ+ (Stern Judging plus) ------------------------------------------
-#   decide:  same as SJ
-#   assign:  like SJ but with stronger punishment overall
+# Like SJ but EVERY failure case (not just the G-cooperate condition)
+# is punished with BIG_STEP. B-targets are shamed.
 SJ_PLUS = f'''
-def evaluate(donor_reputation, recipient_reputation, donor_action, recipient_action, my_reputation):
-    if donor_reputation <= 0.0:
-        new = donor_reputation - {BIG_STEP}
-    elif donor_reputation > 0.0 and donor_action == 'cooperate' and recipient_reputation > 0.0:
-        new = donor_reputation + {STEP}
+def evaluate(target_reputation, target_action, my_reputation):
+    if target_reputation <= 0.0:
+        new = target_reputation - {BIG_STEP}
+    elif my_reputation > 0.0 and target_reputation > 0.0 and target_action == 'cooperate':
+        new = target_reputation + {STEP}
     else:
-        new = donor_reputation - {BIG_STEP}
+        new = target_reputation - {BIG_STEP}
     return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
@@ -203,8 +183,36 @@ def decide(my_reputation, opponent_reputation):
 '''
 
 
+# --- 0. ALLC / ALLD (sanity baselines, not in the 8 leading-eight) ----------
+ALLC = f'''
+def evaluate(target_reputation, target_action, my_reputation):
+    if target_action == 'cooperate':
+        new = target_reputation + {STEP}
+    else:
+        new = target_reputation - {STEP}
+    return max(-1.0, min(1.0, new))
+
+def decide(my_reputation, opponent_reputation):
+    return True
+'''
+
+ALLD = f'''
+def evaluate(target_reputation, target_action, my_reputation):
+    if target_action == 'cooperate':
+        new = target_reputation + {STEP}
+    else:
+        new = target_reputation - {STEP}
+    return max(-1.0, min(1.0, new))
+
+def decide(my_reputation, opponent_reputation):
+    return False
+'''
+
+
 # --- Index ----------------------------------------------------------------
 BASELINES = {
+    "ALLC":    ALLC,
+    "ALLD":    ALLD,
     "IS":      IS,
     "SS":      SS,
     "SJ":      SJ,

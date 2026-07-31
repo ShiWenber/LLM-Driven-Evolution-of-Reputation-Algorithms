@@ -3,28 +3,31 @@
 Each agent runs the SAME code for two functions:
 
   def evaluate(
-      donor_reputation: float,
-      recipient_reputation: float,
-      donor_action: str,
-      recipient_action: str,
-      my_reputation: float
+      target_reputation: float,     # observer's current rating of the target
+      target_action: str,            # target's last action: 'cooperate' or 'defect'
+      my_reputation: float           # observer's own self-rating
   ) -> float:
-      # Returns new donor_reputation (clamped to [-1, 1])
+      # Returns new target_reputation (clamped to [-1, 1])
 
   def decide(
       my_reputation: float,
       opponent_reputation: float
   ) -> bool:
-      # Returns True to donate, False to defect
+      # Returns True to cooperate, False to defect
+
+Note: the game is a 2-player simultaneous Prisoner's Dilemma (not a
+donor game). For each joint action (donor_action, recipient_action),
+the framework calls observe_and_judge on each observer, which
+internally calls evaluate() twice (once for donor, once for recipient),
+using each player's own action as target_action.
 
 Architecture:
   - Single private reputation matrix `reputations: dict[int, float]`.
     The agent's own self-rating is `reputations[agent_id]`. This way
     `reputations` is a uniform dict; no special field needed.
-  - When the agent is the donor in a third-party observation, the
-    framework calls `evaluate(...)` with donor=self.agent_id,
-    which updates `reputations[self_id]` (the self-rating). Same
-    function, same args.
+  - The framework's observe_and_judge calls evaluate() twice per
+    joint action: once for donor (target_action = donor_action),
+    once for recipient (target_action = recipient_action).
   - Population turnover drops entries of removed IDs.
 """
 from __future__ import annotations
@@ -67,6 +70,16 @@ class QuantitativeAgent:
         self.update_reputation(self.agent_id, new_rep)
 
     # --- Framework-driven actions -----------------------------------------
+    def _call_evaluate(self, target_rep: float, target_action: str, my_rep: float) -> float:
+        """Call the executor's evaluate and return the new target rep.
+        On any exception, return the unchanged target rep."""
+        if self._executor is None:
+            return target_rep
+        try:
+            return self._executor.evaluate(target_rep, target_action, my_rep)
+        except Exception:
+            return target_rep
+
     def observe_and_judge(
         self,
         donor_id: int,
@@ -74,31 +87,30 @@ class QuantitativeAgent:
         recipient_id: int,
         recipient_action: str,
     ):
-        """Update my view of `donor_id` based on the observed interaction.
+        """Update my view of `donor_id` based on donor_action, and my view
+        of `recipient_id` based on recipient_action.
 
-        Note: when the framework calls this with donor_id == self.agent_id,
-        this updates my self-rating (the same function is used for both
-        observing others and judging yourself).
+        In the PD game, both donor and recipient are active players, so
+        the observer judges BOTH of them: this method calls evaluate()
+        twice — once with target=(donor_id, donor_action) and once with
+        target=(recipient_id, recipient_action). When the observer
+        itself is one of the two players (self-judgment), it
+        transparently updates its own self-rating because
+        `reputations[self.agent_id]` is the same dict entry.
         """
-        if self._executor is None:
-            return
-        donor_rep = self.get_reputation(donor_id)
-        recipient_rep = self.get_reputation(recipient_id)
         my_rep = self.get_self_reputation()
-        try:
-            new_rep = self._executor.evaluate(
-                donor_reputation=donor_rep,
-                recipient_reputation=recipient_rep,
-                donor_action=donor_action,
-                recipient_action=recipient_action,
-                my_reputation=my_rep,
-            )
-        except Exception:
-            return
-        self.update_reputation(donor_id, new_rep)
+        # Update donor's view based on donor's action
+        donor_rep = self.get_reputation(donor_id)
+        new_donor_rep = self._call_evaluate(donor_rep, donor_action, my_rep)
+        self.update_reputation(donor_id, new_donor_rep)
+        # Update recipient's view based on recipient's action
+        recipient_rep = self.get_reputation(recipient_id)
+        new_recipient_rep = self._call_evaluate(
+            recipient_rep, recipient_action, my_rep
+        )
+        self.update_reputation(recipient_id, new_recipient_rep)
 
-    # The legacy `self_judge` is now identical to `observe_and_judge`
-    # but with donor_id == self.agent_id. Provided as a thin alias.
+    # Self-judgment is just observe_and_judge with donor_id == self.agent_id.
     def self_judge(
         self,
         donor_action: str,

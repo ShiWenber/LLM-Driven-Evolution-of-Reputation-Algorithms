@@ -1,36 +1,46 @@
-"""Prompts for the v2 quantitative interface LLM evolution.
+"""Prompts for the v2 quantitative interface LLM evolution (2-player PD).
 
-The interface is intentionally minimal:
-  evaluate(donor_reputation, recipient_reputation, donor_action, recipient_action, my_reputation) -> float
+The interface is:
+  evaluate(target_reputation, target_action, my_reputation) -> float
   decide(my_reputation, opponent_reputation) -> bool
 
+The game is a 2-player simultaneous Prisoner's Dilemma. Each round,
+two matched agents independently choose C (cooperate) or D (defect);
+payoffs are (C,C) -> both +1, (C,D) -> C gets -1 / D gets +2, etc.
 This matches the leading-eight / quantitative-assessment literature
-(Ohtsuki-Iwasa 2006, Schmid 2023). Strategies like Image Scoring, Simple
-Standing, Judging, IS+ can all be expressed.
+extended to symmetric interactions.
 """
 
 
-INIT_PROMPT_V2 = """You are a Python programmer designing a strategy for an indirect-reciprocity
-donor game. The game has 15 agents that play 30 rounds per generation,
-30 generations total. Each round, every agent is the donor once with a
-random recipient. Donor can choose to cooperate (give benefit=2 to
-recipient at cost=1 to self) or defect (no exchange).
+INIT_PROMPT_V2 = """You are a Python programmer designing a strategy for a 2-player
+Prisoner's Dilemma game with reputation. The game has 15 agents that play
+30 rounds per generation, 30 generations total. Each round, the 15
+agents are randomly paired (7 pairs + 1 unpaired per round). In each
+pair, BOTH agents simultaneously choose to 'cooperate' (give benefit=2
+to the partner at cost=1 to self) or 'defect' (no exchange). Payoffs:
+  (C, C) -> each gets 2 - 1 = 1
+  (C, D) -> C gets -1 (sucker's payoff), D gets +2
+  (D, C) -> symmetric
+  (D, D) -> each gets 0
+
+After each joint action, the framework records both actions and the
+agents' IDs. It then calls each observer's `evaluate` to update the
+observer's private rating of EACH player in the joint action (twice per
+joint action per observer: once for the donor, once for the
+recipient, using each player's own action as `target_action`).
 
 Your strategy consists of TWO functions. Define BOTH.
 
-The interface is the same as in the leading-eight / quantitative-assessment
-literature (Ohtsuki-Iwasa 2006, Schmid 2023). Real-valued reputation in
-[-1.0, +1.0]. Neutral default is 0.0.
+The interface is the leading-eight / quantitative-assessment style
+extended to symmetric 2-player PD:
 
 ```python
 def evaluate(
-    donor_reputation: float,        # observer's current rating of the donor
-    recipient_reputation: float,    # observer's current rating of the recipient
-    donor_action: str,              # 'cooperate' or 'defect'
-    recipient_action: str,          # 'cooperate' or 'defect'
-    my_reputation: float            # observer's own self-rating
+    target_reputation: float,    # observer's current rating of the target being judged
+    target_action: str,           # target's last action: 'cooperate' or 'defect'
+    my_reputation: float          # observer's own self-rating
 ) -> float:
-    # Return the NEW donor_reputation after this observation.
+    # Return the NEW target_reputation after observing target's action.
     # Will be clamped to [-1.0, 1.0].
     pass
 
@@ -38,22 +48,21 @@ def decide(
     my_reputation: float,
     opponent_reputation: float
 ) -> bool:
-    # Return True to donate, False to defect.
+    # Return True to cooperate, False to defect.
     pass
 ```
 
 Important rules:
   1. Both functions MUST be defined.
-  2. evaluate() is called twice per third-party observation:
-       (a) on the observer, with donor=observed_donor, my=observer's self-rating
-           -> updates the OBSERVER's rating of the donor
-       (b) on the donor themselves, with donor=donor, my=donor's self-rating
-           -> updates the DONOR's self-rating
-     The same function must work for both. There is no separate
-     "self-evaluation" function. If you want to know "the donor's
-     previous self-rating", use my_reputation.
+  2. evaluate() is called twice per observed joint action: once for the
+     donor (with target_action=donor's action) and once for the
+     recipient (with target_action=recipient's action). The same
+     function handles both. There is no separate "self-evaluation"
+     function; if the observer is one of the two players in the joint
+     action, the framework calls evaluate() for the observer's own
+     rating update just like for any other target.
   3. Reputation is in [-1.0, 1.0]. Treat 0.0 as neutral.
-  4. The function will be called many times; keep it deterministic or
+  4. The functions will be called many times; keep them deterministic or
      near-deterministic (no random.random unless you really want it).
   5. Use only Python builtins; no imports other than `math` (already
      available) and `random` (NOT recommended).
@@ -63,17 +72,17 @@ no markdown fences. The code must define `evaluate` and `decide`.
 """
 
 
-MUTATION_PROMPT_V2 = """You are mutating an existing strategy for an indirect-reciprocity
-donor game. The game has 15 agents, 30 rounds per generation, 30 generations.
+MUTATION_PROMPT_V2 = """You are mutating an existing strategy for a 2-player
+Prisoner's Dilemma game with reputation. The game has 15 agents, 30
+rounds per generation, 30 generations.
 
-The interface is real-valued, in the leading-eight / quantitative-assessment style:
+The interface is leading-eight / quantitative-assessment style
+extended to symmetric 2-player PD:
 
 ```python
 def evaluate(
-    donor_reputation: float,
-    recipient_reputation: float,
-    donor_action: str,        # 'cooperate' or 'defect'
-    recipient_action: str,    # 'cooperate' or 'defect'
+    target_reputation: float,
+    target_action: str,        # 'cooperate' or 'defect'
     my_reputation: float
 ) -> float:
     pass
@@ -85,11 +94,10 @@ def decide(
     pass
 ```
 
-The same `evaluate` is called twice per third-party observation:
-  (a) on the OBSERVER, with donor=observed_donor, my=observer's self-rating
-  (b) on the DONOR, with donor=donor, my=donor's self-rating
-Use the same judging rule for both — there is no separate function
-for self vs others.
+`evaluate` is called twice per observed joint action: once for the
+donor (target_action=donor's action) and once for the recipient
+(target_action=recipient's action). Use the same judging rule for
+both — there is no separate function for self vs others.
 
 The parent strategy to mutate is below.
 
@@ -102,10 +110,9 @@ PARENT (fitness {fitness}):
 Generate a child strategy. Suggestions (you don't have to follow any):
   - Slightly increase or decrease the step size (e.g., 0.3 vs 0.4)
   - Add or remove dependence on `my_reputation`
-  - Add or remove dependence on `recipient_reputation` (this is the
-    leading-eight discriminator; many leading-eight norms do depend on it)
   - Adjust the threshold for decide()
-  - Add an asymmetry: cooperate gives a smaller step than defect punishes
+  - Add an asymmetry: cooperation gives a smaller step than defection
+    punishes
 
 Output ONLY the Python code, no prose, no markdown fences.
 """

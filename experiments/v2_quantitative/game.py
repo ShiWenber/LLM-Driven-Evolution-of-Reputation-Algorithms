@@ -1,19 +1,26 @@
-"""Donor Game engine for the v2 quantitative interface.
+"""2-player Prisoner's Dilemma game engine for the v2 quantitative interface.
 
-Public reputation store (single dict shared by all agents) + each agent's
-own private self-rating + private ratings of others.
+Game model:
+  - N agents (15 in the default config), each is its own instance with a
+    private reputation matrix `reputations: dict[int, float]` keyed by
+    agent_id, with `reputations[agent_id]` being the self-rating.
+  - Each round: form a random matching of the N agents into pairs (one
+    agent sits out if N is odd).
+  - In each pair, BOTH players simultaneously choose C (cooperate) or
+    D (defect). Payoffs (benefit=2, cost=1):
+      (C, C) -> each +1
+      (C, D) -> C gets -1, D gets +2
+      (D, C) -> symmetric
+      (D, D) -> each 0
+  - After all pairs decide, distribute observations per observability
+    rules (full / partial / private). For each observed joint action,
+    the framework calls observer.observe_and_judge(donor_id, donor_action,
+    recipient_id, recipient_action) on the observer. The agent's
+    observe_and_judge internally calls its evaluate() function twice
+    (once for each player in the joint action).
 
-Observability levels (same as v1):
-  - "private": agents observe only their own interactions
-  - "partial_X": agents observe a random fraction X of third-party interactions
-  - "full": agents observe every third-party interaction
-
-Per interaction, the framework calls:
-  1. donor's `decide()` -> True/False
-  2. donor's `self_judge()` -> updates donor's self_reputation
-  3. recipient's `self_judge()` -> updates recipient's self_reputation
-  4. for each observer X (per observability rules):
-       X.observe_and_judge(donor=donor, ...) -> updates X.reputations[donor]
+Backward-compatible with the type1 QuantitativeAgent interface
+(choose / observe_and_judge / self_judge / record_donation / etc.).
 """
 from __future__ import annotations
 import random
@@ -23,6 +30,13 @@ from .executor import V2StrategyExecutor
 
 
 class V2DonorGame:
+    """2-player simultaneous-PD game with reputation tracking.
+
+    Note: despite the historical name "V2DonorGame" (kept for backward
+    compat with existing imports), the underlying game is a 2-player
+    symmetric prisoner's dilemma, not a donor game.
+    """
+
     def __init__(
         self,
         population_size: int,
@@ -41,78 +55,100 @@ class V2DonorGame:
         self.rng = random.Random(seed)
         self.agents: List[QuantitativeAgent] = []
         self.round_num = 0
-        # Global log of every interaction in the current generation
+        # Global log of every joint action in the current generation
         self._global_log: List[Dict] = []
-        # Payoffs
+        # Payoffs (indexed by list position)
         self.payoffs = [0.0] * population_size
 
     def setup_population(self, agents: List[QuantitativeAgent]):
         self.agents = agents
-        # NOTE: agent_id is a STABLE global identity (assigned monotonically
-        # by V2EvolutionaryPopulation._new_agent). We do NOT reassign it to
-        # list positions. List index in self.agents is just iteration order.
+        # agent_id is a STABLE global identity (assigned monotonically by
+        # the population manager). List index is just iteration order.
         # Build a lookup so play_round can resolve agent_id -> agent object
         # without scanning the list each time.
         self._agent_by_id = {a.agent_id: a for a in self.agents}
 
+    def _form_pairs(self) -> List[Tuple[int, int]]:
+        """Randomly partition agents into pairs. If odd, one sits out."""
+        agent_ids = [a.agent_id for a in self.agents]
+        self.rng.shuffle(agent_ids)
+        pairs = []
+        for i in range(0, len(agent_ids) - 1, 2):
+            pairs.append((agent_ids[i], agent_ids[i + 1]))
+        return pairs
+
     def play_round(self) -> Dict:
-        """Play one round: each agent acts as donor once with random recipient."""
+        """Play one round: form random pairs, each pair plays a simultaneous PD."""
         self.round_num += 1
         round_log = []
-        # Each agent (by stable agent_id) in shuffled order takes a turn
-        agent_ids = [a.agent_id for a in self.agents]
-        donor_order = list(agent_ids)
-        self.rng.shuffle(donor_order)
-        for donor_id in donor_order:
-            # Choose random recipient (by agent_id, not list position)
-            recipient_id = agent_ids[self.rng.randrange(self.population_size)]
-            while recipient_id == donor_id:
-                recipient_id = agent_ids[self.rng.randrange(self.population_size)]
+        pairs = self._form_pairs()
+        for donor_id, recipient_id in pairs:
             donor = self._agent_by_id[donor_id]
             recipient = self._agent_by_id[recipient_id]
-            action = donor.choose(recipient_id, round_num=self.round_num)
-            donor.record_donation(recipient_id, action, self.round_num)
+            # Both players choose simultaneously. We call choose() in
+            # sequence but both decisions are based on each player's
+            # own (my_rep, opp_rep) at the start of the round — no
+            # information leaks between the two calls.
+            action1 = donor.choose(recipient_id, round_num=self.round_num)
+            action2 = recipient.choose(donor_id, round_num=self.round_num)
+            donor.record_donation(recipient_id, action1, self.round_num)
+            recipient.record_donation(donor_id, action2, self.round_num)
             # Payoffs (use list position to index the payoffs array)
             donor_pos = self.agents.index(donor)
             recipient_pos = self.agents.index(recipient)
-            if action:
+            # Cost: each cooperator pays cost
+            if action1:
                 self.payoffs[donor_pos] -= self.cost
+            if action2:
+                self.payoffs[recipient_pos] -= self.cost
+            # Benefit: each cooperator gives benefit to the other
+            if action1:
                 self.payoffs[recipient_pos] += self.benefit
-            # Store action as STRING ('cooperate' / 'defect') so that the
-            # strategy code can pattern-match on it in evaluate().
-            action_str = "cooperate" if action else "defect"
-            recipient_action = action_str
+            if action2:
+                self.payoffs[donor_pos] += self.benefit
+            # Store actions as STRING so the strategy code can
+            # pattern-match on them in evaluate().
+            donor_action_str = "cooperate" if action1 else "defect"
+            recipient_action_str = "cooperate" if action2 else "defect"
             interaction = {
                 "round": self.round_num,
                 "donor": donor_id,
                 "recipient": recipient_id,
-                "donor_action": action_str,
-                "recipient_action": recipient_action,
+                "donor_action": donor_action_str,
+                "recipient_action": recipient_action_str,
             }
             self._global_log.append(interaction)
             round_log.append(interaction)
         return {"round": self.round_num, "interactions": round_log}
 
     def distribute_observations_and_self_judgments(self):
-        """After each round: distribute observations and update self-ratings.
+        """After each round: distribute observations and self-judgments.
 
-        Order of operations:
-          1. donor.self_judge()  (donor updates their own self-rating)
-          2. for each observer (per observability rules), call
-             observer.observe_and_judge(donor, ...) which updates
-             observer's private rating of the donor.
+        For each joint action in the round:
+          - donor observes (self-judgment) via self_judge
+          - recipient observes (self-judgment) via self_judge
+          - for each third-party observer (per observability rules),
+            call observer.observe_and_judge(...)
         """
-        recent = self._global_log[-self.population_size:]
-        # Step 1: self-judgments. Only the DONOR took an action so only the
-        # donor's self_reputation is updated here. The recipient's self-
-        # reputation will update in a future round when they themselves act.
+        recent = self._global_log[-max(1, len(self._global_log)):]
+        recent = [i for i in recent if i["round"] == self.round_num]
+        # Step 1: self-judgments for BOTH players in each pair
         for inter in recent:
             donor_id = inter["donor"]
             recipient_id = inter["recipient"]
+            donor_action = inter["donor_action"]
+            recipient_action = inter["recipient_action"]
+            # Donor's self-judgment
             self._agent_by_id[donor_id].self_judge(
-                donor_action=inter["donor_action"],
+                donor_action=donor_action,
                 recipient_id=recipient_id,
-                recipient_action=inter["recipient_action"],
+                recipient_action=recipient_action,
+            )
+            # Recipient's self-judgment (in PD, recipient also acts)
+            self._agent_by_id[recipient_id].self_judge(
+                donor_action=recipient_action,
+                recipient_id=donor_id,
+                recipient_action=donor_action,
             )
         # Step 2: distribute third-party observations per observability rules
         if self.observability == "private":
@@ -126,7 +162,7 @@ class V2DonorGame:
             # All other agents (by stable agent_id) are potential observers
             for obs_id in all_agent_ids:
                 if obs_id == donor_id or obs_id == recipient_id:
-                    continue
+                    continue  # already self-judged
                 if self.observability == "full":
                     self._agent_by_id[obs_id].observe_and_judge(
                         donor_id=donor_id,
@@ -144,16 +180,31 @@ class V2DonorGame:
                         )
 
     def run_generation(self) -> Dict:
-        """Run a full generation: T rounds, then return aggregate stats."""
+        """Run a full generation: T rounds, then return aggregate stats.
+
+        With population_size=15 and T=30, each round we form 7 pairs
+        and 1 agent sits out. Total of 7*30 = 210 joint actions per
+        generation; each player participates in ~14 joint actions
+        (half of 30 * 7/7.5 ≈ 28 total).
+        """
         self.round_num = 0
         self.payoffs = [0.0] * self.population_size
         self._global_log = []
-        for _ in range(self.population_size):  # T = N (one round per donor)
+        for _ in range(self.population_size):  # T = N (one round per donor, by default)
             self.play_round()
             self.distribute_observations_and_self_judgments()
         # Stats
-        coop_count = sum(1 for inter in self._global_log if inter["donor_action"] == "cooperate")
-        coop_rate = coop_count / max(1, len(self._global_log))
+        coop_count = sum(
+            1
+            for inter in self._global_log
+            if inter["donor_action"] == "cooperate"
+        )
+        coop_count += sum(
+            1
+            for inter in self._global_log
+            if inter["recipient_action"] == "cooperate"
+        )
+        coop_rate = coop_count / max(1, 2 * len(self._global_log))
         return {
             "cooperation_rate_mean": coop_rate,
             "n_interactions": len(self._global_log),
