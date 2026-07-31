@@ -22,7 +22,7 @@ OUT = ROOT / "results" / "quantitative_baseline"
 OUT.mkdir(parents=True, exist_ok=True)
 
 
-def run_one(name: str, seed: int, num_gens: int = 30, mode: str = "baseline"):
+def run_one(name: str, seed: int, num_gens: int = 30, mode: str = "baseline", agent_type: str = "v2"):
     """Run one trial and save JSON. Skip if result already exists."""
     trial_dir = OUT / f"{name}_seed{seed}"
     trial_dir.mkdir(parents=True, exist_ok=True)
@@ -32,11 +32,15 @@ def run_one(name: str, seed: int, num_gens: int = 30, mode: str = "baseline"):
             existing = json.loads(out_path.read_text(encoding="utf-8"))
             t = existing.get("trajectory", [])
             schema_version = existing.get("config", {}).get("schema_version", 1)
-            if len(t) >= num_gens and schema_version >= 3:
-                print(f"[{name} seed{seed}] Already done (v{schema_version}, {len(t)} gens, final coop = {t[-1].get('cooperation_rate_mean', 'n/a')}). Skipping.")
+            config_agent_type = existing.get("config", {}).get("agent_type", "v2")
+            if (len(t) >= num_gens and schema_version >= 3
+                    and config_agent_type == agent_type):
+                print(f"[{name} seed{seed}] Already done (v{schema_version}, {len(t)} gens, agent_type={config_agent_type}, final coop = {t[-1].get('cooperation_rate_mean', 'n/a')}). Skipping.")
                 return existing
             else:
                 reason = "missing per-gen code" if len(t) >= num_gens else f"only {len(t)} gens"
+                if config_agent_type != agent_type:
+                    reason = f"agent_type={config_agent_type} != {agent_type}"
                 print(f"[{name} seed{seed}] Existing JSON is v{schema_version} ({reason}), re-running.")
         except Exception as e:
             print(f"[{name} seed{seed}] Existing JSON unreadable, re-running. ({e})")
@@ -58,6 +62,7 @@ def run_one(name: str, seed: int, num_gens: int = 30, mode: str = "baseline"):
         seed=seed,
         results_dir=str(trial_dir),
         use_baseline=(name if mode == "baseline" else None),
+        agent_type=agent_type,
     )
     print(f"\n[{name} seed{seed}] Starting ({mode})...")
     t0 = time.time()
@@ -74,15 +79,22 @@ def run_one(name: str, seed: int, num_gens: int = 30, mode: str = "baseline"):
 
 
 def main():
-    seeds = [0, 1, 2]
-    n_gens = 30
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--agent-type", choices=["v2", "v3"], default="v2",
+                        help="v2 = two-function interface (default), v3 = full LLMAgent class")
+    parser.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
+    parser.add_argument("--n-gens", type=int, default=30)
+    args = parser.parse_args()
+    seeds = args.seeds
+    n_gens = args.n_gens
     summary = {}
     # Run all baselines
     for name in BASELINES:
         summary[name] = []
         for seed in seeds:
             try:
-                res = run_one(name, seed, n_gens, mode="baseline")
+                res = run_one(name, seed, n_gens, mode="baseline", agent_type=args.agent_type)
                 summary[name].append({
                     "seed": seed,
                     "elapsed_sec": res["elapsed_sec"],
@@ -91,21 +103,22 @@ def main():
             except Exception as e:
                 print(f"  ERROR {name} seed{seed}: {e}")
                 summary[name].append({"seed": seed, "error": str(e)})
-    # Run LLM evolution
-    summary["LLM_evolution"] = []
-    for seed in seeds:
-        try:
-            res = run_one("LLM_evolution", seed, n_gens, mode="llm")
-            summary["LLM_evolution"].append({
-                "seed": seed,
-                "elapsed_sec": res["elapsed_sec"],
-                "trajectory": res["trajectory"],
-            })
-        except Exception as e:
-            print(f"  ERROR LLM seed{seed}: {e}")
-            summary["LLM_evolution"].append({"seed": seed, "error": str(e)})
+    # Run LLM evolution (only if v2 — v3 LLM run has its own script)
+    if args.agent_type == "v2":
+        summary["LLM_evolution"] = []
+        for seed in seeds:
+            try:
+                res = run_one("LLM_evolution", seed, n_gens, mode="llm", agent_type="v2")
+                summary["LLM_evolution"].append({
+                    "seed": seed,
+                    "elapsed_sec": res["elapsed_sec"],
+                    "trajectory": res["trajectory"],
+                })
+            except Exception as e:
+                print(f"  ERROR LLM seed{seed}: {e}")
+                summary["LLM_evolution"].append({"seed": seed, "error": str(e)})
     # Save summary
-    out_summary = OUT / "summary.json"
+    out_summary = OUT / f"summary_{args.agent_type}.json"
     out_summary.write_text(
         json.dumps(summary, indent=2, ensure_ascii=False),
         encoding="utf-8",

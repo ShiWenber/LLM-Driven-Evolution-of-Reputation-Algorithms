@@ -2,6 +2,21 @@
 
 Mirrors the v1 EvolutionaryPopulation but uses the v2 QuantitativeAgent
 and V2DonorGame.
+
+Supports two agent types:
+  - `agent_type="v2"`: type-1 agents. The LLM emits two top-level
+    Python functions (`evaluate` + `decide`); the framework maintains a
+    scalar reputation matrix for them.
+  - `agent_type="v3"`: type-2 agents. The LLM emits a full Python class
+    named `LLMAgent` with `__init__(agent_id)`, `decide()`, and
+    `observe(...)` methods. The LLM owns its own internal state
+    structure (dicts, lists, counters — anything). The framework still
+    maintains a scalar `reputations` matrix for bookkeeping, but the
+    LLM is not required to read it.
+
+Type 2 baseline mode currently only supports ALLCClass and ALLDClass
+(class wrappers around the trivial always-cooperate / always-defect
+strategies). The 8 leading-eight rules live in type-1 land.
 """
 from __future__ import annotations
 import json
@@ -12,28 +27,60 @@ from typing import Dict, List, Optional
 
 from .agent import QuantitativeAgent
 from .executor import V2StrategyExecutor
+from .agent_full import (
+    FullAgent, V3StrategyExecutor,
+    ALLCClass, ALLDClass,
+    ALLC_CLASS_SOURCE, ALLD_CLASS_SOURCE,
+)
 from .game import V2DonorGame
-from .prompts import INIT_PROMPT_V2, MUTATION_PROMPT_V2
+from .prompts import (
+    INIT_PROMPT_V2, MUTATION_PROMPT_V2,
+    INIT_PROMPT_V3, MUTATION_PROMPT_V3,
+)
 from .baselines import get_baseline
 
 
-# Fallback strategies when LLM fails
+# Fallback strategies when LLM fails (type 1: two top-level functions)
 FALLBACK_STRATEGIES = [
     # Always cooperate
     '''
-def evaluate(donor_reputation, recipient_reputation, donor_action, recipient_action, my_reputation):
-    return donor_reputation
+def evaluate(target_reputation, target_action, my_reputation):
+    if target_action == 'cooperate':
+        new = target_reputation + 0.333
+    else:
+        new = target_reputation - 0.333
+    return max(-1.0, min(1.0, new))
 def decide(my_reputation, opponent_reputation):
     return True
 ''',
     # Always defect
     '''
-def evaluate(donor_reputation, recipient_reputation, donor_action, recipient_action, my_reputation):
-    return donor_reputation
+def evaluate(target_reputation, target_action, my_reputation):
+    if target_action == 'cooperate':
+        new = target_reputation + 0.333
+    else:
+        new = target_reputation - 0.333
+    return max(-1.0, min(1.0, new))
 def decide(my_reputation, opponent_reputation):
     return False
 ''',
 ]
+
+
+# Type-2 fallback: a complete LLMAgent class that always cooperates.
+FALLBACK_CLASS_V3 = '''
+class LLMAgent:
+    def __init__(self, agent_id: int):
+        self.agent_id = agent_id
+        self._ctx_opponent_id = None
+
+    def decide(self) -> bool:
+        return True
+
+    def observe(self, donor_id, donor_action, recipient_id, recipient_action) -> None:
+        return None
+'''
+
 
 
 def _extract_code_from_response(text: str) -> Optional[str]:
@@ -73,9 +120,20 @@ class V2EvolutionaryPopulation:
         seed: int = 42,
         results_dir: str = "results",
         use_baseline: Optional[str] = None,
+        agent_type: str = "v2",
         # If use_baseline is set, all agents use that baseline strategy and
         # the LLM is not used. If None, LLM evolution runs.
+        # agent_type:
+        #   "v2" (default) — type-1 agents. LLM emits two top-level
+        #       functions (`evaluate` + `decide`); framework maintains
+        #       a scalar `reputations` dict.
+        #   "v3" — type-2 agents. LLM emits a full `LLMAgent` class
+        #       with `__init__(agent_id)`, `decide()`, and
+        #       `observe(...)` methods. LLM owns its own state
+        #       structure; framework only handles bookkeeping.
     ):
+        if agent_type not in ("v2", "v3"):
+            raise ValueError(f"agent_type must be 'v2' or 'v3', got {agent_type!r}")
         self.population_size = population_size
         self.num_rounds_per_gen = num_rounds_per_gen
         self.benefit = benefit
@@ -93,7 +151,8 @@ class V2EvolutionaryPopulation:
         self.seed = seed
         self.results_dir = Path(results_dir)
         self.use_baseline = use_baseline
-        self.agents: List[QuantitativeAgent] = []
+        self.agent_type = agent_type
+        self.agents: List[object] = []  # QuantitativeAgent or FullAgent
         self.rng = random.Random(seed)
         # Monotonic counter: each new agent gets a fresh, never-reused id.
         # This keeps agent_id stable across generations; reputations keyed
@@ -133,22 +192,38 @@ class V2EvolutionaryPopulation:
                 time.sleep(2 ** attempt)
         return None
 
-    def _make_agent(self, code: str, agent_id: int) -> QuantitativeAgent:
+    def _make_agent(self, code: str, agent_id: int):
+        """Validate `code` and instantiate one agent of the configured type."""
+        if self.agent_type == "v3":
+            executor = V3StrategyExecutor(code)
+            return FullAgent(agent_id, executor=executor, code=code)
+        # v2 (default)
         executor = V2StrategyExecutor(code)
-        a = QuantitativeAgent(agent_id, code, executor=executor)
-        return a
+        return QuantitativeAgent(agent_id, code, executor=executor)
 
-    def _new_agent(self, code: str) -> QuantitativeAgent:
+    def _new_agent(self, code: str):
         """Allocate a fresh, never-reused agent_id and create the agent."""
         aid = self._next_agent_id
         self._next_agent_id += 1
         return self._make_agent(code, aid)
 
+    def _validate_code(self, code: str) -> None:
+        """Validate that `code` is acceptable for the current agent_type.
+
+        For v2: instantiates the V2StrategyExecutor (which loads evaluate
+        and decide). For v3: instantiates the V3StrategyExecutor (which
+        loads the LLMAgent class). Raises on any error.
+        """
+        if self.agent_type == "v3":
+            V3StrategyExecutor(code)
+        else:
+            V2StrategyExecutor(code)
+
     def _init_population_llm(self):
         """Generate N strategies via LLM."""
-        print(f"  Initializing population via LLM ({self.population_size} agents)...")
+        print(f"  Initializing population via LLM ({self.population_size} agents, agent_type={self.agent_type})...")
         client = self._get_llm_client()
-        user_msg = INIT_PROMPT_V2
+        user_msg = INIT_PROMPT_V3 if self.agent_type == "v3" else INIT_PROMPT_V2
         for i in range(self.population_size):
             for attempt in range(3):
                 try:
@@ -176,7 +251,10 @@ class V2EvolutionaryPopulation:
                     time.sleep(2)
             else:
                 # All attempts failed; use random fallback
-                fb = self.rng.choice(FALLBACK_STRATEGIES)
+                if self.agent_type == "v3":
+                    fb = FALLBACK_CLASS_V3
+                else:
+                    fb = self.rng.choice(FALLBACK_STRATEGIES)
                 agent = self._new_agent(fb)
                 self.agents.append(agent)
                 print(f"  [init agent {i}] using FALLBACK strategy")
@@ -184,26 +262,42 @@ class V2EvolutionaryPopulation:
     def _init_population_baseline(self):
         """All agents use the same baseline strategy."""
         assert self.use_baseline is not None
-        code = get_baseline(self.use_baseline)
+        if self.agent_type == "v3":
+            # Only ALLC / ALLD supported as type-2 baselines
+            t2_baselines = {"ALLC": ALLC_CLASS_SOURCE, "ALLD": ALLD_CLASS_SOURCE}
+            if self.use_baseline not in t2_baselines:
+                raise ValueError(
+                    f"agent_type='v3' only supports ALLC / ALLD as baselines; "
+                    f"got {self.use_baseline!r}. The 8 leading-eight are type-1 only."
+                )
+            code = t2_baselines[self.use_baseline]
+        else:
+            code = get_baseline(self.use_baseline)
         for i in range(self.population_size):
             try:
                 self.agents.append(self._new_agent(code))
             except Exception as e:
                 print(f"  [init baseline {i}] validation fail: {e}")
-                fb = self.rng.choice(FALLBACK_STRATEGIES)
+                if self.agent_type == "v3":
+                    fb = FALLBACK_CLASS_V3
+                else:
+                    fb = self.rng.choice(FALLBACK_STRATEGIES)
                 self.agents.append(self._new_agent(fb))
-        print(f"  Initialized {len(self.agents)} agents with baseline '{self.use_baseline}'")
+        print(f"  Initialized {len(self.agents)} agents with baseline '{self.use_baseline}' (agent_type={self.agent_type})")
 
     def _mutate(self, parent_code: str, parent_fitness: float) -> str:
         """LLM-driven mutation of parent code."""
-        user_msg = MUTATION_PROMPT_V2.format(fitness=parent_fitness, parent_code=parent_code)
+        if self.agent_type == "v3":
+            user_msg = MUTATION_PROMPT_V3.format(fitness=parent_fitness, parent_code=parent_code)
+        else:
+            user_msg = MUTATION_PROMPT_V2.format(fitness=parent_fitness, parent_code=parent_code)
         for attempt in range(3):
             content = self._call_llm("You are a Python programmer. Output only valid Python code.", user_msg)
             code = _extract_code_from_response(content) if content else None
             if code:
                 # Validate
                 try:
-                    V2StrategyExecutor(code)
+                    self._validate_code(code)
                     return code
                 except Exception as e:
                     print(f"  [mutate validation fail attempt {attempt+1}]: {e}")
@@ -306,6 +400,7 @@ class V2EvolutionaryPopulation:
             "final_population": final_population,
             "config": {
                 "schema_version": 3,
+                "agent_type": self.agent_type,
                 "population_size": self.population_size,
                 "num_rounds_per_gen": self.num_rounds_per_gen,
                 "benefit": self.benefit,

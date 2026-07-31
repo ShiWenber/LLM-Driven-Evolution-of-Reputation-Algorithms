@@ -1,12 +1,15 @@
-"""Run only the 3 LLM evolution seeds with the v3 (stable agent_id) fix.
-Will overwrite existing LLM JSONs since they are schema_version=2.
+"""Run only the LLM evolution seeds.
+
+Default `agent_type="v3"` (full LLMAgent class). Use `--agent-type v2` to
+re-run the two-function-interface variant. Will overwrite any existing
+JSON whose config does not match the requested agent_type.
 """
 import json
 import sys
 import time
 from pathlib import Path
 
-ROOT = Path(r"C:\Users\shiwenbo\.minimax\agents\mavis\workspace\llm-reputation-paper\llm-reputation")
+ROOT = Path(r"C:\Users\shiwenbo\.mavis\agents\mavis\workspace\llm-reputation-paper\llm-reputation")
 sys.path.insert(0, str(ROOT))
 
 from experiments.config.load_env import get_api_key, get_base_url
@@ -15,24 +18,27 @@ from experiments.v2_quantitative.population import V2EvolutionaryPopulation
 OUT = ROOT / "results" / "quantitative_baseline"
 
 
-def run_one(seed: int, num_gens: int = 30):
-    """Run LLM_evolution seed, overwrite existing v2 JSON."""
-    trial_dir = OUT / f"LLM_evolution_seed{seed}"
+def run_one(seed: int, num_gens: int, agent_type: str, label: str = "LLM_evolution"):
+    """Run one LLM seed; overwrite if existing JSON has wrong agent_type."""
+    trial_dir = OUT / f"{label}_seed{seed}"
     trial_dir.mkdir(parents=True, exist_ok=True)
     out_path = trial_dir / "evolutionary.json"
-    # Delete old v2 JSON to force re-run
     if out_path.exists():
         try:
             existing = json.loads(out_path.read_text(encoding="utf-8"))
             sv = existing.get("config", {}).get("schema_version", 1)
-            if sv < 3:
-                print(f"[LLM_evolution seed{seed}] Deleting old v{sv} JSON to force re-run with v3 (stable agent_id) fix.")
-                out_path.unlink()
+            existing_at = existing.get("config", {}).get("agent_type", "v2")
+            if sv >= 3 and existing_at == agent_type:
+                t = existing.get("trajectory", [])
+                if len(t) >= num_gens:
+                    print(f"[{label} seed{seed}] Already v3+ with agent_type={existing_at} ({len(t)} gens), skipping.")
+                    return
+                print(f"[{label} seed{seed}] Existing v{sv} agent_type={existing_at} has only {len(t)} gens, re-running.")
             else:
-                print(f"[LLM_evolution seed{seed}] Already v3+ ({sv}), skipping.")
-                return
+                print(f"[{label} seed{seed}] Existing v{sv} agent_type={existing_at} (want agent_type={agent_type}), re-running.")
+                out_path.unlink()
         except Exception as e:
-            print(f"[LLM_evolution seed{seed}] Could not read existing JSON ({e}); re-running.")
+            print(f"[{label} seed{seed}] Could not read existing JSON ({e}); re-running.")
 
     pop = V2EvolutionaryPopulation(
         population_size=15,
@@ -52,8 +58,9 @@ def run_one(seed: int, num_gens: int = 30):
         seed=seed,
         results_dir=str(trial_dir),
         use_baseline=None,
+        agent_type=agent_type,
     )
-    print(f"\n[LLM_evolution seed{seed}] Starting (v3, stable agent_id)...")
+    print(f"\n[{label} seed{seed}] Starting (agent_type={agent_type})...")
     t0 = time.time()
     res = pop.run_evolution(num_generations=num_gens)
     elapsed = time.time() - t0
@@ -63,12 +70,22 @@ def run_one(seed: int, num_gens: int = 30):
         encoding="utf-8",
     )
     final = res["trajectory"][-1]["cooperation_rate_mean"] if res["trajectory"] else None
-    print(f"[LLM_evolution seed{seed}] Done in {elapsed/60:.1f} min. Final coop = {final:.3f}")
-    print(f"  schema_version={res['config'].get('schema_version')}, "
+    print(f"[{label} seed{seed}] Done in {elapsed/60:.1f} min. Final coop = {final:.3f}")
+    print(f"  schema_version={res['config'].get('schema_version')}, agent_type={res['config'].get('agent_type')}, "
           f"final agent_ids sample={sorted([a['agent_id'] for a in res['final_population']])}")
     return res
 
 
 if __name__ == "__main__":
-    for seed in [0, 1, 2]:
-        run_one(seed, 30)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--agent-type", choices=["v2", "v3"], default="v3",
+                        help="v2 = two-function interface, v3 = full LLMAgent class (default)")
+    parser.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
+    parser.add_argument("--n-gens", type=int, default=30)
+    parser.add_argument("--label", default="LLM_evolution",
+                        help="Trial-dir name suffix (default: LLM_evolution). "
+                             "Use e.g. 'LLM_v3_evolution' to keep v2 and v3 results separate.")
+    args = parser.parse_args()
+    for seed in args.seeds:
+        run_one(seed, args.n_gens, args.agent_type, label=args.label)

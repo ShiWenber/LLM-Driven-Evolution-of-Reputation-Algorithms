@@ -116,3 +116,126 @@ Generate a child strategy. Suggestions (you don't have to follow any):
 
 Output ONLY the Python code, no prose, no markdown fences.
 """
+
+
+# =======================================================================
+# Type-2 prompts: the LLM writes a FULL Python class, not two functions.
+# Strictly no hints about state structure, value ranges, or named
+# algorithms (no "reputation", no "leading-eight", no "IS/SS/..." etc.).
+# =======================================================================
+
+INIT_PROMPT_V3 = """You are a Python programmer designing a strategy for a
+multi-agent social-dynamics simulation. Your task is to write a single
+Python class named `LLMAgent` that decides how one agent behaves.
+
+The simulation:
+  - 15 agents play 30 rounds per generation, for 30 generations.
+  - Each round, the 15 agents are randomly partitioned into pairs (7
+    pairs; one agent sits out if 15 is odd).
+  - In each pair, BOTH agents SIMULTANEOUSLY choose to either
+    "cooperate" or "defect". The joint action is observed by the
+    players themselves and by every other agent in the population
+    (third-party observers). For each observed joint action, the
+    framework calls `observe(...)` on every agent that was not part
+    of the pair, and the players themselves are also notified via
+    the same `observe(...)` call (i.e. self-judgment is NOT a
+    separate event — you detect it by checking
+    `donor_id == self.agent_id` or `recipient_id == self.agent_id`).
+
+The class interface (REQUIRED):
+
+```python
+class LLMAgent:
+    def __init__(self, agent_id: int) -> None:
+        # `agent_id` is this agent's stable integer ID (0..N-1, never
+        # reused). Set any internal state you want here.
+        ...
+
+    def decide(self) -> bool:
+        # Return True to cooperate, False to defect. Called once per
+        # round for this agent. The framework sets
+        # `self._ctx_opponent_id` to the integer ID of the opponent
+        # you're paired with BEFORE this method is called; you can
+        # read it but you don't have to use it.
+        ...
+
+    def observe(
+        self,
+        donor_id: int,
+        donor_action: str,        # 'cooperate' or 'defect'
+        recipient_id: int,
+        recipient_action: str,    # 'cooperate' or 'defect'
+    ) -> None:
+        # Called for every joint action this agent witnesses (both
+        # third-party observations and self-judgments). Update any
+        # internal state here. Detecting self-judgment: check
+        # `donor_id == self.agent_id` or `recipient_id == self.agent_id`.
+        ...
+```
+
+Important rules:
+  1. The class MUST be named `LLMAgent` (exact spelling).
+  2. The class MAY import `math` (already available) and `random`. No
+     other imports. Avoid `random` unless you have a good reason; keep
+     the strategy deterministic when possible.
+  3. The class MAY use any data structure you want for state:
+     counters, dicts, lists, sets, deques, etc. There is no required
+     state structure.
+  4. Do NOT assume any range or scale for your internal state — pick
+     numbers that work for your strategy.
+  5. The class should not crash on any input. Wrap risky code in
+     try/except if needed.
+  6. Methods may be called many times per generation; keep them
+     fast (no expensive I/O).
+
+Output ONLY the Python code for the class. No prose, no markdown
+fences. The code must define exactly one class named `LLMAgent`.
+"""
+
+
+MUTATION_PROMPT_V3 = """You are mutating an existing strategy for a
+multi-agent social-dynamics simulation. The parent is a Python class
+named `LLMAgent`. Produce a child class also named `LLMAgent` that
+behaves similarly but with at least one change.
+
+The simulation summary (do not propose structural changes to the
+simulation itself):
+  - 15 agents, 30 rounds per generation, 30 generations total.
+  - Random pairing, simultaneous cooperation/defection choice.
+  - Every joint action is observed by both players and by every
+    third-party agent. The framework calls `observe(...)` on every
+    observer with the same (donor_id, donor_action, recipient_id,
+    recipient_action) tuple. Self-judgment is detected via
+    `donor_id == self.agent_id` or `recipient_id == self.agent_id`.
+
+The class interface (REQUIRED, unchanged):
+
+```python
+class LLMAgent:
+    def __init__(self, agent_id: int) -> None:
+        ...
+
+    def decide(self) -> bool:
+        # self._ctx_opponent_id is set by the framework just before.
+        ...
+
+    def observe(
+        self,
+        donor_id: int,
+        donor_action: str,
+        recipient_id: int,
+        recipient_action: str,
+    ) -> None:
+        ...
+```
+
+PARENT (fitness {fitness}):
+
+```python
+{parent_code}
+```
+
+Output ONLY the Python code for the child class, no prose, no
+markdown fences. The child must define exactly one class named
+`LLMAgent` and use the same interface.
+"""
