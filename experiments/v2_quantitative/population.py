@@ -120,6 +120,16 @@ class V2EvolutionaryPopulation:
         self,
         population_size: int = 15,
         num_rounds_per_gen: int = 30,
+        # target_interactions_per_gen: if set (and > 0), overrides
+        # num_rounds_per_gen at construction time so the caller can
+        # think in terms of total PD games per gen rather than
+        # rounds. Computed as ceil(target / (population_size // 2));
+        # with N=15 we get 7 pairs per round, so target=1000 ->
+        # 143 rounds = 1001 games. The LLM call count is governed
+        # separately by num_eliminate (5/gen) and does NOT scale
+        # with rounds, so going from 30 -> 143 rounds is ~4.77x
+        # more game time but the same ~5 LLM calls per gen.
+        target_interactions_per_gen: Optional[int] = None,
         benefit: float = 2.0,
         cost: float = 1.0,
         observability: str = "full",
@@ -161,7 +171,18 @@ class V2EvolutionaryPopulation:
         if agent_type not in ("v2", "v3"):
             raise ValueError(f"agent_type must be 'v2' or 'v3', got {agent_type!r}")
         self.population_size = population_size
+        # If caller asked for a target interaction count, derive the
+        # round count from it. With N=15 we get 7 pairs/round; with
+        # N=20 we get 10 pairs/round. The result is rounded UP so we
+        # hit the target (slightly over is fine; missing it by
+        # hundreds would be a measurement bug).
+        if target_interactions_per_gen is not None and target_interactions_per_gen > 0:
+            pairs_per_round = max(1, population_size // 2)
+            num_rounds_per_gen = (
+                (target_interactions_per_gen + pairs_per_round - 1) // pairs_per_round
+            )
         self.num_rounds_per_gen = num_rounds_per_gen
+        self.target_interactions_per_gen = target_interactions_per_gen
         self.benefit = benefit
         self.cost = cost
         self.observability = observability
@@ -214,6 +235,18 @@ class V2EvolutionaryPopulation:
         # can flag runs where the LLM is misbehaving heavily.
         self._fallback_init_count: int = 0
         self._fallback_mutation_count: int = 0
+        # Echo the effective interaction count so callers can verify
+        # the override took effect (and so log analysis can grep for
+        # it).
+        if target_interactions_per_gen is not None and target_interactions_per_gen > 0:
+            pairs_per_round = max(1, population_size // 2)
+            actual = self.num_rounds_per_gen * pairs_per_round
+            print(
+                f"  [V2EvolutionaryPopulation] target_interactions_per_gen="
+                f"{target_interactions_per_gen} -> num_rounds_per_gen="
+                f"{self.num_rounds_per_gen} -> {actual} games/gen "
+                f"(N={population_size}, pairs={pairs_per_round})"
+            )
 
     def _get_llm_client(self):
         if self._llm_client is not None:
@@ -502,6 +535,8 @@ class V2EvolutionaryPopulation:
                 "seed": self.seed,
                 "use_baseline": self.use_baseline,
                 "num_generations": num_generations,
+                "num_rounds_per_gen": self.num_rounds_per_gen,
+                "target_interactions_per_gen": self.target_interactions_per_gen,
                 "llm_thinking": self.llm_thinking,
                 "llm_max_tokens": self._llm_max_tokens,
                 "fallback_init_count": self._fallback_init_count,
