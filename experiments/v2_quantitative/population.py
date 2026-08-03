@@ -67,15 +67,30 @@ def decide(my_reputation, opponent_reputation):
 ]
 
 
-# Type-2 fallback: a complete LLMAgent class that always cooperates.
+# Type-2 fallback: a complete LLMAgent class. We intentionally make
+# it behaviorally NEUTRAL (50% cooperate / 50% defect, deterministic
+# per agent_id) rather than the previous always-cooperate default.
+# Why this matters: when the LLM init silently fails (content='',
+# reasoning_content consumed all max_tokens, etc.), every init
+# attempt returns the FALLBACK. With the old `return True`, the
+# whole population starts as 15/15 perfect cooperators -> 1.000
+# cooperation in gen 0 -> selection has nothing to amplify, and
+# downstream metrics look deceptively good. With neutral FALLBACK,
+# a heavy-FALLBACK run sits at ~0.5 cooperation, which is a clear
+# signal that the LLM init is broken and the run is unreliable.
 FALLBACK_CLASS_V3 = '''
+import random as _rnd
 class LLMAgent:
     def __init__(self, agent_id: int):
         self.agent_id = agent_id
         self._ctx_opponent_id = None
+        # Deterministic per-agent RNG, seeded by agent_id. Each
+        # instance gets its own stream so a population of 15
+        # FALLBACKs averages to ~0.5, not 1.0 or 0.0.
+        self._rng = _rnd.Random(agent_id * 7919 + 42)
 
     def decide(self) -> bool:
-        return True
+        return self._rng.random() < 0.5
 
     def observe(self, donor_id, donor_action, recipient_id, recipient_action) -> None:
         return None
@@ -131,6 +146,17 @@ class V2EvolutionaryPopulation:
         #       with `__init__(agent_id)`, `decide()`, and
         #       `observe(...)` methods. LLM owns its own state
         #       structure; framework only handles bookkeeping.
+        # llm_thinking: when True, sends `thinking={"type": "enabled"}` to
+        #   the API and bumps max_tokens to llm_max_tokens_thinking to fit
+        #   both reasoning_content and the final code. When False (default),
+        #   sends `thinking={"type": "disabled"}` and uses
+        #   llm_max_tokens_base. DeepSeek-v4-flash is a reasoning model,
+        #   so the default off-state keeps wall time low (~11s/call) and
+        #   avoids empty-content truncation. Set True for research
+        #   questions that need to inspect the chain-of-thought.
+        llm_thinking: bool = False,
+        llm_max_tokens_base: int = 4000,
+        llm_max_tokens_thinking: int = 12000,
     ):
         if agent_type not in ("v2", "v3"):
             raise ValueError(f"agent_type must be 'v2' or 'v3', got {agent_type!r}")
@@ -152,6 +178,24 @@ class V2EvolutionaryPopulation:
         self.results_dir = Path(results_dir)
         self.use_baseline = use_baseline
         self.agent_type = agent_type
+        self.llm_thinking = llm_thinking
+        self.llm_max_tokens_base = llm_max_tokens_base
+        self.llm_max_tokens_thinking = llm_max_tokens_thinking
+        # Derived: the actual max_tokens we'll send. Cached so
+        # _call_llm doesn't recompute on every call.
+        self._llm_max_tokens = (
+            self.llm_max_tokens_thinking if self.llm_thinking
+            else self.llm_max_tokens_base
+        )
+        # Derived: the extra_body payload. For DeepSeek-v4-flash we
+        # always send an explicit `thinking` value because its
+        # default is ON, which silently truncates our code at
+        # max_tokens. With thinking=disabled (the default) the
+        # full budget goes to the final code.
+        if self.llm_thinking:
+            self._llm_extra_body = {"thinking": {"type": "enabled"}}
+        else:
+            self._llm_extra_body = {"thinking": {"type": "disabled"}}
         self.agents: List[object] = []  # QuantitativeAgent or FullAgent
         self.rng = random.Random(seed)
         # Monotonic counter: each new agent gets a fresh, never-reused id.
@@ -160,6 +204,16 @@ class V2EvolutionaryPopulation:
         self._next_agent_id: int = 0
         # LLM client (lazy)
         self._llm_client = None
+        # FALLBACK diagnostics. _fallback_init_count: how many of the
+        # population_size init attempts ended up using the
+        # deterministic-random FALLBACK (i.e., LLM init silently
+        # failed 3x in a row). _fallback_mutation_count: how many
+        # _select_and_reproduce cycles hit the Fix-B fallback path
+        # (mutate produced a code that smoke-validated but failed at
+        # real-id instantiation). Both are reported at run end so we
+        # can flag runs where the LLM is misbehaving heavily.
+        self._fallback_init_count: int = 0
+        self._fallback_mutation_count: int = 0
 
     def _get_llm_client(self):
         if self._llm_client is not None:
@@ -182,7 +236,8 @@ class V2EvolutionaryPopulation:
                         {"role": "user", "content": user_msg},
                     ],
                     temperature=self.mutation_temperature,
-                    max_tokens=4000,
+                    max_tokens=self._llm_max_tokens,
+                    extra_body=self._llm_extra_body,
                 )
                 content = resp.choices[0].message.content
                 if content:
@@ -220,8 +275,14 @@ class V2EvolutionaryPopulation:
             V2StrategyExecutor(code)
 
     def _init_population_llm(self):
-        """Generate N strategies via LLM."""
-        print(f"  Initializing population via LLM ({self.population_size} agents, agent_type={self.agent_type})...")
+        """Generate N strategies via LLM.
+
+        FALLBACK is the deterministic-random class (Fix C) — not
+        the old always-cooperate one. Every FALLBACK hit increments
+        self._fallback_init_count so we can audit run reliability at
+        the end.
+        """
+        print(f"  Initializing population via LLM ({self.population_size} agents, agent_type={self.agent_type}, thinking={self.llm_thinking}, max_tokens={self._llm_max_tokens})...")
         client = self._get_llm_client()
         user_msg = INIT_PROMPT_V3 if self.agent_type == "v3" else INIT_PROMPT_V2
         for i in range(self.population_size):
@@ -234,7 +295,8 @@ class V2EvolutionaryPopulation:
                             {"role": "user", "content": user_msg},
                         ],
                         temperature=self.mutation_temperature,
-                        max_tokens=4000,
+                        max_tokens=self._llm_max_tokens,
+                        extra_body=self._llm_extra_body,
                     )
                     content = resp.choices[0].message.content
                     code = _extract_code_from_response(content)
@@ -250,13 +312,17 @@ class V2EvolutionaryPopulation:
                     print(f"  [init agent {i} LLM error attempt {attempt+1}]: {e}")
                     time.sleep(2)
             else:
-                # All attempts failed; use random fallback
+                # All attempts failed; use the deterministic-random
+                # FALLBACK (Fix C: ~50% cooperation, NOT 1.000). This
+                # is also a signal that the LLM init is unreliable,
+                # so we count it.
                 if self.agent_type == "v3":
                     fb = FALLBACK_CLASS_V3
                 else:
                     fb = self.rng.choice(FALLBACK_STRATEGIES)
                 agent = self._new_agent(fb)
                 self.agents.append(agent)
+                self._fallback_init_count += 1
                 print(f"  [init agent {i}] using FALLBACK strategy")
 
     def _init_population_baseline(self):
@@ -395,6 +461,28 @@ class V2EvolutionaryPopulation:
                 "cooperation_rate": a.cooperation_rate,
                 "self_reputation": a.get_self_reputation(),
             })
+        # FALLBACK diagnostics (Fix E). Print init and mutation
+        # FALLBACK ratios so reviewers can judge run reliability.
+        # Init ratio >30% usually means the LLM init is broken
+        # (model name, API key, thinking-mode mismatch); mutation
+        # ratio >30% usually means the model is producing invalid
+        # code at a high rate.
+        init_ratio = self._fallback_init_count / max(1, self.population_size)
+        mut_total = (num_generations - 1) * self.num_eliminate if num_generations > 1 else 0
+        mut_ratio = self._fallback_mutation_count / max(1, mut_total)
+        print(
+            f"  [FALLBACK stats] init={self._fallback_init_count}/"
+            f"{self.population_size} ({init_ratio:.0%}), "
+            f"mutation={self._fallback_mutation_count}/{mut_total} "
+            f"({mut_ratio:.0%}), thinking={self.llm_thinking}, "
+            f"max_tokens={self._llm_max_tokens}"
+        )
+        if init_ratio > 0.3:
+            print(
+                f"  [FALLBACK warning] init FALLBACK ratio > 30% "
+                f"— LLM init is likely broken; run "
+                f"results are NOT reliable."
+            )
         return {
             "trajectory": trajectory,
             "final_population": final_population,
@@ -414,6 +502,10 @@ class V2EvolutionaryPopulation:
                 "seed": self.seed,
                 "use_baseline": self.use_baseline,
                 "num_generations": num_generations,
+                "llm_thinking": self.llm_thinking,
+                "llm_max_tokens": self._llm_max_tokens,
+                "fallback_init_count": self._fallback_init_count,
+                "fallback_mutation_count": self._fallback_mutation_count,
             },
         }
 
@@ -447,7 +539,21 @@ class V2EvolutionaryPopulation:
         for _ in range(N - n_needed):
             parent = self.rng.choice(survivors)
             new_code = self._mutate(parent.code, parent.fitness)
-            new_agents.append(self._new_agent(new_code))
+            try:
+                new_agents.append(self._new_agent(new_code))
+            except Exception as e:
+                # Defense in depth: if a mutated class somehow slips past
+                # _validate_code but fails to instantiate for the actual
+                # agent_id, fall back to a fresh clone of the parent.
+                # Without this, the whole run crashes (e.g., the gen 7
+                # crash in M4 smoke test). Count it for the run-end
+                # FALLBACK diagnostics.
+                self._fallback_mutation_count += 1
+                print(
+                    f"  [_select_and_reproduce fallback] using parent_code "
+                    f"for agent after mutate: {type(e).__name__}: {e}"
+                )
+                new_agents.append(self._new_agent(parent.code))
         # Drop reputations pointing at removed agents. Each survivor retains
         # its own agent_id (stable), so we can safely pop by id.
         old_ids = {a.agent_id for a in self.agents}

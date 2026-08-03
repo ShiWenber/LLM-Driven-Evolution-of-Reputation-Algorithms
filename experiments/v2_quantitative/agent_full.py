@@ -167,6 +167,19 @@ class V3StrategyExecutor:
                 raise ValueError(
                     f"`LLMAgent` must define a `{method}` method"
                 )
+        # Smoke-test instantiate with id=0. Catches classes that compile
+        # but fail at __init__ (e.g., a class without its own
+        # `__init__(self, agent_id)` inherits object.__init__ which
+        # rejects the extra arg). Without this, the bad class slips
+        # past _validate_code and crashes the run when FullAgent tries
+        # to instantiate it for the assigned agent_id.
+        try:
+            _smoke = cls(0)
+            del _smoke
+        except Exception as e:
+            raise ValueError(
+                f"`LLMAgent` smoke instantiate failed: {e}"
+            )
         self._cls = cls
 
     def instantiate(self, agent_id: int) -> "LLMAgent":
