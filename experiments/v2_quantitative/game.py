@@ -24,7 +24,7 @@ Backward-compatible with the type1 QuantitativeAgent interface
 """
 from __future__ import annotations
 import random
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 from .agent import QuantitativeAgent
 from .executor import V2StrategyExecutor
 
@@ -45,6 +45,7 @@ class V2DonorGame:
         observability: str = "full",
         observability_p: float = 1.0,
         seed: int = 42,
+        fitness_window_interactions: Optional[int] = 200,
     ):
         self.population_size = population_size
         self.benefit = benefit
@@ -59,6 +60,16 @@ class V2DonorGame:
         self._global_log: List[Dict] = []
         # Payoffs (indexed by list position)
         self.payoffs = [0.0] * population_size
+        # Per-interaction payoff deltas (one entry per joint action played
+        # in the current generation). Used to compute windowed fitness
+        # (= sum of payoffs over only the last N interactions, treating
+        # the first M as burn-in). Stored as a list of length-15 lists.
+        self._interaction_deltas: List[List[float]] = []
+        # Fitness window size: how many of the latest interactions to
+        # count toward the agent's fitness for selection. If None or
+        # <= 0 or larger than the total interaction count, all
+        # interactions count (legacy behavior).
+        self.fitness_window_interactions = fitness_window_interactions
 
     def setup_population(self, agents: List[QuantitativeAgent]):
         self.agents = agents
@@ -96,16 +107,28 @@ class V2DonorGame:
             # Payoffs (use list position to index the payoffs array)
             donor_pos = self.agents.index(donor)
             recipient_pos = self.agents.index(recipient)
+            # Per-interaction deltas (for windowed fitness / burn-in).
+            # Initialize zeros for all agents; only the two players
+            # in this pair have nonzero entries.
+            pair_delta = [0.0] * self.population_size
             # Cost: each cooperator pays cost
             if action1:
                 self.payoffs[donor_pos] -= self.cost
+                pair_delta[donor_pos] -= self.cost
             if action2:
                 self.payoffs[recipient_pos] -= self.cost
+                pair_delta[recipient_pos] -= self.cost
             # Benefit: each cooperator gives benefit to the other
             if action1:
                 self.payoffs[recipient_pos] += self.benefit
+                pair_delta[recipient_pos] += self.benefit
             if action2:
                 self.payoffs[donor_pos] += self.benefit
+                pair_delta[donor_pos] += self.benefit
+            # Record this interaction's per-agent payoff deltas for the
+            # windowed-fitness computation (the first
+            # `total - window` interactions count as burn-in).
+            self._interaction_deltas.append(pair_delta)
             # Store actions as STRING so the strategy code can
             # pattern-match on them in evaluate().
             donor_action_str = "cooperate" if action1 else "defect"
@@ -190,6 +213,7 @@ class V2DonorGame:
         self.round_num = 0
         self.payoffs = [0.0] * self.population_size
         self._global_log = []
+        self._interaction_deltas = []
         for _ in range(self.population_size):  # T = N (one round per donor, by default)
             self.play_round()
             self.distribute_observations_and_self_judgments()
@@ -211,3 +235,28 @@ class V2DonorGame:
             "round_num": self.population_size,
             "payoffs": list(self.payoffs),
         }
+
+    def get_windowed_fitness(self) -> List[float]:
+        """Return per-agent fitness summed over only the LAST
+        `fitness_window_interactions` interactions.
+
+        The first `total - window` interactions are treated as
+        burn-in: they were played (so strategies got experience via
+        `observe()` and reputations evolved), but their payoffs do
+        not count toward the fitness used for selection.
+
+        If `fitness_window_interactions` is None, <= 0, or larger
+        than the total interaction count, all interactions count
+        (legacy behavior, equivalent to `self.payoffs`).
+        """
+        window = self.fitness_window_interactions
+        deltas = self._interaction_deltas
+        n_total = len(deltas)
+        if window is None or window <= 0 or window >= n_total:
+            return list(self.payoffs)
+        # Sum the deltas of the LAST `window` interactions only.
+        windowed = [0.0] * self.population_size
+        for delta in deltas[-window:]:
+            for pos, d in enumerate(delta):
+                windowed[pos] += d
+        return windowed

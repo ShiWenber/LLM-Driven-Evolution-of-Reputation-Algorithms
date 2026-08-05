@@ -130,6 +130,16 @@ class V2EvolutionaryPopulation:
         # with rounds, so going from 30 -> 143 rounds is ~4.77x
         # more game time but the same ~5 LLM calls per gen.
         target_interactions_per_gen: Optional[int] = None,
+        # fitness_window_interactions: if set, only the LAST
+        # `fitness_window_interactions` joint actions of each gen
+        # contribute to an agent's fitness for selection; the
+        # earlier `total - window` are treated as burn-in (still
+        # played so observe() / reputations evolve, but their
+        # payoffs don't count). Default 200: with
+        # target_interactions_per_gen=1000, the first 800 are
+        # burn-in. Pass None (or 0) to use all interactions
+        # (legacy behavior).
+        fitness_window_interactions: Optional[int] = 200,
         benefit: float = 2.0,
         cost: float = 1.0,
         observability: str = "full",
@@ -183,6 +193,7 @@ class V2EvolutionaryPopulation:
             )
         self.num_rounds_per_gen = num_rounds_per_gen
         self.target_interactions_per_gen = target_interactions_per_gen
+        self.fitness_window_interactions = fitness_window_interactions
         self.benefit = benefit
         self.cost = cost
         self.observability = observability
@@ -412,6 +423,7 @@ class V2EvolutionaryPopulation:
             observability=self.observability,
             observability_p=self.observability_p,
             seed=self.seed + self.round_num_offset,  # different seed per gen
+            fitness_window_interactions=self.fitness_window_interactions,
         )
         # Per-gen unique seed
         gen_seed = self.rng.randrange(10**9)
@@ -429,13 +441,18 @@ class V2EvolutionaryPopulation:
         game.round_num = 0
         game.payoffs = [0.0] * self.population_size
         game._global_log = []
+        game._interaction_deltas = []
         for _ in range(T):
             game.play_round()
             game.distribute_observations_and_self_judgments()
         coop_count = sum(1 for inter in game._global_log if inter["donor_action"] == "cooperate")
         coop_rate = coop_count / max(1, len(game._global_log))
-        # Sum payoffs for fitness
-        fitness = [p for p in game.payoffs]
+        # Windowed fitness: only the last
+        # `fitness_window_interactions` interactions count toward
+        # selection. Earlier interactions are played (so observe()
+        # history and reputations evolve) but their payoffs are
+        # treated as burn-in. See game.get_windowed_fitness().
+        fitness = game.get_windowed_fitness()
         return {
             "cooperation_rate_mean": coop_rate,
             "n_interactions": len(game._global_log),
