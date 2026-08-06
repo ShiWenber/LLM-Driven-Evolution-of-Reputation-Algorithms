@@ -147,6 +147,35 @@ class V2EvolutionaryPopulation:
         elite_count: int = 2,
         num_eliminate: int = 5,
         tournament_size: int = 3,
+        # Selection rule. When use_fermi is True, the per-generation
+        # update step is a synchronous Fermi imitation process
+        # (Moran-process style) instead of tournament+elite. The
+        # legacy tournament code path is kept behind use_fermi=False
+        # for backward compatibility; see
+        # _select_and_reproduce_fermi() for the implementation.
+        #
+        # Per update event we sample i (learner) and j (role model,
+        # i != j) and apply
+        #     P(i copies j) = 1 / (1 + exp(-fermi_beta * (phi_j - phi_i)))
+        # with phi = per-agent windowed fitness from the just-finished
+        # generation. On copy, with probability mutation_rate_on_adoption
+        # the learner becomes an LLM-mutated version of j (counts as 1
+        # LLM call); otherwise it becomes a verbatim copy of j's code
+        # (no LLM call). Synchronous commit: all updates are decided
+        # from the old generation's fitness, then written in one shot.
+        #
+        # Coverage math (N=15, 1001 inter/gen, updates_per_gen=N=15):
+        #   Fermi events per gen  = 15
+        #   Mutations per gen      = 15 * 0.1 = 1.5
+        #   Fermi:mutation ratio   = 10:1 (drift-dominated)
+        #   Pair coverage per gen  = 1.5% (relative to game inter)
+        # Increase updates_per_gen to push selection strength up at
+        # the cost of squashing heterogeneous LLM initial states faster.
+        use_fermi: bool = False,
+        fermi_beta: float = 5.0,
+        mutation_rate_on_adoption: float = 0.1,
+        updates_per_gen: int = 15,
+        forbid_self_pairing: bool = True,
         llm_provider: str = "openai",
         llm_model: str = "deepseek-v4-flash",
         api_key: str = "",
@@ -201,6 +230,11 @@ class V2EvolutionaryPopulation:
         self.elite_count = elite_count
         self.num_eliminate = num_eliminate
         self.tournament_size = tournament_size
+        self.use_fermi = use_fermi
+        self.fermi_beta = fermi_beta
+        self.mutation_rate_on_adoption = mutation_rate_on_adoption
+        self.updates_per_gen = updates_per_gen
+        self.forbid_self_pairing = forbid_self_pairing
         self.llm_provider = llm_provider
         self.llm_model = llm_model
         self.api_key = api_key
@@ -501,7 +535,10 @@ class V2EvolutionaryPopulation:
                   f"fitness_mean={sum(stats['payoffs'])/max(1,len(stats['payoffs'])):.1f}")
             # Selection + mutation (only for LLM mode)
             if not self.use_baseline and gen < num_generations - 1:
-                self._select_and_reproduce()
+                if self.use_fermi:
+                    self._select_and_reproduce_fermi()
+                else:
+                    self._select_and_reproduce()
         # Build final population
         for a in self.agents:
             final_population.append({
@@ -518,14 +555,23 @@ class V2EvolutionaryPopulation:
         # ratio >30% usually means the model is producing invalid
         # code at a high rate.
         init_ratio = self._fallback_init_count / max(1, self.population_size)
-        mut_total = (num_generations - 1) * self.num_eliminate if num_generations > 1 else 0
+        if self.use_fermi:
+            # Expected Fermi-side mutation attempts: updates_per_gen *
+            # mu per gen, summed over all update gens.
+            mut_total = int(
+                (num_generations - 1) * self.updates_per_gen * self.mutation_rate_on_adoption
+            ) if num_generations > 1 else 0
+        else:
+            mut_total = (num_generations - 1) * self.num_eliminate if num_generations > 1 else 0
         mut_ratio = self._fallback_mutation_count / max(1, mut_total)
         print(
             f"  [FALLBACK stats] init={self._fallback_init_count}/"
             f"{self.population_size} ({init_ratio:.0%}), "
             f"mutation={self._fallback_mutation_count}/{mut_total} "
             f"({mut_ratio:.0%}), thinking={self.llm_thinking}, "
-            f"max_tokens={self._llm_max_tokens}"
+            f"max_tokens={self._llm_max_tokens}, "
+            f"use_fermi={self.use_fermi} (beta={self.fermi_beta}, "
+            f"mu={self.mutation_rate_on_adoption}, updates/gen={self.updates_per_gen})"
         )
         if init_ratio > 0.3:
             print(
@@ -556,6 +602,11 @@ class V2EvolutionaryPopulation:
                 "target_interactions_per_gen": self.target_interactions_per_gen,
                 "llm_thinking": self.llm_thinking,
                 "llm_max_tokens": self._llm_max_tokens,
+                "use_fermi": self.use_fermi,
+                "fermi_beta": self.fermi_beta,
+                "mutation_rate_on_adoption": self.mutation_rate_on_adoption,
+                "updates_per_gen": self.updates_per_gen,
+                "forbid_self_pairing": self.forbid_self_pairing,
                 "fallback_init_count": self._fallback_init_count,
                 "fallback_mutation_count": self._fallback_mutation_count,
             },
@@ -618,3 +669,100 @@ class V2EvolutionaryPopulation:
         # global identity; list position in self.agents is just iteration
         # order and may differ across generations.
         self.agents = new_agents
+
+    def _select_and_reproduce_fermi(self):
+        """Synchronous Fermi imitation + LLM mutation (Moran-process style).
+
+        Per generation we run `updates_per_gen` independent update
+        events. For each event we sample (i, j) with i != j (when
+        forbid_self_pairing=True) and apply
+
+            P(i copies j) = 1 / (1 + exp(-fermi_beta * (phi_j - phi_i)))
+
+        where phi is the per-agent windowed fitness from the just-
+        finished generation. On copy, with probability
+        mutation_rate_on_adoption the learner becomes an LLM-mutated
+        version of j (1 LLM call per copy); otherwise it becomes a
+        verbatim copy of j's code (no LLM call). All decisions are
+        made from the old generation's fitness+code and committed
+        synchronously at the end (Moran style, no in-place mutation
+        of j that other events could read).
+
+        This is the Fermi update rule replacing the legacy
+        tournament+elite path. It's a pure imitation process: no
+        elite preservation, no tournament size parameter. Designed
+        to pair with `fitness_window_interactions` so the fitness
+        signal reflects post-burn-in behavior.
+
+        Sanity checks (should pass):
+          * Fermi + ALLC  -> stays at 1.0 (no drift, no defectors)
+          * Fermi + ALLD  -> stays at 0.0
+          * Fermi + IS    -> collapses to 0 (IS not an ESS here)
+          * Fermi + LLM   -> heterogeneous init should survive a
+                             few gens at low updates_per_gen
+        """
+        import math
+        N = len(self.agents)
+        if N < 2:
+            return  # nothing to update
+        beta = self.fermi_beta
+        mu = self.mutation_rate_on_adoption
+        # Build a fresh list; we'll mutate entries in-place, but
+        # always read phi and code from the OLD generation.
+        next_agents = list(self.agents)
+        old_agents = list(self.agents)
+        for _ in range(self.updates_per_gen):
+            # Sample learner i
+            i = self.rng.randrange(N)
+            # Sample role model j != i (unless population has 1)
+            if self.forbid_self_pairing and N > 1:
+                j = self.rng.randrange(N - 1)
+                if j >= i:
+                    j += 1
+            else:
+                j = self.rng.randrange(N)
+            # Fermi imitation probability
+            phi_i = old_agents[i].fitness
+            phi_j = old_agents[j].fitness
+            try:
+                p_imitate = 1.0 / (1.0 + math.exp(-beta * (phi_j - phi_i)))
+            except OverflowError:
+                # exp(-beta * large_negative) underflows to 0; p -> 1
+                p_imitate = 0.0 if (phi_j - phi_i) < 0 else 1.0
+            if self.rng.random() >= p_imitate:
+                continue  # no update this event
+            # Adopt j's code. With probability mu, LLM-mutate first.
+            adopted_code = old_agents[j].code
+            if self.rng.random() < mu:
+                adopted_code = self._mutate(old_agents[j].code, old_agents[j].fitness)
+            # Build a new agent for slot i, preserving i's stable
+            # agent_id. _new_agent allocates a NEW id, so we use
+            # _make_agent directly to keep the id stable.
+            try:
+                new_agent = self._make_agent(adopted_code, old_agents[i].agent_id)
+            except Exception as e:
+                # Defense in depth: if the LLM produced a class
+                # that validates but somehow fails to instantiate
+                # for the chosen id, fall back to a verbatim copy
+                # of j's code with the same id.
+                self._fallback_mutation_count += 1
+                print(
+                    f"  [fermi fallback] using j.code verbatim for "
+                    f"agent {old_agents[i].agent_id}: {type(e).__name__}: {e}"
+                )
+                new_agent = self._make_agent(old_agents[j].code, old_agents[i].agent_id)
+            next_agents[i] = new_agent
+        # Drop reputations pointing at removed agent_ids. With
+        # synchronous commit, the set of agent_ids is preserved
+        # (every slot retains its old id), so no ids_to_drop. But
+        # we still want to reset the per-agent state for the new
+        # gen (no observations carry over between gens in this
+        # framework). The agent's __init__ already initializes
+        # reputations={self_id: 0.1}, which is the gen-0 state.
+        # We want to preserve the EXISTING reputations so the
+        # learner can see history built up by the previous gen.
+        # Inherit reputations from old agent at same slot.
+        for slot, new_a in enumerate(next_agents):
+            old_a = old_agents[slot]
+            new_a.reputations = dict(old_a.reputations)
+        self.agents = next_agents
