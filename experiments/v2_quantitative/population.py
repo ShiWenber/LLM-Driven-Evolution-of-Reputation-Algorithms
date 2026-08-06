@@ -34,8 +34,8 @@ from .agent_full import (
 )
 from .game import V2DonorGame
 from .prompts import (
-    INIT_PROMPT_V2, MUTATION_PROMPT_V2,
-    INIT_PROMPT_V3, MUTATION_PROMPT_V3,
+    INIT_PROMPT_V2, MUTATION_PROMPT_V2, SMUTATION_PROMPT_V2,
+    INIT_PROMPT_V3, MUTATION_PROMPT_V3, SMALL_MUTATION_PROMPT_V3,
 )
 from .baselines import get_baseline
 
@@ -448,6 +448,74 @@ class V2EvolutionaryPopulation:
         # Fallback: tiny variation of parent
         return parent_code  # No change on failure
 
+    def _llm_init_one_agent(self, preserve_id: int) -> object:
+        """Fermi μ-path: independent LLM agent generation.
+
+        No reference to the donor j. The new strategy is sampled fresh
+        from the LLM's prior over strategies. Returns a fully built
+        agent (using preserve_id so the slot's id stays stable across
+        the synchronous commit).
+
+        FALLBACK on 3x LLM failure: a deterministic-random strategy
+        (the FALLBACK_CLASS_V3 for v3; a random pick from
+        FALLBACK_STRATEGIES for v2). Bumps _fallback_mutation_count
+        so we can audit run reliability.
+        """
+        if self.agent_type == "v3":
+            user_msg = INIT_PROMPT_V3
+        else:
+            user_msg = INIT_PROMPT_V2
+        for attempt in range(3):
+            content = self._call_llm(
+                "You are a Python programmer. Output only valid Python code.",
+                user_msg,
+            )
+            code = _extract_code_from_response(content) if content else None
+            if code:
+                try:
+                    return self._make_agent(code, preserve_id)
+                except Exception as e:
+                    print(f"  [fermi μ-init validate fail attempt {attempt+1}]: {e}")
+        # 3x failed: FALLBACK (same shape as _init_population_llm).
+        self._fallback_mutation_count += 1
+        print(f"  [fermi μ-init] FALLBACK for slot id={preserve_id}")
+        if self.agent_type == "v3":
+            fb = FALLBACK_CLASS_V3
+        else:
+            fb = self.rng.choice(FALLBACK_STRATEGIES)
+        return self._make_agent(fb, preserve_id)
+
+    def _llm_small_mutate(self, parent_code: str, preserve_id: int) -> object:
+        """Fermi 1-μ path: small variant of parent.
+
+        The parent code IS shown to the LLM (this is the whole point
+        of "imitate with tiny mutation" — the offspring is
+        recognizably the parent's strategy with a small perturbation).
+        Contrast with the μ path which uses no parent reference.
+
+        FALLBACK on 3x LLM failure: the parent code verbatim (the
+        smallest possible mutation). Bumps _fallback_mutation_count.
+        """
+        if self.agent_type == "v3":
+            user_msg = SMALL_MUTATION_PROMPT_V3.format(parent_code=parent_code)
+        else:
+            user_msg = SMUTATION_PROMPT_V2.format(fitness=0.0, parent_code=parent_code)
+        for attempt in range(3):
+            content = self._call_llm(
+                "You are a Python programmer. Output only valid Python code.",
+                user_msg,
+            )
+            code = _extract_code_from_response(content) if content else None
+            if code:
+                try:
+                    return self._make_agent(code, preserve_id)
+                except Exception as e:
+                    print(f"  [fermi 1-μ small-mutate validate fail attempt {attempt+1}]: {e}")
+        # 3x failed: parent code verbatim (the smallest mutation).
+        self._fallback_mutation_count += 1
+        print(f"  [fermi 1-μ small-mutate] FALLBACK (parent verbatim) for slot id={preserve_id}")
+        return self._make_agent(parent_code, preserve_id)
+
     def _run_one_generation(self) -> Dict:
         """Run a single generation. Returns per-gen stats."""
         game = V2DonorGame(
@@ -556,10 +624,11 @@ class V2EvolutionaryPopulation:
         # code at a high rate.
         init_ratio = self._fallback_init_count / max(1, self.population_size)
         if self.use_fermi:
-            # Expected Fermi-side mutation attempts: updates_per_gen *
-            # mu per gen, summed over all update gens.
+            # Z-like: every Fermi copy event triggers exactly one LLM
+            # call (μ path = init, 1-μ path = small_mutate). Upper
+            # bound on LLM calls is updates_per_gen per gen.
             mut_total = int(
-                (num_generations - 1) * self.updates_per_gen * self.mutation_rate_on_adoption
+                (num_generations - 1) * self.updates_per_gen
             ) if num_generations > 1 else 0
         else:
             mut_total = (num_generations - 1) * self.num_eliminate if num_generations > 1 else 0
@@ -671,7 +740,7 @@ class V2EvolutionaryPopulation:
         self.agents = new_agents
 
     def _select_and_reproduce_fermi(self):
-        """Synchronous Fermi imitation + LLM mutation (Moran-process style).
+        """Synchronous Fermi imitation + LLM mutation (Moran-process style, Z-like).
 
         Per generation we run `updates_per_gen` independent update
         events. For each event we sample (i, j) with i != j (when
@@ -681,25 +750,30 @@ class V2EvolutionaryPopulation:
 
         where phi is the per-agent windowed fitness from the just-
         finished generation. On copy, with probability
-        mutation_rate_on_adoption the learner becomes an LLM-mutated
-        version of j (1 LLM call per copy); otherwise it becomes a
-        verbatim copy of j's code (no LLM call). All decisions are
-        made from the old generation's fitness+code and committed
-        synchronously at the end (Moran style, no in-place mutation
-        of j that other events could read).
+        mutation_rate_on_adoption the offspring is an INDEPENDENT
+        LLM init (no reference to j); with probability 1-mu the
+        offspring is a SMALL LLM mutation of j's code (j is shown to
+        the LLM, the prompt asks for a tiny change). Both paths
+        always perform exactly one LLM call per copy event.
 
-        This is the Fermi update rule replacing the legacy
-        tournament+elite path. It's a pure imitation process: no
-        elite preservation, no tournament size parameter. Designed
-        to pair with `fitness_window_interactions` so the fitness
-        signal reflects post-burn-in behavior.
+        All decisions are made from the old generation's fitness+code
+        and committed synchronously at the end (Moran style, no in-
+        place mutation of j that other events could read).
+
+        μ=0 degenerate: with mutation_rate_on_adoption=0 the 1-μ
+        path is still LLM-mutate, NOT verbatim copy. This is the
+        Z-like scheme (vs the Y scheme where 1-μ was free verbatim).
+        To get pure Fermi + no mutation, set
+        mutation_rate_on_adoption=1 so every copy is a free LLM
+        init — but note: that still costs LLM calls. For pure
+        replicator dynamics, run with use_fermi=False (legacy
+        tournament+elite path, no LLM in selection step).
 
         Sanity checks (should pass):
-          * Fermi + ALLC  -> stays at 1.0 (no drift, no defectors)
-          * Fermi + ALLD  -> stays at 0.0
-          * Fermi + IS    -> collapses to 0 (IS not an ESS here)
-          * Fermi + LLM   -> heterogeneous init should survive a
-                             few gens at low updates_per_gen
+          * Fermi + ALLC, mu=0       -> stays at 1.0
+          * Fermi + ALLD, mu=0       -> stays at 0.0
+          * Fermi + 1 IS+ + 14 ALLD, mu=0 -> 14/1 (IS+ invades)
+          * Fermi + 1 ALLD + 14 ALLC, mu=0 -> 15/0 (ALLD contained)
         """
         import math
         N = len(self.agents)
@@ -731,37 +805,22 @@ class V2EvolutionaryPopulation:
                 p_imitate = 0.0 if (phi_j - phi_i) < 0 else 1.0
             if self.rng.random() >= p_imitate:
                 continue  # no update this event
-            # Adopt j's code. With probability mu, LLM-mutate first.
-            adopted_code = old_agents[j].code
+            # i imitates j. Construct the offspring:
+            #   with prob mu  -> INDEPENDENT LLM init (no j reference)
+            #   with prob 1-mu -> SMALL LLM mutation of j.code
+            # In both cases exactly one LLM call per copy event.
             if self.rng.random() < mu:
-                adopted_code = self._mutate(old_agents[j].code, old_agents[j].fitness)
-            # Build a new agent for slot i, preserving i's stable
-            # agent_id. _new_agent allocates a NEW id, so we use
-            # _make_agent directly to keep the id stable.
-            try:
-                new_agent = self._make_agent(adopted_code, old_agents[i].agent_id)
-            except Exception as e:
-                # Defense in depth: if the LLM produced a class
-                # that validates but somehow fails to instantiate
-                # for the chosen id, fall back to a verbatim copy
-                # of j's code with the same id.
-                self._fallback_mutation_count += 1
-                print(
-                    f"  [fermi fallback] using j.code verbatim for "
-                    f"agent {old_agents[i].agent_id}: {type(e).__name__}: {e}"
+                new_agent = self._llm_init_one_agent(old_agents[i].agent_id)
+            else:
+                new_agent = self._llm_small_mutate(
+                    old_agents[j].code, old_agents[i].agent_id
                 )
-                new_agent = self._make_agent(old_agents[j].code, old_agents[i].agent_id)
             next_agents[i] = new_agent
-        # Drop reputations pointing at removed agent_ids. With
-        # synchronous commit, the set of agent_ids is preserved
-        # (every slot retains its old id), so no ids_to_drop. But
-        # we still want to reset the per-agent state for the new
-        # gen (no observations carry over between gens in this
-        # framework). The agent's __init__ already initializes
-        # reputations={self_id: 0.1}, which is the gen-0 state.
-        # We want to preserve the EXISTING reputations so the
-        # learner can see history built up by the previous gen.
-        # Inherit reputations from old agent at same slot.
+        # Synchronous commit. The set of agent_ids is preserved
+        # (every slot retains its old id) so no reputation ids to
+        # drop. Inherit reputations from the old agent at the same
+        # slot so the new individual sees history built up by the
+        # previous gen.
         for slot, new_a in enumerate(next_agents):
             old_a = old_agents[slot]
             new_a.reputations = dict(old_a.reputations)

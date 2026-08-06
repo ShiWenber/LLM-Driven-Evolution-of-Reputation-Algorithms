@@ -239,3 +239,88 @@ Output ONLY the Python code for the child class, no prose, no
 markdown fences. The child must define exactly one class named
 `LLMAgent` and use the same interface.
 """
+
+
+# Used in the Fermi 1-μ path: produce a child that is a SMALL variant
+# of the parent. The parent code IS shown to the LLM (this is the
+# whole point of "imitate with tiny mutation" — the offspring is
+# recognizably the parent's strategy with a small perturbation).
+# Contrast with the μ path, which uses INIT_PROMPT_V3 with NO
+# reference to j.
+SMALL_MUTATION_PROMPT_V3 = """You are mutating an existing strategy for a
+multi-agent social-dynamics simulation. The parent is a Python class
+named `LLMAgent`. Produce a child class also named `LLMAgent` that is
+a SMALL variant of the parent.
+
+CRITICAL: make ONLY a TINY change. Adjust a single number by a small
+amount, swap one comparison operator, add or remove one short clause,
+or rename one local variable. Do NOT rewrite the logic. The child
+should behave almost identically to the parent — small differences
+in the parameters/thresholds, not in the overall structure.
+
+The simulation summary:
+  - 15 agents, 30 rounds per generation, 30 generations total.
+  - Random pairing, simultaneous cooperation/defection choice.
+  - Every joint action is observed by both players and by every
+    third-party agent. The framework calls `observe(...)` on every
+    observer with the same (donor_id, donor_action, recipient_id,
+    recipient_action) tuple. Self-judgment is detected via
+    `donor_id == self.agent_id` or `recipient_id == self.agent_id`.
+
+The class interface (REQUIRED, unchanged):
+
+```python
+class LLMAgent:
+    def __init__(self, agent_id: int) -> None:
+        ...
+
+    def decide(self) -> bool:
+        # self._ctx_opponent_id is set by the framework just before.
+        ...
+
+    def observe(
+        self,
+        donor_id: int,
+        donor_action: str,
+        recipient_id: int,
+        recipient_action: str,
+    ) -> None:
+        ...
+```
+
+PARENT:
+
+```python
+{parent_code}
+```
+
+Output ONLY the Python code for the child class, no prose, no
+markdown fences. The child must define exactly one class named
+`LLMAgent` and use the same interface.
+"""
+
+
+# v2 (legacy) small-mutate: same interface as INIT_PROMPT_V2. The
+# v2 quantitative interface is two free functions, not a class.
+SMUTATION_PROMPT_V2 = """You are mutating an existing strategy for a 2-player
+Prisoner's Dilemma game with reputation. The parent is two functions,
+`evaluate` and `decide`. Produce a child that is a SMALL variant of
+the parent — adjust a single number or threshold, do NOT rewrite the
+logic. Output ONLY the Python code, no prose, no fences.
+
+Interface:
+
+```python
+def evaluate(target_reputation: float, target_action: str, my_reputation: float) -> float:
+    pass
+
+def decide(my_reputation: float, opponent_reputation: float) -> bool:
+    pass
+```
+
+PARENT (fitness {fitness}):
+
+```python
+{parent_code}
+```
+"""

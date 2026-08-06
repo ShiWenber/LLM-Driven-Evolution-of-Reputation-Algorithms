@@ -41,15 +41,14 @@ def make_population(use_fermi=True, fermi_beta=5.0, mu=0.1,
         forbid_self_pairing=forbid_self_pairing,
         use_baseline="ALLC",  # we won't actually init, just to satisfy validation
     )
-    # CRITICAL: replace _mutate with a no-op for unit tests so we
-    # never call the LLM. Sanity tests want to validate the SELECTION
-    # rule in isolation; mutation would inject LLM-perturbed codes
-    # that break the strict "ALLC stays ALLC" assertion. With
-    # mutation_rate_on_adoption=mu, the rule is: if a copy is
-    # triggered, j's code is mutated with prob mu. In the unit
-    # tests we set mu=0 (T3, T4) so this is unused; T1, T2 use
-    # the default 0.1 but we patch _mutate anyway as a safety net.
-    pop._mutate = lambda code, fitness: code
+    # CRITICAL: replace the two LLM-producing paths with no-ops so
+    # we never call the LLM in unit tests. Z-like scheme: every
+    # Fermi copy event goes through one of these two (μ -> init,
+    # 1-μ -> small_mutate). For selection-rule sanity, both should
+    # reduce to "return j's code verbatim" so the only thing being
+    # tested is the Fermi imitation decision.
+    pop._llm_init_one_agent = lambda preserve_id: None  # patched below per-test
+    pop._llm_small_mutate = lambda parent_code, preserve_id: None
     return pop
 
 
@@ -63,6 +62,28 @@ def manually_seed(pop, codes, fitnesses):
         agent = QuantitativeAgent(agent_id=i, code=code, executor=executor)
         agent.fitness = fit
         pop.agents.append(agent)
+
+
+def make_passthrough_agent(preserve_id, code):
+    """Build a QuantitativeAgent with the given code, for use as
+    a no-op LLM replacement in unit tests."""
+    from experiments.v2_quantitative.agent import QuantitativeAgent
+    from experiments.v2_quantitative.executor import V2StrategyExecutor
+    executor = V2StrategyExecutor(code)
+    return QuantitativeAgent(agent_id=preserve_id, code=code, executor=executor)
+
+
+def patch_fermi_paths_noop(pop, fallback_code):
+    """Replace the two LLM-producing methods with no-ops that always
+    return a fresh agent wrapping `fallback_code`. This is the
+    "no mutation" reference behavior: the selection rule decides
+    who imitates whom, but the offspring is always `fallback_code`.
+    For ALLC/ALLD homogeneous stability tests (T1, T2), `fallback_code`
+    is the test's strategy. For invasion tests (T3, T4), `fallback_code`
+    is irrelevant because mu=0 means only _llm_small_mutate fires,
+    and that gets the parent code as input which we forward verbatim."""
+    pop._llm_init_one_agent = lambda preserve_id: make_passthrough_agent(preserve_id, fallback_code)
+    pop._llm_small_mutate = lambda parent_code, preserve_id: make_passthrough_agent(preserve_id, parent_code)
 
 
 def count_codes(pop):
@@ -80,6 +101,7 @@ def test_t1_alld_stable():
     """T1: ALLC homogeneous -> stays 100% ALLC."""
     pop = make_population()
     allc_code = get_baseline("ALLC")
+    patch_fermi_paths_noop(pop, allc_code)  # offspring is always ALLC
     manually_seed(pop, [allc_code] * 15, [10.0] * 15)
     initial = count_codes(pop)
     for _ in range(50):
@@ -94,6 +116,7 @@ def test_t2_alld_stable():
     """T2: ALLD homogeneous -> stays 100% ALLD."""
     pop = make_population()
     alld_code = get_baseline("ALLD")
+    patch_fermi_paths_noop(pop, alld_code)  # offspring is always ALLD
     manually_seed(pop, [alld_code] * 15, [10.0] * 15)
     initial = count_codes(pop)
     for _ in range(50):
@@ -109,10 +132,15 @@ def test_t3_is_invades_alld():
     isolated selection rule. P(ALLD copies IS) = sigmoid(5*(5-0)) = 1.
     So IS+ should invade and convert all ALLD.
 
-    This is the "rare-mutant-invades" test of the Fermi rule."""
+    This is the "rare-mutant-invades" test of the Fermi rule.
+
+    With mu=0 the 1-μ path (small_mutate) is the only one called.
+    We patch it to be a no-op (forward parent_code), so the test
+    isolates the Fermi selection rule."""
     pop = make_population(mu=0.0, updates_per_gen=15)
     is_code = get_baseline("IS+")
     alld_code = get_baseline("ALLD")
+    patch_fermi_paths_noop(pop, alld_code)  # fallback code unused, mu=0
     codes = [is_code] + [alld_code] * 14
     fitnesses = [5.0] + [0.0] * 14
     manually_seed(pop, codes, fitnesses)
@@ -142,6 +170,7 @@ def test_t4_alld_contained():
     pop = make_population(mu=0.0, updates_per_gen=15)
     alld_code = get_baseline("ALLD")
     allc_code = get_baseline("ALLC")
+    patch_fermi_paths_noop(pop, allc_code)  # mu=0 so fallback unused
     codes = [alld_code] + [allc_code] * 14
     fitnesses = [5.0] + [10.0] * 14
     manually_seed(pop, codes, fitnesses)
@@ -193,6 +222,53 @@ def test_t5_llm_smoke_5gen():
     print("  T5 PASS: 5-gen LLM+Fermi smoke completed without crash")
 
 
+def test_r7_fermi_z_like_mechanism():
+    """R7: Z-like mechanism stress test with mu=0.1 (both paths fire).
+
+    Starts with 8 ALLC + 7 IS+ (both with fitness 10). With mu=0.1
+    both the μ path (_llm_init_one_agent, 10% of imitations) and the
+    1-μ path (_llm_small_mutate, 90%) are exercised. With patched
+    no-op LLM methods (μ path returns a neutral cooperative agent,
+    1-μ returns parent's code), the test verifies:
+
+      * the synchronous commit preserves agent_id stability
+      * the selection rule still works under non-zero mu
+      * the 1-μ path actually being called doesn't break things
+
+    The "neutral cooperative" in μ path is a NEW strategy each call,
+    so this also implicitly tests that the population can absorb
+    fresh LLM-like diversity without crashing.
+    """
+    pop = make_population(mu=0.1, updates_per_gen=15)
+    allc_code = get_baseline("ALLC")
+    is_code = get_baseline("IS+")
+
+    # Patch: μ path returns a "fresh ALLC-like" agent (LLM init = arbitrary
+    # new strategy, here we just say it's ALLC). 1-μ path returns parent's
+    # code verbatim (small-mutate = no-op).
+    pop._llm_init_one_agent = lambda preserve_id: make_passthrough_agent(preserve_id, allc_code)
+    pop._llm_small_mutate = lambda parent_code, preserve_id: make_passthrough_agent(preserve_id, parent_code)
+
+    # 8 ALLC + 7 IS+, all fitness=10 (homogeneous -> no selection pressure,
+    # only stochastic drift + μ-path noise)
+    codes = [allc_code] * 8 + [is_code] * 7
+    fitnesses = [10.0] * 15
+    manually_seed(pop, codes, fitnesses)
+
+    # Capture initial agent_ids — they must be preserved through generations
+    initial_ids = [a.agent_id for a in pop.agents]
+    for _ in range(50):
+        pop._select_and_reproduce_fermi()
+    after_ids = [a.agent_id for a in pop.agents]
+    assert initial_ids == after_ids, (
+        f"R7 FAIL: agent_id not stable through gens. "
+        f"init={initial_ids}, after={after_ids}"
+    )
+    # No crash = pass. We don't make cooperation claims because μ=0.1
+    # injects noise that mixes ALLC/IS+ identity.
+    print("  R7 PASS: Z-like scheme with mu=0.1 ran 50 gens without crash, agent_ids stable")
+
+
 if __name__ == "__main__":
     print("== Fermi sanity suite ==")
     print("\n[T1] Fermi+ALLC homogeneous stability")
@@ -203,6 +279,8 @@ if __name__ == "__main__":
     test_t3_is_invades_alld()
     print("\n[T4] Fermi: 1 ALLD (fitness 5) + 14 ALLC (fitness 10) -> contained?")
     test_t4_alld_contained()
+    print("\n[R7] Fermi Z-like mechanism stress (mu=0.1, both paths fire, patched LLM)")
+    test_r7_fermi_z_like_mechanism()
     print("\n[T5] Fermi + LLM 5-gen smoke (requires DEEPSEEK_API_KEY)")
     test_t5_llm_smoke_5gen()
     print("\n== All Fermi sanity tests done ==")
