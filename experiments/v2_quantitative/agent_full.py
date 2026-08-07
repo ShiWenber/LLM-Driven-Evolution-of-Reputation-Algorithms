@@ -244,8 +244,57 @@ class FullAgent:
 
     # --- Framework-driven actions ---------------------------------------
     def choose(self, opponent_id: int, round_num: int = 0) -> bool:
-        """Set the opponent context, then ask the brain to decide."""
-        self.brain._ctx_opponent_id = opponent_id
+        """Set the opponent context, then ask the brain to decide.
+
+        Some LLM-generated classes define `_ctx_opponent_id` as a
+        @property WITHOUT a setter; in that case direct attribute
+        assignment raises AttributeError. We catch it and bypass the
+        property by injecting directly into the instance __dict__
+        (or, if the property has no underlying storage at all, we
+        fall back to a None opponent_id and let decide() cope).
+        """
+        try:
+            self.brain._ctx_opponent_id = opponent_id
+        except AttributeError as e:
+            # Property without setter. Try to bypass by going through
+            # __dict__ — works iff there's a backing field. If the
+            # property fully owns the attribute, this also fails and
+            # we just give up on setting it; decide() will see the
+            # property's default value.
+            try:
+                # Walk the MRO: if any class has _ctx_opponent_id in
+                # __dict__ (the storage), we can write to it there.
+                found = False
+                for cls in type(self.brain).__mro__:
+                    if "_ctx_opponent_id" in cls.__dict__:
+                        # The storage is the descriptor; if it's a
+                        # property, this won't help. But if it's a
+                        # plain attribute (LLM put it in __init__),
+                        # we can bypass the property by writing
+                        # directly to instance __dict__.
+                        descr = cls.__dict__["_ctx_opponent_id"]
+                        if not isinstance(descr, property):
+                            self.brain.__dict__["_ctx_opponent_id"] = opponent_id
+                            found = True
+                            break
+                if not found:
+                    # Pure property with no setter; decide() will use
+                    # whatever the property returns (likely None or
+                    # a stored value). Log once per LLM-emitted class
+                    # so the run isn't spammed.
+                    cls = type(self.brain)
+                    if not getattr(cls, "_ctx_opponent_id_logged", False):
+                        cls._ctx_opponent_id_logged = True
+                        print(
+                            f"  [choose] brain class {cls.__name__} "
+                            f"defines _ctx_opponent_id as a property "
+                            f"without a setter; opponent_id={opponent_id} "
+                            f"will be IGNORED for this class. "
+                            f"({type(e).__name__}: {e})"
+                        )
+            except Exception:
+                # Last resort: silently ignore.
+                pass
         try:
             return bool(self.brain.decide())
         except Exception:
