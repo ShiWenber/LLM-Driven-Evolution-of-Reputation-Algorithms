@@ -250,13 +250,18 @@ markdown fences. The child must define exactly one class named
 SMALL_MUTATION_PROMPT_V3 = """You are mutating an existing strategy for a
 multi-agent social-dynamics simulation. The parent is a Python class
 named `LLMAgent`. Produce a child class also named `LLMAgent` that is
-a SMALL variant of the parent.
+recognizably related to the parent but explores a different parameter,
+threshold, structural choice, or mechanism.
 
-CRITICAL: make ONLY a TINY change. Adjust a single number by a small
-amount, swap one comparison operator, add or remove one short clause,
-or rename one local variable. Do NOT rewrite the logic. The child
-should behave almost identically to the parent — small differences
-in the parameters/thresholds, not in the overall structure.
+You are free to:
+  - Change thresholds, learning rates, decay factors
+  - Add or remove a clause in decide() or observe()
+  - Replace a hand-rolled reputation update with a different update rule
+  - Restructure the state (e.g., swap a dict for a deque, add a counter)
+  - Combine the parent's logic with a small new mechanism
+
+The child does not need to behave identically to the parent. Aim for
+meaningful exploration within the parent's strategy family.
 
 The simulation summary:
   - 15 agents, 30 rounds per generation, 30 generations total.
