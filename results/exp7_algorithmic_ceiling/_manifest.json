@@ -1,0 +1,56 @@
+[
+  {
+    "exp": "E_kitchen",
+    "subdir": "E_all_combined",
+    "obs": "full",
+    "seed": 0,
+    "ok": true,
+    "elapsed_sec": 655.7,
+    "coop_final": 0.0022222222222222222
+  },
+  {
+    "exp": "E_kitchen",
+    "subdir": "E_all_combined",
+    "obs": "full",
+    "seed": 1,
+    "ok": true,
+    "elapsed_sec": 564.1,
+    "coop_final": 0.14444444444444443
+  },
+  {
+    "exp": "E_kitchen",
+    "subdir": "E_all_combined",
+    "obs": "full",
+    "seed": 2,
+    "ok": true,
+    "elapsed_sec": 500.5,
+    "coop_final": 0.03111111111111111
+  },
+  {
+    "exp": "E_kitchen",
+    "subdir": "E_all_combined",
+    "obs": "partial_0.7",
+    "seed": 0,
+    "ok": true,
+    "elapsed_sec": 588.9,
+    "coop_final": 0.07111111111111111
+  },
+  {
+    "exp": "E_kitchen",
+    "subdir": "E_all_combined",
+    "obs": "partial_0.7",
+    "seed": 1,
+    "ok": true,
+    "elapsed_sec": 463.6,
+    "coop_final": 0.04
+  },
+  {
+    "exp": "E_kitchen",
+    "subdir": "E_all_combined",
+    "obs": "partial_0.7",
+    "seed": 2,
+    "ok": true,
+    "elapsed_sec": 601.2,
+    "coop_final": 0.24222222222222226
+  }
+]

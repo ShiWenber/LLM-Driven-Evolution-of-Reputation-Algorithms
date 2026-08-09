@@ -1,0 +1,142 @@
+[
+  {
+    "obs": "private",
+    "seed": 0,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\private_seed0",
+    "ok": true,
+    "elapsed_sec": 442.5
+  },
+  {
+    "obs": "partial_0.3",
+    "seed": 0,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\partial_0.3_seed0",
+    "ok": true,
+    "elapsed_sec": 474.7
+  },
+  {
+    "obs": "partial_0.7",
+    "seed": 0,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\partial_0.7_seed0",
+    "ok": true,
+    "elapsed_sec": 464.1
+  },
+  {
+    "obs": "full",
+    "seed": 0,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\full_seed0",
+    "ok": true,
+    "elapsed_sec": 429.4
+  },
+  {
+    "obs": "private",
+    "seed": 1,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\private_seed1",
+    "ok": true,
+    "elapsed_sec": 367.3
+  },
+  {
+    "obs": "partial_0.3",
+    "seed": 1,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\partial_0.3_seed1",
+    "ok": true,
+    "elapsed_sec": 443.3
+  },
+  {
+    "obs": "partial_0.7",
+    "seed": 1,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\partial_0.7_seed1",
+    "ok": true,
+    "elapsed_sec": 432.2
+  },
+  {
+    "obs": "full",
+    "seed": 1,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\full_seed1",
+    "ok": true,
+    "elapsed_sec": 385.6
+  },
+  {
+    "obs": "private",
+    "seed": 2,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\private_seed2",
+    "ok": true,
+    "elapsed_sec": 472.3
+  },
+  {
+    "obs": "partial_0.3",
+    "seed": 2,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\partial_0.3_seed2",
+    "ok": true,
+    "elapsed_sec": 510.7
+  },
+  {
+    "obs": "partial_0.7",
+    "seed": 2,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\partial_0.7_seed2",
+    "ok": true,
+    "elapsed_sec": 449.3
+  },
+  {
+    "obs": "full",
+    "seed": 2,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\full_seed2",
+    "ok": true,
+    "elapsed_sec": 359.0
+  },
+  {
+    "obs": "private",
+    "seed": 3,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\private_seed3",
+    "ok": true,
+    "elapsed_sec": 362.2
+  },
+  {
+    "obs": "partial_0.3",
+    "seed": 3,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\partial_0.3_seed3",
+    "ok": true,
+    "elapsed_sec": 323.0
+  },
+  {
+    "obs": "partial_0.7",
+    "seed": 3,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\partial_0.7_seed3",
+    "ok": true,
+    "elapsed_sec": 431.1
+  },
+  {
+    "obs": "full",
+    "seed": 3,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\full_seed3",
+    "ok": true,
+    "elapsed_sec": 440.3
+  },
+  {
+    "obs": "private",
+    "seed": 4,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\private_seed4",
+    "ok": true,
+    "elapsed_sec": 466.7
+  },
+  {
+    "obs": "partial_0.3",
+    "seed": 4,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\partial_0.3_seed4",
+    "ok": true,
+    "elapsed_sec": 458.3
+  },
+  {
+    "obs": "partial_0.7",
+    "seed": 4,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\partial_0.7_seed4",
+    "ok": true,
+    "elapsed_sec": 464.7
+  },
+  {
+    "obs": "full",
+    "seed": 4,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB_n5\\full_seed4",
+    "ok": true,
+    "elapsed_sec": 435.9
+  }
+]

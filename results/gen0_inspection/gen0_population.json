@@ -1,0 +1,67 @@
+{
+  "n_agents": 15,
+  "model": "deepseek-v4-flash",
+  "observability_p": 0.0,
+  "strategies": [
+    {
+      "agent_id": 0,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 1,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 2,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    return True\n"
+    },
+    {
+      "agent_id": 3,
+      "code": "import random\n\ndef evaluate(current_reputation, observation, my_history, round_num):\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    return random.random() < 0.5\n"
+    },
+    {
+      "agent_id": 4,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"donate\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 5,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Always returns same reputation; no learning\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Always donate (cooperator)\n    return True"
+    },
+    {
+      "agent_id": 6,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Always returns same reputation; no learning\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Never donate (defector)\n    return False"
+    },
+    {
+      "agent_id": 7,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Update reputation: reward donations, punish defections\n    if observation['action'] == 'donate':\n        return min(1.0, current_reputation + 0.2)\n    else:\n        return max(-1.0, current_reputation - 0.2)\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate only if reputation is positive (trustworthy)\n    return recipient_reputation > 0.0"
+    },
+    {
+      "agent_id": 8,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Strongly react: +1 for donate, -1 for not donate\n    if observation['action'] == 'donate':\n        return 1.0\n    else:\n        return -1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate only if reputation is 1.0 (perfect)\n    return recipient_reputation >= 1.0"
+    },
+    {
+      "agent_id": 9,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Only punish defections; ignore donations\n    if observation['action'] == 'not_donate':\n        return max(-1.0, current_reputation - 0.3)\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Donate only if reputation is high (>=0.5)\n    return recipient_reputation >= 0.5"
+    },
+    {
+      "agent_id": 10,
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Always return the same reputation, no update\n    return current_reputation\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Always donate\n    return True"
+    },
+    {
+      "agent_id": 11,
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # No update\n    return current_reputation\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Never donate\n    return False"
+    },
+    {
+      "agent_id": 12,
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Simple update: +1 for donate, -1 for not_donate\n    if observation['action'] == 'donate':\n        new_rep = current_reputation + 1.0\n    else:\n        new_rep = current_reputation - 1.0\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Donate only if reputation is positive\n    return recipient_reputation > 0.0"
+    },
+    {
+      "agent_id": 13,
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Image scoring: only consider the observed agent's action, ignore recipient\n    if observation['action'] == 'donate':\n        new_rep = current_reputation + 1.0\n    else:\n        new_rep = current_reputation - 1.0\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Donate if reputation is above 0.5 (strict)\n    return recipient_reputation > 0.5"
+    },
+    {
+      "agent_id": 14,
+      "code": "def evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Standing: evaluate action based on recipient's current reputation (unknown here)\n    # We approximate: donate is good, not_donate is bad; but consider if recipient is bad.\n    # We don't have recipient reputation, so we use observation to infer social standing.\n    # Simple version: if donate, +1; if not_donate and we know recipient is bad? no info.\n    # To be different: update based on action only, but with asymmetry.\n    # Actually, we can only observe the donor's action. So we use the donor's action.\n    if observation['action'] == 'donate':\n        new_rep = current_reputation + 1.0\n    else:\n        new_rep = current_reputation - 1.0\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Reciprocity: if the recipient ever donated to me in the past, donate; else not.\n    for entry in my_history:\n        if entry['role'] == 'recipient' and entry['partner_action'] == 'donate':\n            return True\n    # Also consider if I have never interacted before, use reputation threshold\n    if recipient_reputation > 0.0:\n        return True\n    return False"
+    }
+  ]
+}

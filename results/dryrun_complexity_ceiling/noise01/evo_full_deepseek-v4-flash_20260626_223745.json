@@ -1,0 +1,102 @@
+{
+  "config": {
+    "population_size": 6,
+    "num_rounds_per_gen": 5,
+    "benefit": 2,
+    "cost": 1,
+    "observability": "full",
+    "observability_p": 0.3,
+    "elite_count": 1,
+    "num_eliminate": 2,
+    "llm_provider": "openai",
+    "llm_model": "deepseek-v4-flash",
+    "seed": 0
+  },
+  "trajectory": [
+    {
+      "fitness_mean": 3.3333333333333335,
+      "fitness_std": 4.346134936801766,
+      "fitness_max": 8.0,
+      "fitness_min": -5.0,
+      "cooperation_rate_mean": 0.6666666666666666,
+      "cooperation_rate_std": 0.4109609335312651,
+      "valid_agents": 6,
+      "total_agents": 6,
+      "generation": 0,
+      "num_survivors": 4,
+      "num_eliminated": 2,
+      "num_children": 2
+    },
+    {
+      "fitness_mean": 2.3333333333333335,
+      "fitness_std": 3.0912061651652345,
+      "fitness_max": 7.0,
+      "fitness_min": -1.0,
+      "cooperation_rate_mean": 0.46666666666666673,
+      "cooperation_rate_std": 0.37712361663282534,
+      "valid_agents": 6,
+      "total_agents": 6,
+      "generation": 1,
+      "num_survivors": 4,
+      "num_eliminated": 2,
+      "num_children": 2
+    }
+  ],
+  "final_population": [
+    {
+      "agent_id": 0,
+      "strategy_id": "ccca1d8da64f",
+      "fitness": 7.0,
+      "cooperation_rate": 1.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    return 0.5\ndef decide(recipient_reputation, round_num, my_history):\n    return True"
+    },
+    {
+      "agent_id": 1,
+      "strategy_id": "57615849e907",
+      "fitness": 6.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    weight = (round_num + 1) / 5.0\n    if observation['action'] == 'cooperate':\n        return 0.5 * weight\n    else:\n        return -0.5 * weight\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation > 0.2"
+    },
+    {
+      "agent_id": 2,
+      "strategy_id": "e2d931f7fa85",
+      "fitness": 2.0,
+      "cooperation_rate": 0.0,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    return -0.5\ndef decide(recipient_reputation, round_num, my_history):\n    return False"
+    },
+    {
+      "agent_id": 3,
+      "strategy_id": "42a897fb2099",
+      "fitness": 0.0,
+      "cooperation_rate": 0.8,
+      "generation": 1,
+      "parent_id": "ccca1d8da64f",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Update reputation based on observed action with a moving average\n    alpha = 0.3  # weight for new observation\n    if observation['action'] == 'cooperate':\n        val = 1.0\n    else:  # defect\n        val = -1.0\n    new_rep = (1 - alpha) * current_reputation + alpha * val\n    # Clamp to valid range\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Cooperate only if the recipient has a positive reputation\n    return recipient_reputation > 0.0"
+    },
+    {
+      "agent_id": 4,
+      "strategy_id": "d44d0cad1325",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 2,
+      "parent_id": "ccca1d8da64f",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Update reputation based on observed action: +0.2 for cooperate, -0.2 for defect\n    if observation['action'] == 'cooperate':\n        delta = 0.2\n    else:\n        delta = -0.2\n    new_rep = current_reputation + delta\n    # Clamp to [-1.0, 1.0]\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(recipient_reputation, round_num, my_history):\n    # In the first round (no history), always cooperate\n    if len(my_history) == 0:\n        return True\n    # Otherwise, cooperate only if the recipient's reputation is positive\n    return recipient_reputation > 0.0"
+    },
+    {
+      "agent_id": 5,
+      "strategy_id": "47435f876257",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 2,
+      "parent_id": "e2d931f7fa85",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Update reputation based on observed action: cooperate increases, defect decreases.\n    if observation[\"action\"] == \"cooperate\":\n        return 0.3\n    else:\n        return -0.3\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Cooperate only if the recipient's reputation is positive (i.e., has cooperated more than defected).\n    if recipient_reputation > 0:\n        return True\n    else:\n        return False"
+    }
+  ],
+  "timestamp": "2026-06-26T22:37:45.190788"
+}

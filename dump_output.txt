@@ -1,0 +1,1092 @@
+Total strategies using recipient_reputation in evaluate body: 23
+Unique code variants: 23
+
+==============================================================================
+# 1 | deepseek-v4-flash | exp=exp1_method_n10
+    trial=exp1_method_n10\partial_0.7_seed3\evo_partial_0.7_deepseek-v4-flash_20260610_080750.json  agent_id=3  cooperation=0.533  fitness=18.0
+==============================================================================
+import random
+
+def evaluate(current_reputation, observation, my_history, round_num):
+    """
+    Update reputation using context-aware scores:
+    - Donating to a low-reputation recipient is more positive.
+    - Not donating to a high-reputation recipient is more negative.
+    Learning rate decays with rounds to stabilize.
+    """
+    # Decaying learning rate: start high, slowly decrease
+    alpha = 0.5 * (0.9 ** (round_num // 50))  # half-life roughly 50 rounds
+    alpha = max(0.05, min(0.5, alpha))        # clamp to [0.05, 0.5]
+
+    # Default scores if no recipient reputation available
+    donate_score = 1.0
+    not_donate_score = -1.0
+
+    # Adjust scores based on recipient's reputation (if available)
+    recipient_rep = observation.get('recipient_reputation', 0.0)
+    if observation['action'] == 'donate':
+        # More positive if recipient reputation is low (generous act)
+        donate_score = 1.0 + 0.5 * max(-1.0, -recipient_rep)
+        new_rep = (1 - alpha) * current_reputation + alpha * donate_score
+    else:
+        # More negative if recipient reputation is high (stingy)
+        not_donate_score = -1.0 - 0.5 * max(0.0, recipient_rep)
+        new_rep = (1 - alpha) * current_reputation + alpha * not_donate_score
+
+    # Small symmetric noise for flexibility
+    noise = random.uniform(-0.03, 0.03)
+    new_rep += noise
+    return max(-1.0, min(1.0, new_rep))
+
+def decide(recipient_reputation, round_num, my_history):
+    """
+    Dynamic threshold based on own generosity trend and round number.
+    Generosity index = fraction of donations in last 10 rounds.
+    Threshold drops as generosity increases, but also becomes more
+    generous in later rounds (lower threshold).
+    """
+    # Default threshold
+    threshold = 0.0
+
+    # Generosity from own recent history
+    if my_history:
+        recent = my_history[-10:]
+        donations = sum(1 for entry in recent if entry.get('action') == 'donate')
+        generosity = donations / max(1, len(recent))  # fraction in [0,1]
+        # Lower threshold if we have been generous (maintain consistency)
+        threshold -= 0.3 * generosity
+
+    # Rounds effect: become slightly more generous over time
+    threshold -= 0.002 * round_num  # small drift
+
+    # Exploration noise
+    threshold += random.uniform(-0.1, 0.1)
+
+    # Keep threshold within reasonable bounds
+    threshold = max(-0.7, min(0.3, threshold))
+    return recipient_reputation > threshold
+
+==============================================================================
+# 2 | deepseek-v4-flash | exp=exp1_method_n10
+    trial=exp1_method_n10\partial_0.7_seed4\evo_partial_0.7_deepseek-v4-flash_20260610_090723.json  agent_id=12  cooperation=0.000  fitness=0.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    # Use a social norm based on the recipient's reputation
+    rec_rep = observation.get('recipient_reputation', 0.0)
+    action = observation["action"]
+    
+    if action == "donate":
+        if rec_rep >= 0.0:
+            delta = 0.2   # reward donating to good or neutral recipients
+        else:
+            delta = -0.1  # penalize donating to bad recipients
+    else:  # not donate
+        if rec_rep >= 0.0:
+            delta = -0.3  # penalize not donating to good recipients
+        else:
+            delta = 0.1   # approve not donating to bad recipients
+    
+    # Weight by round number (more importance to recent rounds)
+    round_weight = 0.5 + 0.5 * min(round_num, 30) / 30.0
+    delta *= round_weight
+    
+    # Modulate based on own donation rate (if enough history)
+    if my_history and len(my_history) > 10:
+        own_rate = sum(1 for a in my_history if a) / len(my_history)
+        if own_rate > 0.7:
+            delta *= 0.9     # more forgiving when we donate a lot
+        elif own_rate < 0.3:
+            delta *= 1.1     # slightly less forgiving when we donate rarely
+    
+    new_rep = current_reputation + delta
+    return max(-1.0, min(1.0, new_rep))
+
+
+def decide(recipient_reputation, round_num, my_history):
+    # Threshold starts lenient and becomes stricter over time
+    threshold = 0.0 + 0.3 * (1 - 2.71828 ** (-round_num / 10.0))
+    
+    # Adjust threshold based on own donation history
+    if my_history and len(my_history) > 5:
+        own_rate = sum(1 for a in my_history if a) / len(my_history)
+        if own_rate > 0.7:
+            threshold -= 0.2
+        elif own_rate < 0.3:
+            threshold += 0.15
+    
+    return recipient_reputation > threshold
+
+==============================================================================
+# 3 | deepseek-coder | exp=exp5_robustness
+    trial=exp5_robustness\partial_0.7_seed0\evo_partial_0.7_deepseek-coder_20260608_225137.json  agent_id=1  cooperation=0.567  fitness=29.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    # More nuanced evaluation: consider both action and recipient's current reputation
+    if observation["action"] == "donate":
+        # Reward donations more if the recipient had decent reputation (reinforcing good behavior)
+        if observation["recipient_reputation"] >= 0.2:
+            return min(1.0, current_reputation + 0.25)
+        else:
+            # Donating to low-reputation recipients is still positive but less so
+            return min(1.0, current_reputation + 0.15)
+    else:
+        # Punish not donating more if the recipient had good reputation (missed opportunity)
+        if observation["recipient_reputation"] >= 0.3:
+            return max(-1.0, current_reputation - 0.4)
+        else:
+            # Not donating to low-reputation recipients is less severe
+            return max(-1.0, current_reputation - 0.15)
+
+def decide(recipient_reputation, round_num, my_history):
+    # Dynamically adjust threshold based on how many times we've donated recently
+    # Count donations in last 5 rounds
+    recent_donations = sum(1 for entry in my_history[-5:] if entry["action"] == "donate")
+    # If we've been generous recently, be more selective; if stingy, be more generous
+    threshold_adjustment = 0.1 * (recent_donations - 2)  # ranges from -0.2 to +0.3
+    
+    # Base threshold changes over time
+    if round_num <= 8:
+        base_threshold = -0.3
+    elif round_num <= 18:
+        base_threshold = 0.0
+    else:
+        base_threshold = 0.2
+    
+    final_threshold = base_threshold + threshold_adjustment
+    return recipient_reputation >= final_threshold
+
+==============================================================================
+# 4 | deepseek-coder | exp=exp5_robustness
+    trial=exp5_robustness\partial_0.7_seed0\evo_partial_0.7_deepseek-coder_20260608_225137.json  agent_id=12  cooperation=0.000  fitness=0.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    # More nuanced evaluation: reward donations to high-reputation recipients,
+    # and punish not donating to high-reputation recipients more severely.
+    # Use a decay factor to weigh recent observations more heavily.
+    if observation["action"] == "donate":
+        # Reward donations more if the recipient had decent reputation (reinforcing good behavior)
+        if observation["recipient_reputation"] >= 0.1:
+            return min(1.0, current_reputation + 0.3)
+        else:
+            # Donating to low-reputation recipients is still positive but less so
+            return min(1.0, current_reputation + 0.1)
+    else:
+        # Punish not donating more if the recipient had good reputation (missed opportunity)
+        if observation["recipient_reputation"] >= 0.2:
+            return max(-1.0, current_reputation - 0.5)
+        else:
+            # Not donating to low-reputation recipients is less severe
+            return max(-1.0, current_reputation - 0.1)
+
+def decide(recipient_reputation, round_num, my_history):
+    # Dynamically adjust threshold based on how many times we've donated recently
+    # Count donations in last 3 rounds (more recent focus)
+    recent_donations = sum(1 for entry in my_history[-3:] if entry["action"] == "donate")
+    # If we've been generous recently, be more selective; if stingy, be more generous
+    # adjustment ranges from -0.3 to +0.3 with step 0.15
+    threshold_adjustment = 0.15 * (recent_donations - 1)  # ranges from -0.15 to +0.30
+    
+    # Base threshold changes over time
+    if round_num <= 5:
+        base_threshold = -0.4
+    elif round_num <= 12:
+        base_threshold = -0.1
+    elif round_num <= 20:
+        base_threshold = 0.1
+    else:
+        base_threshold = 0.3
+    
+    final_threshold = base_threshold + threshold_adjustment
+    return recipient_reputation >= final_threshold
+
+==============================================================================
+# 5 | deepseek-coder | exp=exp5_robustness
+    trial=exp5_robustness\partial_0.7_seed2\evo_partial_0.7_deepseek-coder_20260608_231307.json  agent_id=2  cooperation=0.000  fitness=0.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    # Use a reputation momentum: recent observations matter more, but with a twist
+    # If observation is donate, we boost reputation; if not donate, we penalize
+    # We also consider the recipient's previous reputation (via observation)
+    # to modulate the update: donating to low-rep recipients is seen as more praiseworthy
+    
+    # Extract recipient's reputation from observation if available, else use current_reputation
+    recipient_rep = observation.get("recipient_reputation", current_reputation)
+    
+    # Learning rate decays slower to keep adaptation ongoing
+    learning_rate = max(0.05, 0.15 - round_num * 0.001)
+    
+    if observation["action"] == "donate":
+        # Donating to a low-reputation recipient is more praiseworthy (altruistic)
+        # Donating to a high-reputation recipient is still good but less increment
+        if recipient_rep < 0:
+            # Altruistic donation: big boost
+            boost = learning_rate * (1.5 - recipient_rep)
+        else:
+            # Normal donation: moderate boost
+            boost = learning_rate * (1.0 + (1 - recipient_rep) * 0.5)
+        return min(1.0, current_reputation + boost)
+    else:
+        # Not donating: penalize more if recipient had low reputation (failed to help the needy)
+        # Penalize less if recipient had high reputation (maybe they don't need help)
+        if recipient_rep < 0:
+            penalty = learning_rate * 1.5
+        else:
+            penalty = learning_rate * (0.8 + recipient_rep * 0.5)
+        return max(-1.0, current_reputation - penalty)
+
+def decide(recipient_reputation, round_num, my_history):
+    # Use a threshold that adapts based on how many donations I've made recently
+    # Count donations in the last 10 rounds (if enough history exists)
+    recent_window = 10
+    if len(my_history) >= recent_window:
+        recent_donations = sum(1 for entry in my_history[-recent_window:] if entry.get("action") == "donate")
+        donation_rate = recent_donations / recent_window
+    else:
+        donation_rate = 0.5  # neutral starting assumption
+    
+    # Adjust threshold: if I've been donating a lot, become more selective (higher threshold)
+    # to conserve resources; if I've been stingy, become more generous (lower threshold)
+    base_threshold = 0.5
+    adjustment = 0.3 * (donation_rate - 0.5)  # positive if donated more than half
+    threshold = max(0.1, min(0.9, base_threshold + adjustment))
+    
+    # Also consider round number: be more generous early, more selective late
+    if round_num < 20:
+        threshold -= 0.1
+    elif round_num > 80:
+        threshold += 0.1
+    
+    return recipient_reputation > threshold
+
+==============================================================================
+# 6 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\full_seed4\evo_full_deepseek-v4-flash_20260618_133423.json  agent_id=0  cooperation=0.000  fitness=2.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    """
+    Variant: Assumes A is cooperative, B is defection.
+    Uses a moderate threshold (0.4) and applies recency weighting.
+    Punishes defection against good recipients severely,
+    penalizes cooperation with bad recipients slightly.
+    """
+    THRESH = 0.4
+    REWARD_COOP_GOOD = 0.2
+    PUNISH_DEFECT_GOOD = -0.5
+    PENALTY_COOP_BAD = -0.1
+    NEUTRAL_DEFECT_BAD = 0.0
+    ALPHA = 0.8
+
+    donor_rep = current_reputation
+    recip_rep = observation["recipient_reputation"]
+    action = observation["action"]
+
+    if recip_rep > THRESH:  # good recipient
+        if action == "A":   # A = cooperative
+            update = min(1.0, donor_rep + REWARD_COOP_GOOD)
+        else:               # B = defection against good
+            update = max(-1.0, donor_rep + PUNISH_DEFECT_GOOD)
+    else:  # bad recipient
+        if action == "A":   # cooperation with bad is slightly penalized
+            update = max(-1.0, donor_rep + PENALTY_COOP_BAD)
+        else:               # defection against bad is neutral
+            update = donor_rep + NEUTRAL_DEFECT_BAD
+
+    new_rep = ALPHA * donor_rep + (1 - ALPHA) * update
+    return max(-1.0, min(1.0, new_rep))
+
+
+def decide(recipient_reputation, round_num, my_history):
+    """
+    Cooperate (A) if recipient reputation is above a dynamic threshold.
+    The threshold increases over time, making the agent gradually more selective.
+    Starts at 0.2 and increases by 0.02 per round, capped at 0.7.
+    """
+    base_threshold = 0.2
+    increment = 0.02 * round_num
+    threshold = min(0.7, base_threshold + increment)
+
+    # Return True for cooperative action (assumed A)
+    return recipient_reputation > threshold
+
+==============================================================================
+# 7 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\full_seed4\evo_full_deepseek-v4-flash_20260618_133423.json  agent_id=1  cooperation=0.000  fitness=2.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    """
+    Variant: Assumes A is cooperative, B is defection.
+    Uses a lower goodness threshold (0.5) and stronger punishment.
+    Cooperating with a bad recipient slightly damages reputation;
+    defecting against a bad recipient has no effect.
+    Recency weight is reduced (alpha = 0.8).
+    """
+    THRESH = 0.5
+    REWARD_COOP_GOOD = 0.2
+    PUNISH_DEFECT_GOOD = -0.5
+    PENALTY_COOP_BAD = -0.1   # slightly negative for coop with bad
+    ALPHA = 0.8                # weight on old reputation
+
+    donor_rep = current_reputation
+    recip_rep = observation["recipient_reputation"]
+    action = observation["action"]  # "A" or "B"
+
+    if recip_rep > THRESH:          # good recipient
+        if action == "A":           # A = cooperative
+            update = donor_rep + REWARD_COOP_GOOD
+        else:                       # B = defection against good
+            update = donor_rep + PUNISH_DEFECT_GOOD
+    else:                           # bad recipient
+        if action == "A":           # cooperation with bad is penalised
+            update = donor_rep + PENALTY_COOP_BAD
+        else:                       # defection against bad is neutral
+            update = donor_rep
+
+    # Recency blend
+    new_rep = ALPHA * donor_rep + (1 - ALPHA) * update
+    return max(-1.0, min(1.0, new_rep))
+
+
+def decide(recipient_reputation, round_num, my_history):
+    """
+    Dynamic threshold based on round number and own recent cooperation rate.
+    Base threshold decays from 0.6 to 0.1 over rounds.
+    If the agent itself has been cooperative (>=60% of last 10 actions),
+    threshold is lowered by 0.1 (more cooperative).
+    If it has been defecting (<=30% cooperative), threshold is raised by 0.1 (more selective).
+    Return True for cooperative action (assumed to be A).
+    """
+    # Base threshold from round number
+    base_threshold = 0.6
+    decay = 0.005 * round_num
+    threshold = max(0.1, base_threshold - decay)
+
+    # Adjustment based on own recent history (last 10 actions)
+    recent = my_history[-10:] if len(my_history) >= 10 else my_history
+    if recent:
+        coop_count = sum(1 for entry in recent if entry["action"] == "A")
+        coop_ratio = coop_count / len(recent)
+        if coop_ratio > 0.6:
+            threshold -= 0.1
+        elif coop_ratio < 0.3:
+            threshold += 0.1
+
+    # Clamp threshold to reasonable range
+    threshold = max(0.05, min(0.95, threshold))
+
+    # Assume A is cooperative
+    return recipient_reputation > threshold
+
+==============================================================================
+# 8 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\full_seed4\evo_full_deepseek-v4-flash_20260618_133423.json  agent_id=2  cooperation=0.000  fitness=0.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    """
+    Variant: Assumes B is cooperative, A is defection.
+    Uses a higher goodness threshold (0.6) and applies recency weighting.
+    Defecting against good recipients is punished more,
+    cooperating with bad recipients gives no reward.
+    """
+    # Parameters
+    THRESH = 0.6          # reputation threshold for 'good' recipient
+    REWARD_COOP_GOOD = 0.3
+    PUNISH_DEFECT_GOOD = -0.4
+    REWARD_COOP_BAD = 0.0  # no reward for coop with bad
+    ALPHA = 0.9            # weight on old reputation (recency)
+
+    donor_rep = current_reputation
+    recip_rep = observation["recipient_reputation"]
+    action = observation["action"]
+
+    if recip_rep > THRESH:  # good recipient
+        if action == "B":   # B = cooperative
+            update = min(1.0, donor_rep + REWARD_COOP_GOOD)
+        else:               # A = defection against good
+            update = max(-1.0, donor_rep + PUNISH_DEFECT_GOOD)
+    else:  # bad recipient
+        if action == "B":   # cooperation with bad is neutral
+            update = min(1.0, donor_rep + REWARD_COOP_BAD)
+        else:               # defection against bad is also neutral
+            update = donor_rep  # no change
+
+    # Blend historical and new update for recency effect
+    new_rep = ALPHA * donor_rep + (1 - ALPHA) * update
+    return max(-1.0, min(1.0, new_rep))
+
+
+def decide(recipient_reputation, round_num, my_history):
+    """
+    Cooperate (B) if recipient reputation is above a dynamic threshold.
+    The threshold starts at 0.5 and decreases by 0.01 per round,
+    making the agent more cooperative over time.
+    """
+    # Dynamic threshold: gradually become more cooperative
+    base_threshold = 0.5
+    decay = 0.01 * round_num
+    threshold = max(0.1, base_threshold - decay)  # never go below 0.1
+
+    # Return True for cooperative action (assumed B)
+    return recipient_reputation > threshold
+
+==============================================================================
+# 9 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\full_seed4\evo_full_deepseek-v4-flash_20260618_133423.json  agent_id=6  cooperation=0.000  fitness=0.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    if observation['action'] == 'A':
+        if observation['recipient_reputation'] > 0:
+            return min(1.0, current_reputation + 0.2)
+        else:
+            return min(1.0, current_reputation + 0.05)
+    else:
+        if observation['recipient_reputation'] > 0:
+            return max(-1.0, current_reputation - 0.2)
+        else:
+            return max(-1.0, current_reputation - 0.05)
+
+def decide(recipient_reputation, round_num, my_history):
+    return recipient_reputation > 0.5
+
+==============================================================================
+#10 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\full_seed4\evo_full_deepseek-v4-flash_20260618_133423.json  agent_id=10  cooperation=0.000  fitness=0.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    THRESH = 0.5
+    REWARD_COOP = 0.2
+    PUNISH_DEFECT_GOOD = -0.5
+    PUNISH_DEFECT_BAD = -0.3
+    ALPHA = 0.9
+
+    donor_rep = current_reputation
+    recip_rep = observation["recipient_reputation"]
+    action = observation["action"]
+
+    if recip_rep > THRESH:          # good recipient
+        if action == "A":           # cooperate
+            update = donor_rep + REWARD_COOP
+        else:                       # defect against good
+            update = donor_rep + PUNISH_DEFECT_GOOD
+    else:                           # bad recipient
+        if action == "A":           # cooperate with the needy
+            update = donor_rep + REWARD_COOP
+        else:                       # defect against the needy
+            update = donor_rep + PUNISH_DEFECT_BAD
+
+    new_rep = ALPHA * donor_rep + (1 - ALPHA) * update
+    return max(-1.0, min(1.0, new_rep))
+
+
+def decide(recipient_reputation, round_num, my_history):
+    # Base threshold decays from 0.6 to 0.1 over rounds
+    base = 0.6
+    decay = 0.005 * round_num
+    threshold = max(0.1, base - decay)
+
+    # Adjust based on own recent cooperation rate (last 8 actions)
+    recent = my_history[-8:] if len(my_history) >= 8 else my_history
+    if recent:
+        coop_count = sum(1 for entry in recent if entry["action"] == "A")
+        coop_ratio = coop_count / len(recent)
+        if coop_ratio > 0.5:
+            threshold -= 0.1      # more willing to help the needy
+        elif coop_ratio < 0.2:
+            threshold += 0.1      # less willing to help the needy
+
+    threshold = max(0.05, min(0.95, threshold))
+
+    # Cooperate (assumed action A) with low-reputation recipients
+    return recipient_reputation < threshold
+
+==============================================================================
+#11 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\full_seed4\evo_full_deepseek-v4-flash_20260618_133423.json  agent_id=11  cooperation=0.000  fitness=0.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    action = observation['action']
+    recip_rep = observation['recipient_reputation']
+    # Own reputation determines strictness: high-reputation agents judge more harshly
+    strictness = 0.5 * (1 + current_reputation)  # maps [-1,1] to [0,1]
+    if action == 'A':
+        if recip_rep > 0:
+            delta = 0.3 * strictness
+        else:
+            delta = 0.1 * strictness
+        return min(1.0, current_reputation + delta)
+    else:
+        if recip_rep > 0:
+            delta = -0.3 * strictness
+        else:
+            delta = -0.1 * strictness
+        return max(-1.0, current_reputation + delta)
+
+def decide(recipient_reputation, round_num, my_history):
+    # Become more cautious over time: threshold starts low (forgiving) and increases
+    threshold = 0.3 + 0.2 * min(round_num / 20, 1.0)
+    return recipient_reputation > threshold
+
+==============================================================================
+#12 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\full_seed4\evo_full_deepseek-v4-flash_20260618_133423.json  agent_id=13  cooperation=0.000  fitness=0.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    """
+    Variant: Uses a threshold of 0.0 to distinguish good/bad recipients.
+    Rewards cooperation with good recipients (+0.3), heavily punishes
+    defection against good recipients (-0.6). Penalizes cooperation with
+    bad recipients (-0.2) and rewards defection against bad recipients (+0.1).
+    Applies recency weighting with alpha=0.7.
+    """
+    THRESH = 0.0
+    REWARD_COOP_GOOD = 0.3
+    PUNISH_DEFECT_GOOD = -0.6
+    PENALTY_COOP_BAD = -0.2
+    REWARD_DEFECT_BAD = 0.1
+    ALPHA = 0.7
+
+    donor_rep = current_reputation
+    recip_rep = observation["recipient_reputation"]
+    action = observation["action"]
+
+    if recip_rep > THRESH:  # good recipient
+        if action == "A":   # A assumed cooperative
+            update = donor_rep + REWARD_COOP_GOOD
+        else:               # B = defection against good
+            update = donor_rep + PUNISH_DEFECT_GOOD
+    else:  # bad recipient (reputation <= 0)
+        if action == "A":   # cooperation with bad is penalized
+            update = donor_rep + PENALTY_COOP_BAD
+        else:               # defection against bad is rewarded
+            update = donor_rep + REWARD_DEFECT_BAD
+
+    new_rep = ALPHA * donor_rep + (1 - ALPHA) * update
+    return max(-1.0, min(1.0, new_rep))
+
+
+def decide(recipient_reputation, round_num, my_history):
+    """
+    Cooperate (A) if recipient reputation is above a decreasing threshold.
+    The threshold decreases linearly from 0.5 to 0.1 over the first 20 rounds,
+    then stays at 0.1. This makes the agent more cooperative as the game
+    progresses (in contrast to the original which increases threshold).
+    """
+    start_threshold = 0.5
+    end_threshold = 0.1
+    decay_rounds = 20
+    if round_num < decay_rounds:
+        threshold = start_threshold - (start_threshold - end_threshold) * (round_num / decay_rounds)
+    else:
+        threshold = end_threshold
+
+    return recipient_reputation > threshold
+
+==============================================================================
+#13 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\full_seed4\evo_full_deepseek-v4-flash_20260618_133423.json  agent_id=14  cooperation=0.000  fitness=0.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    """
+    Variant: Assumes B is cooperative, A is defection.
+    Threshold for recipient goodness is 0.4.
+    Stronger reward for cooperating with good recipients,
+    moderate penalty for cooperating with bad, harsh punishment for defecting against good.
+    Recency weight increased to 0.85.
+    """
+    THRESH = 0.4
+    REWARD_COOP_GOOD = 0.3          # B with good
+    PUNISH_DEFECT_GOOD = -0.4       # A with good
+    PENALTY_COOP_BAD = -0.2         # B with bad
+    ALPHA = 0.85                    # weight on old reputation
+
+    donor_rep = current_reputation
+    recip_rep = observation["recipient_reputation"]
+    action = observation["action"]   # "A" or "B"
+
+    if recip_rep > THRESH:            # good recipient
+        if action == "B":            # B = cooperative
+            update = donor_rep + REWARD_COOP_GOOD
+        else:                        # A = defection against good
+            update = donor_rep + PUNISH_DEFECT_GOOD
+    else:                             # bad recipient
+        if action == "B":            # cooperation with bad is penalised
+            update = donor_rep + PENALTY_COOP_BAD
+        else:                        # defection against bad is neutral
+            update = donor_rep
+
+    new_rep = ALPHA * donor_rep + (1 - ALPHA) * update
+    return max(-1.0, min(1.0, new_rep))
+
+
+def decide(recipient_reputation, round_num, my_history):
+    """
+    Dynamic threshold based on round number and own recent cooperation rate.
+    Base threshold decays from 0.7 to 0.15 over rounds.
+    If the agent itself has been cooperative (B) >=70% of last 10 actions,
+    threshold is lowered by 0.15 (more cooperative).
+    If it has been defecting (A <=30% cooperative), threshold is raised by 0.15.
+    Return True for cooperative action (assumed to be B).
+    """
+    base_threshold = 0.7
+    decay = 0.004 * round_num
+    threshold = max(0.15, base_threshold - decay)
+
+    recent = my_history[-10:] if len(my_history) >= 10 else my_history
+    if recent:
+        coop_count = sum(1 for entry in recent if entry["action"] == "B")
+        coop_ratio = coop_count / len(recent)
+        if coop_ratio > 0.7:
+            threshold -= 0.15
+        elif coop_ratio < 0.3:
+            threshold += 0.15
+
+    threshold = max(0.1, min(0.95, threshold))
+
+    # Assume B is cooperative 鈫?cooperate if reputation above threshold
+    return recipient_reputation > threshold
+
+==============================================================================
+#14 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\partial_0.7_seed3\evo_partial_0.7_deepseek-v4-flash_20260618_125638.json  agent_id=4  cooperation=0.000  fitness=4.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    """
+    Reputation update that uses a logistic weighting of recipient reputation
+    and a constant learning rate. Cooperative (A) rewards proportionally to
+    the recipient's reputation (mapped to [0,1]), defection (B) penalizes similarly.
+    """
+    # Map recipient reputation from [-1,1] to [0,1] linearly
+    rep_weight = (observation['recipient_reputation'] + 1.0) / 2.0
+    
+    # Constant learning rate (no decay)
+    learning_rate = 0.6
+    
+    if observation['action'] == 'A':
+        # Reward cooperation: increase reputation proportional to rep_weight
+        reward = 0.25 * rep_weight + 0.05
+        new_rep = current_reputation + learning_rate * reward
+    else:
+        # Penalize defection: decrease reputation proportional to rep_weight
+        penalty = 0.25 * rep_weight + 0.05
+        new_rep = current_reputation - learning_rate * penalty
+    
+    # Clamp to valid range
+    return max(-1.0, min(1.0, new_rep))
+
+
+def decide(recipient_reputation, round_num, my_history):
+    """
+    Cooperation threshold increases with rounds but is lowered if the agent
+    has cooperated frequently in recent decisions (based on own history). 
+    Assumes that returning True corresponds to the cooperative action (A).
+    """
+    # Base threshold increases linearly with round
+    base_threshold = 0.1 + 0.005 * round_num
+    
+    # Adjust threshold based on recent own cooperation frequency
+    # Look at last 5 decisions (or all if fewer)
+    recent_history = my_history[-5:] if len(my_history) >= 5 else my_history
+    if recent_history:
+        # Count how many times we chose action 'A' (cooperative move)
+        coop_count = sum(1 for _, action, _, _ in recent_history if action == 'A')
+        coop_fraction = coop_count / len(recent_history)
+        # More cooperation -> lower threshold (more generous)
+        adjusted_threshold = base_threshold - 0.15 * coop_fraction
+    else:
+        adjusted_threshold = base_threshold  # no history yet
+    
+    return recipient_reputation > adjusted_threshold
+
+==============================================================================
+#15 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\partial_0.7_seed3\evo_partial_0.7_deepseek-v4-flash_20260618_125638.json  agent_id=6  cooperation=0.000  fitness=4.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    """
+    Modified reputation update:
+    - Cooperative action (A) now gives a linear reward based on recipient reputation
+    - Defection (B) gives a quadratic penalty, punishing high-reputation targets harder
+    - Learning rate is moderate and decays slowly over rounds
+    """
+    learning_rate = 0.5 / (1 + 0.05 * round_num)  # slower decay, moderate initial rate
+
+    if observation['action'] == 'A':
+        # Linear reward: scales with recipient reputation plus small baseline
+        reward = 0.2 * observation['recipient_reputation'] + 0.05
+        new_rep = current_reputation + learning_rate * reward
+    else:  # action 'B'
+        # Quadratic penalty: high-reputation recipients cause larger penalty
+        penalty = 0.2 * (observation['recipient_reputation'] ** 2) + 0.05
+        new_rep = current_reputation - learning_rate * penalty
+
+    # Clamp to valid range
+    return max(-1.0, min(1.0, new_rep))
+
+
+def decide(recipient_reputation, round_num, my_history):
+    """
+    Decision rule with decreasing threshold over rounds and self-history influence.
+    - Initial threshold = 0.5, decreases by 0.01 per round
+    - Additional adjustment: if the agent has cooperated often (True decisions)
+      it becomes more lenient (lowers threshold further)
+    - Minimum threshold is 0.1 to avoid always cooperating
+    """
+    # Base threshold decays with rounds
+    base = 0.5 - 0.01 * round_num
+
+    # Self-history influence: if we have many True decisions, we become more trusting
+    if my_history:
+        coop_rate = sum(1 for d in my_history if d is True) / len(my_history)
+    else:
+        coop_rate = 0.5  # neutral at start
+
+    # Lower threshold if we have cooperated a lot (more lenient)
+    threshold = base - 0.25 * (coop_rate - 0.5)
+
+    # Ensure threshold stays within reasonable bounds
+    threshold = max(0.1, min(0.9, threshold))
+
+    return recipient_reputation > threshold
+
+==============================================================================
+#16 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\partial_0.7_seed3\evo_partial_0.7_deepseek-v4-flash_20260618_125638.json  agent_id=12  cooperation=0.000  fitness=0.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    """
+    Reputation update with asymmetric rewarding: cooperating with low-reputation
+    partners is rewarded more (encourages forgiveness), while defecting against
+    high-reputation partners is penalized more (protects good standing).
+    Learning rate decays slightly over rounds to stabilize.
+    """
+    # Linear mapping from reputation [-1,1] to [0,1]
+    rep_weight = (observation['recipient_reputation'] + 1.0) / 2.0
+    
+    # Decaying learning rate: starts at 0.6, approaches 0.4
+    learning_rate = 0.4 + 0.2 / (1.0 + round_num * 0.1)
+    
+    if observation['action'] == 'A':
+        # Reward cooperation: larger reward for low-reputation recipients
+        reward = 0.30 * (1.0 - rep_weight) + 0.05
+        new_rep = current_reputation + learning_rate * reward
+    else:
+        # Penalize defection: larger penalty for high-reputation recipients
+        penalty = 0.30 * rep_weight + 0.05
+        new_rep = current_reputation - learning_rate * penalty
+    
+    # Clamp to valid range
+    return max(-1.0, min(1.0, new_rep))
+
+
+def decide(recipient_reputation, round_num, my_history):
+    """
+    Cooperation threshold declines over rounds (becomes more generous with time),
+    but is raised if the agent has cooperated frequently recently, preventing
+    excessive generosity.
+    """
+    # Base threshold starts at 0.2 and decreases linearly (min 0)
+    base_threshold = max(0.0, 0.2 - 0.005 * round_num)
+    
+    # Look at last 10 decisions (or all if fewer)
+    recent_history = my_history[-10:] if len(my_history) >= 10 else my_history
+    if recent_history:
+        coop_count = sum(1 for _, action, _, _ in recent_history if action == 'A')
+        coop_fraction = coop_count / len(recent_history)
+        # More own cooperation raises the threshold (more selective)
+        adjusted_threshold = base_threshold + 0.2 * coop_fraction
+    else:
+        adjusted_threshold = base_threshold
+    
+    return recipient_reputation > adjusted_threshold
+
+==============================================================================
+#17 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\partial_0.7_seed3\evo_partial_0.7_deepseek-v4-flash_20260618_125638.json  agent_id=13  cooperation=0.000  fitness=0.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    """
+    Reputation update: more generous toward low-reputation recipients when cooperating,
+    and harsher toward high-reputation recipients when defecting.
+    Uses a sigmoid-like weighting and a constant learning rate.
+    """
+    # Map recipient reputation from [-1,1] to [0,1]
+    rep_weight = (observation['recipient_reputation'] + 1.0) / 2.0
+    
+    learning_rate = 0.5
+    
+    if observation['action'] == 'A':
+        # Reward cooperation more when recipient's reputation is low (giving a chance)
+        reward = 0.2 * (1.0 - rep_weight) + 0.1
+        new_rep = current_reputation + learning_rate * reward
+    else:
+        # Penalize defection more when recipient's reputation is high (betrayal)
+        penalty = 0.2 * rep_weight + 0.1
+        new_rep = current_reputation - learning_rate * penalty
+    
+    # Clamp to [-1.0, 1.0]
+    return max(-1.0, min(1.0, new_rep))
+
+
+def decide(recipient_reputation, round_num, my_history):
+    """
+    Decision: sigmoid-shaped threshold over rounds, then adjusted downwards
+    by the agent's own recent cooperation frequency (based on own history only).
+    """
+    # Base threshold increases sigmoidally over rounds, saturating near 0.8
+    base_threshold = 0.2 + 0.5 / (1.0 + math.exp(-0.1 * (round_num - 50)))
+    
+    # Compute own recent cooperation rate (last up to 10 decisions)
+    recent = my_history[-10:] if len(my_history) >= 10 else my_history
+    if recent:
+        coop_count = sum(1 for _, action, _, _ in recent if action == 'A')
+        coop_frac = coop_count / len(recent)
+        # More own cooperation -> lower threshold (more generous)
+        adjusted_threshold = base_threshold - 0.2 * coop_frac
+    else:
+        adjusted_threshold = base_threshold
+    
+    return recipient_reputation > adjusted_threshold
+
+==============================================================================
+#18 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\private_seed4\evo_private_deepseek-v4-flash_20260618_131145.json  agent_id=0  cooperation=0.000  fitness=0.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    if observation["action"] == "B":
+        if observation["recipient_reputation"] > 0.5:
+            return max(-1.0, current_reputation - 0.8)
+        else:
+            return max(-1.0, current_reputation - 0.2)
+    else:  # A
+        return min(1.0, current_reputation + 0.3)
+
+def decide(recipient_reputation, round_num, my_history):
+    # Base threshold
+    threshold = 0.6
+    # Check recent own cooperation (ignore partner actions)
+    if len(my_history) >= 3:
+        recent_own = [act for (_, act, _) in my_history[-3:]]
+        if recent_own.count("A") >= 2:
+            threshold = 0.3
+    return recipient_reputation > threshold
+
+==============================================================================
+#19 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\private_seed4\evo_private_deepseek-v4-flash_20260618_131145.json  agent_id=3  cooperation=0.000  fitness=0.0
+==============================================================================
+# Variant: Adaptive threshold with time-dependent punishment
+def evaluate(current_reputation, observation, my_history, round_num):
+    # Use round_num to gradually increase sensitivity (e.g., less forgiving later)
+    if observation["action"] == "A":
+        # Reward cooperation more if recipient already has good reputation
+        if observation["recipient_reputation"] > 0.5:
+            return min(1.0, current_reputation + 0.6)
+        else:
+            return min(1.0, current_reputation + 0.3)
+    else:
+        # Punish defection more severely as rounds increase
+        penalty = 0.5 + 0.01 * round_num  # harsher later
+        return max(-1.0, current_reputation - penalty)
+
+def decide(recipient_reputation, round_num, my_history):
+    # Use a threshold that decreases over rounds (becomes more demanding later)
+    # Also consider own recent actions: avoid cooperating if we have defected recently?
+    # But careful: my_history contains (action, partner_action, recipient_reputation, outcome?).
+    # We'll only use the number of rounds to adjust threshold.
+    threshold = 0.3 - 0.005 * round_num  # gradually lower threshold (more cautious)
+    threshold = max(0.1, threshold)       # never go below 0.1
+    if recipient_reputation > threshold:
+        return True
+    else:
+        return False
+
+==============================================================================
+#20 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\private_seed4\evo_private_deepseek-v4-flash_20260618_131145.json  agent_id=6  cooperation=0.000  fitness=0.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    """
+    Update reputation based on observed action and recipient's reputation.
+    Uses a continuous sliding scale rather than a sharp threshold.
+    Also reduces update magnitude as rounds progress to promote stability.
+    """
+    action = observation["action"]
+    rep = observation["recipient_reputation"]
+    
+    # Scaling factor: early rounds have larger updates, later rounds smaller
+    scale = max(0.2, 1.0 - 0.02 * round_num)
+    
+    if action == "A":  # cooperative action
+        # Reward cooperation more when recipient already has good reputation
+        # Base update positive, scaled by recipient reputation
+        update = 0.15 + 0.25 * rep
+        update *= scale
+    else:  # B: non-cooperative action
+        # Penalize defection, more harshly against good recipients
+        update = -0.3 - 0.3 * rep
+        update *= scale
+    
+    new_rep = current_reputation + update
+    return max(-1.0, min(1.0, new_rep))
+
+
+def decide(recipient_reputation, round_num, my_history):
+    """
+    Decision threshold based on recipient reputation and own cooperation rate.
+    Uses all available history (not just recent) to compute personal cooperation rate.
+    Threshold decreases with round number but is modulated by own behavior.
+    """
+    # Base threshold decreases slowly with round number, clamped to [0.2, 0.8]
+    base = 0.65 - 0.003 * round_num
+    base = max(0.2, min(0.8, base))
+    
+    # Compute own cooperation rate over entire history (if any)
+    if my_history:
+        total_actions = len(my_history)
+        coop_actions = sum(1 for (_, act, _) in my_history if act == "A")
+        coop_rate = coop_actions / total_actions
+    else:
+        coop_rate = 0.5  # neutral at start
+    
+    # Adjust threshold: if we have been more cooperative, lower threshold (more trusting)
+    # If less cooperative, raise threshold (more cautious)
+    adjustment = -0.15 * (coop_rate - 0.5)
+    threshold = base + adjustment
+    threshold = max(0.1, min(0.9, threshold))  # keep within reasonable bounds
+    
+    return recipient_reputation > threshold
+
+==============================================================================
+#21 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\private_seed4\evo_private_deepseek-v4-flash_20260618_131145.json  agent_id=8  cooperation=0.000  fitness=0.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    # For action A (cooperative): reward more if recipient already has good reputation
+    # For action B (defect): penalize, but less harshly if recipient is bad
+    if observation["action"] == "A":
+        if observation["recipient_reputation"] > 0.5:
+            update = 0.4
+        else:
+            update = 0.1
+        return min(1.0, current_reputation + update)
+    else:  # B
+        # Stronger penalty for defecting against a good recipient
+        if observation["recipient_reputation"] > 0.5:
+            update = -0.6
+        else:
+            update = -0.3
+        return max(-1.0, current_reputation + update)
+
+def decide(recipient_reputation, round_num, my_history):
+    # Base threshold decreases with round number (more cooperative early)
+    base = 0.7 - 0.005 * round_num
+    base = max(0.2, min(0.8, base))
+    
+    # Adjust based on own recent cooperation (last 4 rounds)
+    if len(my_history) >= 4:
+        recent_own = [act for (_, act, _) in my_history[-4:]]
+        coop_count = recent_own.count("A")
+        # More own cooperation -> lower threshold (more trusting)
+        threshold = base - 0.1 * coop_count
+    else:
+        threshold = base
+    
+    return recipient_reputation > threshold
+
+==============================================================================
+#22 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\private_seed4\evo_private_deepseek-v4-flash_20260618_131145.json  agent_id=13  cooperation=0.000  fitness=0.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    """
+    Updated reputation function with slower time decay and a small 'forgiveness'
+    bonus for cooperating with low-reputation recipients.
+    """
+    action = observation["action"]
+    rep = observation["recipient_reputation"]
+    
+    # Scale factor that decays more slowly: asymptotic around 0.5.
+    scale = 0.5 + 0.5 / (1.0 + 0.05 * round_num)
+    
+    if action == "A":  # cooperative
+        # Base reward increased for helping those with bad reputation
+        base_update = 0.1 + 0.3 * rep
+        if rep < 0:
+            # extra boost for cooperating with a 鈥榥eedy鈥?recipient
+            base_update += 0.05
+        update = base_update * scale
+    else:  # B: non-cooperative
+        # Milder punishment, especially against already low鈥憆ep recipients
+        update = (-0.2 - 0.2 * rep) * scale
+    
+    new_rep = current_reputation + update
+    return max(-1.0, min(1.0, new_rep))
+
+
+def decide(recipient_reputation, round_num, my_history):
+    """
+    Decision threshold that uses an exponential moving average of own
+    cooperation rate and a slightly more trusting base preference.
+    """
+    # Base threshold decays a bit faster, but clamped to [0.1, 0.9]
+    base = 0.6 - 0.005 * round_num
+    base = max(0.1, min(0.9, base))
+    
+    # Compute own cooperation rate using exponential moving average
+    # to give more weight to recent rounds.
+    alpha = 0.3
+    if my_history:
+        # iterate through history, each entry: (partner_id, action, partner_rep)
+        # We only care about own action.
+        ema = None
+        for (_, act, _) in my_history:
+            # treat 'A' as cooperative
+            current_action_value = 1.0 if act == 'A' else 0.0
+            if ema is None:
+                ema = current_action_value
+            else:
+                ema = alpha * current_action_value + (1 - alpha) * ema
+        coop_rate = ema
+    else:
+        coop_rate = 0.5  # neutral at start
+    
+    # Adjust threshold: if we have been more cooperative, become more trusting
+    adjustment = -0.2 * (coop_rate - 0.5)
+    threshold = base + adjustment
+    threshold = max(0.1, min(0.9, threshold))
+    
+    return recipient_reputation > threshold
+
+==============================================================================
+#23 | deepseek-v4-flash | exp=exp6_sweep_AB_n5
+    trial=exp6_sweep_AB_n5\private_seed4\evo_private_deepseek-v4-flash_20260618_131145.json  agent_id=14  cooperation=0.000  fitness=0.0
+==============================================================================
+def evaluate(current_reputation, observation, my_history, round_num):
+    # Modify reputation updates: larger penalty for B when recipient is good,
+    # smaller penalty otherwise; larger reward for A
+    if observation["action"] == "B":
+        if observation["recipient_reputation"] > 0.5:
+            # Strongly penalize defection against a good recipient
+            return max(-1.0, current_reputation - 0.5)
+        else:
+            # Mild penalty for defection against a low-rep recipient
+            return max(-1.0, current_reputation - 0.1)
+    else:  # A
+        # Reward cooperation generously
+        return min(1.0, current_reputation + 0.5)
+
+def decide(recipient_reputation, round_num, my_history):
+    # Use own cooperation rate over all history to set threshold
+    if len(my_history) == 0:
+        own_coop_rate = 0.0
+    else:
+        own_actions = [act for (_, act, _) in my_history]
+        own_coop_rate = own_actions.count("A") / len(own_actions)
+    
+    # If we have cooperated a lot recently, become more trusting
+    if own_coop_rate > 0.6:
+        threshold = 0.2
+    else:
+        threshold = 0.8
+    
+    return recipient_reputation > threshold
+

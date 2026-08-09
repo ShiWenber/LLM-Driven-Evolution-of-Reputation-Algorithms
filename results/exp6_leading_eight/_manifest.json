@@ -1,0 +1,10 @@
+{
+  "experiment": "exp6_leading_eight",
+  "obs": "full",
+  "n_seeds": 1,
+  "G": 10,
+  "ok": true,
+  "elapsed_sec": 1161.6,
+  "stdout_tail": "s\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_leading_eight\\evo_full_deepseek-v4-flash_20260616_115153.json\n  Final: coop=0.9711111111111113, elapsed=1161s\n\nAggregate results saved to: C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_leading_eight\\evolutionary_20260616_115153.json\n\n============================================================\nAll experiments complete.\n============================================================\n",
+  "stderr_tail": ""
+}

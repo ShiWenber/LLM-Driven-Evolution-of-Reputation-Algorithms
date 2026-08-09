@@ -1,0 +1,250 @@
+{
+  "config": {
+    "population_size": 10,
+    "num_rounds_per_gen": 20,
+    "benefit": 2,
+    "cost": 1,
+    "observability": "partial_0.7",
+    "observability_p": 0.7,
+    "elite_count": 1,
+    "num_eliminate": 2,
+    "llm_provider": "openai",
+    "llm_model": "Intern-S2-Preview",
+    "seed": 0
+  },
+  "trajectory": [
+    {
+      "fitness_mean": 13.2,
+      "fitness_std": 5.6000000000000005,
+      "fitness_max": 20.0,
+      "fitness_min": 2.0,
+      "cooperation_rate_mean": 0.6599999999999999,
+      "cooperation_rate_std": 0.25961509971494334,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 0,
+      "num_survivors": 8,
+      "num_eliminated": 2,
+      "num_children": 2
+    },
+    {
+      "fitness_mean": 11.3,
+      "fitness_std": 5.9,
+      "fitness_max": 22.0,
+      "fitness_min": 3.0,
+      "cooperation_rate_mean": 0.565,
+      "cooperation_rate_std": 0.14840822079655833,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 1,
+      "num_survivors": 8,
+      "num_eliminated": 2,
+      "num_children": 2
+    },
+    {
+      "fitness_mean": 12.3,
+      "fitness_std": 3.5227829907617076,
+      "fitness_max": 16.0,
+      "fitness_min": 6.0,
+      "cooperation_rate_mean": 0.615,
+      "cooperation_rate_std": 0.1703672503740082,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 2,
+      "num_survivors": 8,
+      "num_eliminated": 2,
+      "num_children": 2
+    },
+    {
+      "fitness_mean": 9.5,
+      "fitness_std": 3.930648801406709,
+      "fitness_max": 17.0,
+      "fitness_min": 4.0,
+      "cooperation_rate_mean": 0.4749999999999999,
+      "cooperation_rate_std": 0.15041608956491323,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 3,
+      "num_survivors": 8,
+      "num_eliminated": 2,
+      "num_children": 2
+    },
+    {
+      "fitness_mean": 10.3,
+      "fitness_std": 7.836453279386026,
+      "fitness_max": 25.0,
+      "fitness_min": -1.0,
+      "cooperation_rate_mean": 0.5149999999999999,
+      "cooperation_rate_std": 0.2110094784600919,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 4,
+      "num_survivors": 8,
+      "num_eliminated": 2,
+      "num_children": 2
+    },
+    {
+      "fitness_mean": 11.8,
+      "fitness_std": 4.66476151587624,
+      "fitness_max": 19.0,
+      "fitness_min": 4.0,
+      "cooperation_rate_mean": 0.59,
+      "cooperation_rate_std": 0.18275666882497066,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 5,
+      "num_survivors": 8,
+      "num_eliminated": 2,
+      "num_children": 2
+    },
+    {
+      "fitness_mean": 9.4,
+      "fitness_std": 6.118823416311342,
+      "fitness_max": 20.0,
+      "fitness_min": 0.0,
+      "cooperation_rate_mean": 0.47000000000000003,
+      "cooperation_rate_std": 0.20149441679609886,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 6,
+      "num_survivors": 8,
+      "num_eliminated": 2,
+      "num_children": 2
+    },
+    {
+      "fitness_mean": 9.7,
+      "fitness_std": 4.243819034784589,
+      "fitness_max": 20.0,
+      "fitness_min": 5.0,
+      "cooperation_rate_mean": 0.48500000000000004,
+      "cooperation_rate_std": 0.21219095173922944,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 7,
+      "num_survivors": 8,
+      "num_eliminated": 2,
+      "num_children": 2
+    },
+    {
+      "fitness_mean": 8.7,
+      "fitness_std": 5.060632371551998,
+      "fitness_max": 16.0,
+      "fitness_min": -2.0,
+      "cooperation_rate_mean": 0.43500000000000005,
+      "cooperation_rate_std": 0.25104780421266387,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 8,
+      "num_survivors": 8,
+      "num_eliminated": 2,
+      "num_children": 2
+    },
+    {
+      "fitness_mean": 14.5,
+      "fitness_std": 6.296824596572466,
+      "fitness_max": 24.0,
+      "fitness_min": 5.0,
+      "cooperation_rate_mean": 0.725,
+      "cooperation_rate_std": 0.24723470630152233,
+      "valid_agents": 10,
+      "total_agents": 10,
+      "generation": 9,
+      "num_survivors": 8,
+      "num_eliminated": 2,
+      "num_children": 2
+    }
+  ],
+  "final_population": [
+    {
+      "agent_id": 0,
+      "strategy_id": "96491e0f9d61",
+      "fitness": 24.0,
+      "cooperation_rate": 0.1,
+      "generation": 6,
+      "parent_id": "9ab9afdfb22a",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"cooperate\":\n        return current_reputation + 0.6\n    else:\n        return current_reputation - 0.9\n\ndef decide(recipient_reputation, round_num, my_history):\n    if round_num < 2:\n        return True\n    \n    coop_ratio = sum(my_history) / len(my_history) if my_history else 0.5\n    \n    if recipient_reputation > 0.35:\n        return True\n    if recipient_reputation < -0.35:\n        return False\n    \n    return coop_ratio >= 0.5"
+    },
+    {
+      "agent_id": 1,
+      "strategy_id": "4040cc4710ff",
+      "fitness": 22.0,
+      "cooperation_rate": 0.6,
+      "generation": 0,
+      "parent_id": null,
+      "code": "import random\n\ndef evaluate(current_reputation, observation, my_history, round_num):\n    return current_reputation\n\ndef decide(recipient_reputation, round_num, my_history):\n    return random.random() < 0.5\n"
+    },
+    {
+      "agent_id": 2,
+      "strategy_id": "9ab9afdfb22a",
+      "fitness": 18.0,
+      "cooperation_rate": 0.6,
+      "generation": 3,
+      "parent_id": "f126db867197",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"cooperate\":\n        return current_reputation + 0.7\n    else:\n        return current_reputation - 1.3\n\ndef decide(recipient_reputation, round_num, my_history):\n    if round_num < 3:\n        return True\n    if recipient_reputation > 0.4:\n        return True\n    if recipient_reputation < -0.4:\n        return False\n    return my_history.count(True) >= len(my_history) // 2"
+    },
+    {
+      "agent_id": 3,
+      "strategy_id": "f126db867197",
+      "fitness": 18.0,
+      "cooperation_rate": 0.9,
+      "generation": 0,
+      "parent_id": null,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"cooperate\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    },
+    {
+      "agent_id": 4,
+      "strategy_id": "c5f00d86e042",
+      "fitness": 17.0,
+      "cooperation_rate": 0.75,
+      "generation": 7,
+      "parent_id": "32aaba56421e",
+      "code": "import random\n\ndef evaluate(current_reputation, observation, my_history, round_num):\n    action = observation.get('action', 'defect')\n    weight = 0.25 if round_num < 10 else 0.08\n    delta = 0.6 if action == 'cooperate' else -0.6\n    new_reputation = current_reputation + weight * delta\n    return max(-1.0, min(1.0, new_reputation))\n\ndef decide(recipient_reputation, round_num, my_history):\n    if recipient_reputation > 0.35:\n        return True\n    elif recipient_reputation < -0.35:\n        return False\n    elif round_num < 5:\n        return True\n    else:\n        cooperate_count = sum(1 for h in my_history if h.get('action') == 'cooperate')\n        defect_count = sum(1 for h in my_history if h.get('action') == 'defect')\n        if defect_count > cooperate_count * 2:\n            return False\n        return random.random() < 0.5"
+    },
+    {
+      "agent_id": 5,
+      "strategy_id": "32aaba56421e",
+      "fitness": 14.0,
+      "cooperation_rate": 0.9,
+      "generation": 6,
+      "parent_id": "4040cc4710ff",
+      "code": "import random\n\ndef evaluate(current_reputation, observation, my_history, round_num):\n    action = observation.get('action', 'defect')\n    weight = max(0.1, 1.0 / (round_num + 1))\n    delta = 0.8 if action == 'cooperate' else -0.8\n    new_reputation = current_reputation + weight * delta\n    return max(-1.0, min(1.0, new_reputation))\n\ndef decide(recipient_reputation, round_num, my_history):\n    if recipient_reputation > 0.25:\n        return True\n    elif recipient_reputation < -0.25:\n        return False\n    else:\n        return random.random() < 0.6"
+    },
+    {
+      "agent_id": 6,
+      "strategy_id": "061b80a08aa6",
+      "fitness": 14.0,
+      "cooperation_rate": 1.0,
+      "generation": 9,
+      "parent_id": "32aaba56421e",
+      "code": "import random\n\ndef evaluate(current_reputation, observation, my_history, round_num):\n    action = observation.get('action', 'defect')\n    \n    # Exponential decay weighting - more emphasis on recent actions\n    weight = 0.4 * (0.65 ** round_num)\n    \n    # Asymmetric impacts - cooperation rewarded more heavily than defection penalized\n    delta = 1.0 if action == 'cooperate' else -0.5\n    \n    # Smooth reputation update with bounds\n    new_reputation = current_reputation + weight * delta\n    return max(-1.0, min(1.0, new_reputation))\n\ndef decide(recipient_reputation, round_num, my_history):\n    # More selective cooperation thresholds than original\n    if recipient_reputation > 0.5:\n        return True\n    elif recipient_reputation < -0.4:\n        return False\n    else:\n        # Early rounds more cooperative, later rounds more cautious\n        if round_num < 15:\n            return random.random() < 0.7\n        elif round_num < 30:\n            return random.random() < 0.5\n        else:\n            return random.random() < 0.3"
+    },
+    {
+      "agent_id": 7,
+      "strategy_id": "9ab9afdfb22a",
+      "fitness": 7.0,
+      "cooperation_rate": 0.75,
+      "generation": 9,
+      "parent_id": "9ab9afdfb22a",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"cooperate\":\n        return current_reputation + 0.7\n    else:\n        return current_reputation - 1.3\n\ndef decide(recipient_reputation, round_num, my_history):\n    if round_num < 3:\n        return True\n    if recipient_reputation > 0.4:\n        return True\n    if recipient_reputation < -0.4:\n        return False\n    return my_history.count(True) >= len(my_history) // 2"
+    },
+    {
+      "agent_id": 8,
+      "strategy_id": "ac90d9b078cc",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "9ab9afdfb22a",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] != \"cooperate\":\n        return current_reputation + 0.7\n    else:\n        return current_reputation - 1.3\n\ndef decide(recipient_reputation, round_num, my_history):\n    if round_num < 3:\n        return True\n    if recipient_reputation > 0.4:\n        return True\n    if recipient_reputation < -0.4:\n        return False\n    return my_history.count(True) >= len(my_history) // 2"
+    },
+    {
+      "agent_id": 9,
+      "strategy_id": "25e8f5d8a480",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "4040cc4710ff",
+      "code": "import random\n\ndef evaluate(current_reputation, observation, my_history, round_num):\n    action = observation['action']\n    recent_window = observation.get('recent_window', [])\n    \n    # Weight recent actions more heavily\n    recent_coops = sum(1 for r in recent_window if r.get('action') == 'cooperate')\n    recent_total = len(recent_window)\n    recent_score = recent_coops / recent_total if recent_total > 0 else 0.5\n    \n    # Update reputation based on observed action\n    if action == 'cooperate':\n        current_reputation = min(1.0, current_reputation + 0.15)\n    else:\n        current_reputation = max(-1.0, current_reputation - 0.15)\n    \n    # Blend historical reputation with recent observations\n    return current_reputation * 0.6 + recent_score * 0.4\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Base cooperation probability from recipient reputation\n    coop_prob = (recipient_reputation + 1.0) / 2.0\n    \n    # Reduce cooperation if we've been defected against recently\n    if len(my_history) >= 3:\n        recent_actions = [h.get('action', '') for h in my_history[-3:]]\n        recent_defects = recent_actions.count('defect')\n        if recent_defects >= 2:\n            coop_prob *= 0.5\n    \n    # Add small exploration probability\n    coop_prob = max(0.05, min(0.95, coop_prob))\n    \n    return random.random() < coop_prob"
+    }
+  ],
+  "timestamp": "2026-06-30T21:57:30.508142"
+}

@@ -1,0 +1,295 @@
+{
+  "config": {
+    "population_size": 15,
+    "num_rounds_per_gen": 30,
+    "benefit": 2,
+    "cost": 1,
+    "observability": "partial_0.7",
+    "observability_p": 0.7,
+    "elite_count": 3,
+    "num_eliminate": 5,
+    "llm_provider": "openai",
+    "llm_model": "deepseek-v4-flash",
+    "seed": 0
+  },
+  "trajectory": [
+    {
+      "fitness_mean": 18.266666666666666,
+      "fitness_std": 9.773888115222563,
+      "fitness_max": 32.0,
+      "fitness_min": 0.0,
+      "cooperation_rate_mean": 0.6088888888888889,
+      "cooperation_rate_std": 0.38034422355947745,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 0,
+      "num_survivors": 10,
+      "num_eliminated": 5,
+      "num_children": 5
+    },
+    {
+      "fitness_mean": 11.133333333333333,
+      "fitness_std": 8.70912675811352,
+      "fitness_max": 30.0,
+      "fitness_min": -1.0,
+      "cooperation_rate_mean": 0.37111111111111106,
+      "cooperation_rate_std": 0.34229436469034286,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 1,
+      "num_survivors": 10,
+      "num_eliminated": 5,
+      "num_children": 5
+    },
+    {
+      "fitness_mean": 7.733333333333333,
+      "fitness_std": 6.29779502859709,
+      "fitness_max": 26.0,
+      "fitness_min": 1.0,
+      "cooperation_rate_mean": 0.2577777777777778,
+      "cooperation_rate_std": 0.3116186336525885,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 2,
+      "num_survivors": 10,
+      "num_eliminated": 5,
+      "num_children": 5
+    },
+    {
+      "fitness_mean": 8.666666666666666,
+      "fitness_std": 6.007402840570031,
+      "fitness_max": 18.0,
+      "fitness_min": -2.0,
+      "cooperation_rate_mean": 0.28888888888888886,
+      "cooperation_rate_std": 0.30999800875505434,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 3,
+      "num_survivors": 10,
+      "num_eliminated": 5,
+      "num_children": 5
+    },
+    {
+      "fitness_mean": 9.733333333333333,
+      "fitness_std": 8.984925647376771,
+      "fitness_max": 26.0,
+      "fitness_min": -4.0,
+      "cooperation_rate_mean": 0.3244444444444445,
+      "cooperation_rate_std": 0.3327698941748424,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 4,
+      "num_survivors": 10,
+      "num_eliminated": 5,
+      "num_children": 5
+    },
+    {
+      "fitness_mean": 6.133333333333334,
+      "fitness_std": 6.280835047100735,
+      "fitness_max": 20.0,
+      "fitness_min": -1.0,
+      "cooperation_rate_mean": 0.20444444444444446,
+      "cooperation_rate_std": 0.24761579159438438,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 5,
+      "num_survivors": 10,
+      "num_eliminated": 5,
+      "num_children": 5
+    },
+    {
+      "fitness_mean": 4.8,
+      "fitness_std": 5.393823628311676,
+      "fitness_max": 18.0,
+      "fitness_min": -4.0,
+      "cooperation_rate_mean": 0.16000000000000006,
+      "cooperation_rate_std": 0.24831282540227212,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 6,
+      "num_survivors": 10,
+      "num_eliminated": 5,
+      "num_children": 5
+    },
+    {
+      "fitness_mean": 4.2,
+      "fitness_std": 7.21295131459146,
+      "fitness_max": 21.0,
+      "fitness_min": -6.0,
+      "cooperation_rate_mean": 0.14,
+      "cooperation_rate_std": 0.1254325848148452,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 7,
+      "num_survivors": 10,
+      "num_eliminated": 5,
+      "num_children": 5
+    },
+    {
+      "fitness_mean": 16.0,
+      "fitness_std": 7.58946638440411,
+      "fitness_max": 28.0,
+      "fitness_min": 3.0,
+      "cooperation_rate_mean": 0.5333333333333333,
+      "cooperation_rate_std": 0.29514591494904874,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 8,
+      "num_survivors": 10,
+      "num_eliminated": 5,
+      "num_children": 5
+    },
+    {
+      "fitness_mean": 21.666666666666668,
+      "fitness_std": 10.460507742085095,
+      "fitness_max": 40.0,
+      "fitness_min": 4.0,
+      "cooperation_rate_mean": 0.7222222222222222,
+      "cooperation_rate_std": 0.22266622310889508,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 9,
+      "num_survivors": 10,
+      "num_eliminated": 5,
+      "num_children": 5
+    }
+  ],
+  "final_population": [
+    {
+      "agent_id": 0,
+      "strategy_id": "f11a6343ec44",
+      "fitness": 40.0,
+      "cooperation_rate": 0.7333333333333333,
+      "generation": 9,
+      "parent_id": "d1b459f66aac",
+      "code": "def evaluate(current_reputation: float, observation: dict, my_history: list[dict], round_num: int) -> float:\n    # Asymmetric updates that become milder over time (decreasing magnitude)\n    # Reward cooperative action 'A' consistently, but with decreasing gain\n    # Punish defection 'B' more harshly early on, then gradually soften\n    delta_A = 0.12 * (1 - round_num / 100)  # shrinks from 0.12 to near 0\n    delta_B = 0.30 * (1 - round_num / 80)   # shrinks from 0.30 to near 0, but faster decay\n    if observation['action'] == 'A':\n        new_reputation = min(1.0, current_reputation + delta_A)\n    else:  # action 'B'\n        new_reputation = max(-1.0, current_reputation - delta_B)\n    return new_reputation\n\ndef decide(recipient_reputation: float, round_num: int, my_history: list[dict]) -> bool:\n    # Base threshold: generous early, stricter later\n    if round_num < 15:\n        base_threshold = -0.5\n    elif round_num < 40:\n        base_threshold = 0.0\n    else:\n        base_threshold = 0.4\n\n    # Adjust threshold based on own recent cooperative tendency (last 10 actions)\n    if my_history:\n        window = my_history[-10:]  # last 10 actions (or fewer if not enough)\n        count_A = sum(1 for h in window if h.get('action') == 'A')\n        total = len(window)\n        # If we have been more cooperative, become more trusting (lower threshold)\n        # If we have been less cooperative, become stricter (higher threshold)\n        # Using a linear adjustment proportional to the difference from neutral (50% A)\n        # Neutral point: count_A/total = 0.5 -> adjust = 0\n        # If count_A/total > 0.5 -> negative adjustment (lower threshold)\n        # If count_A/total < 0.5 -> positive adjustment (raise threshold)\n        prop = count_A / total if total > 0 else 0.5\n        adjustment = (0.5 - prop) * 0.4   # max adjustment \u00b10.2\n        base_threshold += adjustment\n\n    return recipient_reputation > base_threshold"
+    },
+    {
+      "agent_id": 1,
+      "strategy_id": "2ee1895ddcbc",
+      "fitness": 36.0,
+      "cooperation_rate": 0.8,
+      "generation": 9,
+      "parent_id": "0aacc9d34b54",
+      "code": "def evaluate(current_reputation: float, observation: dict, my_history: list[dict], round_num: int) -> float:\n    # Exponential moving average update; target is 1.0 for 'A', -1.0 for 'B'\n    alpha = 0.95\n    target = 1.0 if observation['action'] == 'A' else -1.0\n    new_reputation = alpha * current_reputation + (1 - alpha) * target\n    return max(-1.0, min(1.0, new_reputation))\n\ndef decide(recipient_reputation: float, round_num: int, my_history: list[dict]) -> bool:\n    # Base threshold increases smoothly with rounds, from -0.2 toward 0.4\n    base_threshold = -0.2 + 0.6 * (round_num / (round_num + 30))\n\n    # Adjust threshold based on own action counts (cooperation vs defection)\n    coop_count = sum(1 for entry in my_history if entry.get('action') == 'A')\n    defect_count = sum(1 for entry in my_history if entry.get('action') == 'B')\n    total = len(my_history) + 1  # avoid division by zero\n    adjustment = 0.1 * (defect_count - coop_count) / total\n\n    threshold = base_threshold + adjustment\n\n    # Also adjust based on last own action\n    if my_history:\n        last_own = my_history[-1].get('action')\n        if last_own == 'A':\n            threshold -= 0.1\n        else:\n            threshold += 0.1\n\n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 2,
+      "strategy_id": "0aacc9d34b54",
+      "fitness": 35.0,
+      "cooperation_rate": 0.8333333333333334,
+      "generation": 5,
+      "parent_id": "79d8a8427b44",
+      "code": "def evaluate(current_reputation: float, observation: dict, my_history: list[dict], round_num: int) -> float:\n    # Update reputation based on observed action\n    delta = 0.2\n    if observation['action'] == 'A':\n        new_reputation = min(1.0, current_reputation + delta)\n    else:  # action 'B'\n        new_reputation = max(-1.0, current_reputation - delta)\n    return new_reputation\n\ndef decide(recipient_reputation: float, round_num: int, my_history: list[dict]) -> bool:\n    # Use reputation threshold that changes over time\n    # Early rounds: cooperate generously (low threshold)\n    # Later rounds: more selective (higher threshold)\n    if round_num < 30:\n        threshold = -0.5\n    else:\n        threshold = 0.3\n    # Also adjust based on own last action (if available)\n    if my_history:\n        last_own_action = my_history[-1].get('action', None)\n        # If we just took action 'A' (maybe cooperative), lower threshold to continue cooperation\n        if last_own_action == 'A':\n            threshold -= 0.2\n        # If we took 'B' (maybe defection), raise threshold to be more cautious\n        else:\n            threshold += 0.1\n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 3,
+      "strategy_id": "bf4c4d59d4d4",
+      "fitness": 31.0,
+      "cooperation_rate": 0.7666666666666667,
+      "generation": 9,
+      "parent_id": "9cf744242565",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Use exponential smoothing with alpha=0.5, but set asymmetric targets.\n    # Assume action A is cooperative (target high), B is defection (target low).\n    alpha = 0.5\n    if observation[\"action\"] == \"A\":\n        target = 0.8   # positive but not 1.0 to allow nuance\n    else:\n        target = -0.8  # negative but not -1.0\n    new_rep = (1 - alpha) * current_reputation + alpha * target\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Use own cooperation history to adjust threshold.\n    # Count own actions (assuming 'action' key stores 'A' or 'B').\n    if len(my_history) == 0:\n        coop_fraction = 0.5\n    else:\n        coop_count = sum(1 for entry in my_history if entry[\"action\"] == \"A\")\n        coop_fraction = coop_count / len(my_history)\n    # Dynamic threshold: more cooperative agents are more forgiving.\n    if coop_fraction > 0.5:\n        threshold = 0.0   # requires at least neutral reputation\n    else:\n        threshold = -0.3  # more tolerant when own cooperation is low\n    # Cooperate if reputation exceeds threshold.\n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 4,
+      "strategy_id": "8f5f32f2381d",
+      "fitness": 26.0,
+      "cooperation_rate": 0.4666666666666667,
+      "generation": 8,
+      "parent_id": "d1b459f66aac",
+      "code": "def evaluate(current_reputation: float, observation: dict, my_history: list[dict], round_num: int) -> float:\n    # Exponential moving average: weight recent observations more than old ones\n    alpha = 0.2  # weight for the new update\n    if observation['action'] == 'A':\n        delta = 0.25   # positive reward for cooperation\n    else:\n        delta = -0.15  # smaller penalty for defection\n    new_reputation = (1 - alpha) * current_reputation + alpha * delta\n    return max(-1.0, min(1.0, new_reputation))\n\ndef decide(recipient_reputation: float, round_num: int, my_history: list[dict]) -> bool:\n    # Thresholds change over rounds, becoming more demanding later\n    if round_num < 10:\n        base_threshold = -0.3\n    elif round_num < 30:\n        base_threshold = 0.1\n    else:\n        base_threshold = 0.5\n\n    # Adjust threshold based on recent own actions (last 10 rounds)\n    recent_window = 10\n    recent_history = my_history[-recent_window:] if len(my_history) >= recent_window else my_history\n    if recent_history:\n        count_A = sum(1 for h in recent_history if h.get('action') == 'A')\n        count_B = len(recent_history) - count_A\n        if count_A > count_B:\n            base_threshold -= 0.3   # more forgiving if we have been cooperative\n        elif count_A < count_B:\n            base_threshold += 0.3   # stricter if we have been defecting\n\n    return recipient_reputation > base_threshold"
+    },
+    {
+      "agent_id": 5,
+      "strategy_id": "f73c1bac6f17",
+      "fitness": 25.0,
+      "cooperation_rate": 0.8333333333333334,
+      "generation": 8,
+      "parent_id": "0aacc9d34b54",
+      "code": "def evaluate(current_reputation: float, observation: dict, my_history: list[dict], round_num: int) -> float:\n    # Adaptive update: larger changes when reputation is extreme,\n    # and updates become stronger in later rounds.\n    delta = 0.15\n    round_factor = 1.0 + 0.5 * (round_num / 150)  # gradually increase impact\n    if observation['action'] == 'A':\n        # Raise reputation, but slower near the top\n        increase = delta * (1.0 - current_reputation ** 2)\n        new_reputation = min(1.0, current_reputation + increase * round_factor)\n    else:\n        # Lower reputation, faster near the bottom\n        decrease = delta * (1.0 - current_reputation ** 2)  # same symmetric? use different factor\n        # For defection, make it more punishing when reputation is already positive\n        if current_reputation > 0:\n            decrease = delta * (1.0 + current_reputation)\n        else:\n            decrease = delta * 0.5\n        new_reputation = max(-1.0, current_reputation - decrease * round_factor)\n    return new_reputation\n\ndef decide(recipient_reputation: float, round_num: int, my_history: list[dict]) -> bool:\n    # Base threshold shifts from cooperative (-0.5) to cautious (+0.5) over rounds\n    base_threshold = -0.5 + (round_num / 60.0)  # reaches 0.5 around round 60, then stays\n    base_threshold = max(-0.5, min(0.5, base_threshold))\n    \n    threshold = base_threshold\n    \n    # Adjust based on own last action (if any)\n    if my_history:\n        last_own_action = my_history[-1].get('action', None)\n        if last_own_action == 'A':\n            # After cooperating, become more cautious (higher threshold)\n            threshold += 0.25\n        elif last_own_action == 'B':\n            # After defecting, become more generous (lower threshold)\n            threshold -= 0.25\n    \n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 6,
+      "strategy_id": "ad8d65e772d2",
+      "fitness": 23.0,
+      "cooperation_rate": 0.9,
+      "generation": 9,
+      "parent_id": "9cf744242565",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    \"\"\"\n    Update reputation using exponential smoothing with adaptive alpha.\n    Assume action A is cooperative (high reward) and B is defection.\n    If the caller has been cooperative in recent rounds, we are more forgiving\n    (target closer to 1 for A, less negative for B). Otherwise, harsher.\n    \"\"\"\n    # Base target values\n    if observation[\"action\"] == \"A\":\n        base_target = 0.8\n    else:\n        base_target = -0.8\n\n    # Compute own recent cooperation (last 5 actions, or all if fewer)\n    recent = my_history[-5:] if len(my_history) >= 5 else my_history\n    if recent:\n        coop_count = sum(1 for entry in recent if entry[\"action\"] == \"A\")\n        recent_coop_frac = coop_count / len(recent)\n    else:\n        recent_coop_frac = 0.5\n\n    # Adjust target based on own recent behavior\n    # If we have been cooperative, shift target upward (more forgiving)\n    # If we have been defective, shift target downward (harsher)\n    shift = (recent_coop_frac - 0.5) * 0.2  # max shift \u00b10.1\n    adjusted_target = base_target + shift\n    # Clamp to [-1,1]\n    adjusted_target = max(-1.0, min(1.0, adjusted_target))\n\n    # Adaptive alpha: higher when own behavior is more cooperative (trust recent)\n    alpha = 0.3 + 0.3 * recent_coop_frac  # between 0.3 and 0.6\n\n    # Exponential smoothing\n    new_rep = (1 - alpha) * current_reputation + alpha * adjusted_target\n    return max(-1.0, min(1.0, new_rep))\n\n\ndef decide(recipient_reputation, round_num, my_history):\n    \"\"\"\n    Decide to cooperate if recipient reputation exceeds a threshold that\n    depends on own cooperation history and round number.\n    \"\"\"\n    # Compute own overall cooperation fraction\n    if len(my_history) == 0:\n        coop_fraction = 0.5\n    else:\n        coop_count = sum(1 for entry in my_history if entry[\"action\"] == \"A\")\n        coop_fraction = coop_count / len(my_history)\n\n    # Base threshold: more cooperative own history => lower threshold (more forgiving)\n    base_threshold = 0.3 - 0.6 * coop_fraction  # between -0.3 and 0.3\n\n    # Add a round\u2011dependent component: become slightly more forgiving over time\n    round_bonus = min(round_num / 100.0, 0.3)  # up to +0.3 after many rounds\n\n    threshold = base_threshold - round_bonus  # lower threshold => more cooperation\n\n    # Extra condition: if own history is short and recipient reputation is high, cooperate\n    if len(my_history) < 5 and recipient_reputation > 0.5:\n        return True\n\n    # Otherwise use threshold rule\n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 7,
+      "strategy_id": "d1b459f66aac",
+      "fitness": 21.0,
+      "cooperation_rate": 0.7666666666666667,
+      "generation": 7,
+      "parent_id": "0aacc9d34b54",
+      "code": "def evaluate(current_reputation: float, observation: dict, my_history: list[dict], round_num: int) -> float:\n    # Asymmetric reputation update: cooperative action rewarded less than defection is punished\n    delta_A = 0.15   # reward for action 'A'\n    delta_B = 0.25   # penalty for action 'B' (larger to discourage defection)\n    if observation['action'] == 'A':\n        new_reputation = min(1.0, current_reputation + delta_A)\n    else:  # action 'B'\n        new_reputation = max(-1.0, current_reputation - delta_B)\n    return new_reputation\n\ndef decide(recipient_reputation: float, round_num: int, my_history: list[dict]) -> bool:\n    # Thresholds vary with round number\n    if round_num < 20:\n        base_threshold = -0.7\n    else:\n        base_threshold = 0.4\n\n    # Adjustment based on overall history of own actions (not just last)\n    if my_history:\n        count_A = sum(1 for h in my_history if h.get('action') == 'A')\n        count_B = len(my_history) - count_A\n        if count_A > count_B:\n            base_threshold -= 0.2\n        elif count_A < count_B:\n            base_threshold += 0.2\n        # no change if equal counts\n\n    return recipient_reputation > base_threshold"
+    },
+    {
+      "agent_id": 8,
+      "strategy_id": "8b38bddd81d4",
+      "fitness": 20.0,
+      "cooperation_rate": 0.6666666666666666,
+      "generation": 4,
+      "parent_id": "b0dd213b848b",
+      "code": "def evaluate(current_reputation: float, observation: dict, my_history: list[dict], round_num: int) -> float:\n    action = observation['action']\n    # Vary update strength: more weight to cooperation, less to defection\n    if action == 'A':\n        delta = 0.12\n    else:\n        delta = -0.08\n    # Add mild forgetting to prevent reputation from drifting too far\n    decay = 0.995\n    new_rep = current_reputation * decay + delta\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(recipient_reputation: float, round_num: int, my_history: list[dict]) -> bool:\n    # Use absolute floor for extremely high/low reputation\n    if recipient_reputation > 0.80:\n        return True\n    if recipient_reputation < -0.80:\n        return False\n    # Linear decreasing threshold, but with slower decay than original\n    threshold = max(0.0, 0.5 - 0.01 * round_num)\n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 9,
+      "strategy_id": "0668612c0e54",
+      "fitness": 18.0,
+      "cooperation_rate": 0.6666666666666666,
+      "generation": 9,
+      "parent_id": "9cf744242565",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    # Use aggressive exponential smoothing (alpha=0.7) to update reputation.\n    # Assume action A is cooperative, B is defection.\n    alpha = 0.7\n    if observation[\"action\"] == \"A\":\n        target = 1.0\n    else:\n        target = -1.0\n    new_rep = (1 - alpha) * current_reputation + alpha * target\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(recipient_reputation, round_num, my_history):\n    # Use a round-dependent threshold: more cooperative early, more selective later.\n    if round_num < 10:\n        threshold = 0.2\n    else:\n        threshold = -0.2\n    # Cooperate only if recipient reputation is above threshold.\n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 10,
+      "strategy_id": "ecfab3d4a4aa",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "f73c1bac6f17",
+      "code": "def evaluate(current_reputation: float, observation: dict, my_history: list[dict], round_num: int) -> float:\n    # Asymmetric update: cooperation increases reputation more when low,\n    # defection decreases reputation more when high.\n    delta = 0.2\n    round_factor = 1.0 + 0.3 * (round_num / 150.0)  # increases impact over rounds\n\n    if observation['action'] == 'A':\n        # Increase: faster when reputation is low, slower when already high\n        increase = delta * (1.0 - current_reputation)\n        new_reputation = min(1.0, current_reputation + increase * round_factor)\n    else:\n        # Decrease: faster when reputation is high, slower when already low\n        decrease = delta * (1.0 + current_reputation)\n        new_reputation = max(-1.0, current_reputation - decrease * round_factor)\n    return new_reputation\n\ndef decide(recipient_reputation: float, round_num: int, my_history: list[dict]) -> bool:\n    # Threshold evolves from cautious (0.3) to cooperative (-0.3) over rounds\n    base_threshold = 0.3 - 0.6 * (round_num / 60.0)  # reaches -0.3 around round 60\n    base_threshold = max(-0.3, min(0.3, base_threshold))\n\n    # Adjust threshold based on own recent cooperation frequency (last 5 actions)\n    if len(my_history) > 0:\n        recent = my_history[-5:] if len(my_history) >= 5 else my_history\n        coop_count = sum(1 for entry in recent if entry.get('action') == 'A')\n        coop_rate = coop_count / len(recent)\n        # If cooperating often, become more cautious (higher threshold)\n        # If defecting often, become more generous (lower threshold)\n        if coop_rate > 0.6:\n            base_threshold += 0.2\n        elif coop_rate < 0.4:\n            base_threshold -= 0.2\n\n    return recipient_reputation > base_threshold"
+    },
+    {
+      "agent_id": 11,
+      "strategy_id": "0db70d4092a4",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "bf4c4d59d4d4",
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    alpha = 0.8\n    if observation[\"action\"] == \"A\":\n        target = 0.9\n    else:\n        target = -0.9\n    new_rep = (1 - alpha) * current_reputation + alpha * target\n    return max(-1.0, min(1.0, new_rep))\n\ndef decide(recipient_reputation, round_num, my_history):\n    if len(my_history) == 0:\n        coop_fraction = 0.5\n    else:\n        coop_count = sum(1 for entry in my_history if entry[\"action\"] == \"A\")\n        coop_fraction = coop_count / len(my_history)\n    threshold = -0.2 + (coop_fraction * 0.4)\n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 12,
+      "strategy_id": "a4e51ee7f978",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "f11a6343ec44",
+      "code": "def evaluate(current_reputation: float, observation: dict, my_history: list[dict], round_num: int) -> float:\n    # Use own recent cooperation to moderate updates\n    # Compute own cooperative proportion over last 10 rounds (or fewer)\n    own_window = my_history[-10:] if len(my_history) >= 10 else my_history\n    if own_window:\n        own_A = sum(1 for h in own_window if h.get('action') == 'A')\n        own_prop = own_A / len(own_window)\n    else:\n        own_prop = 0.5  # neutral at start\n\n    # Base deltas with decreasing magnitude over time (exponential decay)\n    base_delta_A = 0.15 * (1 - round_num / 120)   # shrinks linearly to ~0 at round 120\n    base_delta_B = 0.35 * (1 - round_num / 90)    # shrinks faster\n\n    # Adjust deltas based on own behavior:\n    # If we have been cooperative (own_prop > 0.5), we reward others more and punish less\n    # If we have been selfish, we do the opposite (more punishment, less reward)\n    # The adjustment is small: at most \u00b130% of base delta\n    adjustment_factor = (own_prop - 0.5) * 0.6  # range [-0.3, 0.3]\n    delta_A = base_delta_A * (1 + adjustment_factor)          # reward more if we are cooperative\n    delta_B = base_delta_B * (1 - adjustment_factor)          # punish more if we are selfish\n\n    # Clamp to ensure non-negative\n    delta_A = max(0.0, delta_A)\n    delta_B = max(0.0, delta_B)\n\n    if observation['action'] == 'A':\n        new_reputation = min(1.0, current_reputation + delta_A)\n    else:  # 'B'\n        new_reputation = max(-1.0, current_reputation - delta_B)\n    return new_reputation\n\n\ndef decide(recipient_reputation: float, round_num: int, my_history: list[dict]) -> bool:\n    # Base threshold: gradual increase from -0.5 to 0.6, with a plateau\n    if round_num < 10:\n        base_threshold = -0.5\n    elif round_num < 30:\n        base_threshold = -0.5 + (round_num - 10) * (0.05)   # linear to 0.5 at round 30\n    elif round_num < 60:\n        base_threshold = 0.5 + (round_num - 30) * (0.01)   # slow increase to 0.8 at round 60\n    else:\n        base_threshold = 0.8\n\n    # Adjustment based on own recent cooperative tendency (last 15 actions)\n    if my_history:\n        window = my_history[-15:]\n        count_A = sum(1 for h in window if h.get('action') == 'A')\n        total = len(window)\n        prop = count_A / total if total > 0 else 0.5\n        # Stronger adjustment than original, and asymmetrical\n        # If we cooperate a lot, we become much more trusting (lower threshold)\n        # If we defect a lot, we become much stricter (higher threshold)\n        adjustment = (0.5 - prop) * 0.5   # max strength \u00b10.25\n        base_threshold += adjustment\n\n    return recipient_reputation > base_threshold"
+    },
+    {
+      "agent_id": 13,
+      "strategy_id": "f92ef2504c06",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "f11a6343ec44",
+      "code": "def evaluate(current_reputation: float, observation: dict, my_history: list[dict], round_num: int) -> float:\n    # Asymmetric updates with decay, adjusted by current reputation extremity.\n    if round_num < 90:\n        delta_A = 0.15 * (1 - round_num / 90)\n    else:\n        delta_A = 0.01\n    if round_num < 70:\n        delta_B = 0.25 * (1 - round_num / 70)\n    else:\n        delta_B = 0.01\n\n    # Reduce delta when reputation is already extreme (close to \u00b11)\n    rep_mag = abs(current_reputation)\n    delta_A *= (1 - rep_mag * 0.5)\n    delta_B *= (1 - rep_mag * 0.5)\n\n    if observation['action'] == 'A':\n        new_reputation = min(1.0, current_reputation + delta_A)\n    else:  # action 'B'\n        new_reputation = max(-1.0, current_reputation - delta_B)\n    return new_reputation\n\ndef decide(recipient_reputation: float, round_num: int, my_history: list[dict]) -> bool:\n    # Compute weighted moving average of own recent actions (last 8), recent actions weighted more.\n    if my_history:\n        window = my_history[-8:]\n        total_weight = 0\n        weighted_sum = 0\n        for i, h in enumerate(window):\n            w = i + 1  # i=0 oldest gets weight 1, i=len-1 newest gets weight len\n            total_weight += w\n            if h.get('action') == 'A':\n                weighted_sum += w\n        prop = weighted_sum / total_weight if total_weight > 0 else 0.5\n    else:\n        prop = 0.5\n\n    # Base threshold: linear increase over rounds, then clamped\n    base_threshold = -0.6 + 0.01 * round_num\n    base_threshold = max(-0.8, min(0.7, base_threshold))\n\n    # Adjustment based on own cooperative tendency: more cooperative -> lower threshold\n    adjustment = (0.5 - prop) * 0.5\n    threshold = base_threshold + adjustment\n\n    return recipient_reputation > threshold"
+    },
+    {
+      "agent_id": 14,
+      "strategy_id": "b783637e7939",
+      "fitness": 0.0,
+      "cooperation_rate": 0.0,
+      "generation": 10,
+      "parent_id": "0aacc9d34b54",
+      "code": "def evaluate(current_reputation: float, observation: dict, my_history: list[dict], round_num: int) -> float:\n    # Reputation update with asymmetric steps and slight decay\n    decay = 0.05  # small drift toward zero\n    # Decay first: pull reputation slightly toward 0\n    new_reputation = current_reputation * (1 - decay)\n    \n    if observation['action'] == 'A':\n        # Larger positive boost for cooperative action\n        new_reputation += 0.3\n    else:  # action 'B'\n        # Smaller negative penalty for non\u2011cooperative action\n        new_reputation -= 0.15\n    \n    # Clamp to [-1, 1]\n    return max(-1.0, min(1.0, new_reputation))\n\n\ndef decide(recipient_reputation: float, round_num: int, my_history: list[dict]) -> bool:\n    # Baseline threshold that becomes stricter over time\n    if round_num < 20:\n        base_threshold = -0.6  # very generous early\n    elif round_num < 50:\n        base_threshold = -0.2\n    else:\n        base_threshold = 0.4   # more selective later\n    \n    # Adjust threshold based on own recent cooperation rate\n    # Look at last 5 own actions (if available)\n    if len(my_history) >= 5:\n        recent_actions = my_history[-5:]\n        coop_count = sum(1 for entry in recent_actions if entry.get('action') == 'A')\n        # If we cooperated often, lower threshold (more likely to cooperate now)\n        # If we defected often, raise threshold\n        # coop_count ranges 0..5, map to adjustment -0.3..+0.3\n        adjustment = 0.3 * (1 - 2 * (coop_count / 5))  # 0 -> +0.3, 5 -> -0.3\n    elif len(my_history) > 0:\n        # With few rounds, use last action only\n        last_action = my_history[-1].get('action')\n        if last_action == 'A':\n            adjustment = -0.2\n        else:\n            adjustment = 0.2\n    else:\n        adjustment = 0.0\n    \n    threshold = base_threshold + adjustment\n    # Decide: cooperate (return True) if recipient reputation > threshold\n    return recipient_reputation > threshold"
+    }
+  ],
+  "timestamp": "2026-06-18T00:11:16.265885"
+}

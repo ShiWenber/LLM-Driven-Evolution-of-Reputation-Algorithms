@@ -1,0 +1,57 @@
+[
+  {
+    "label": "A N=30,G=20 (Intern skip, too slow)",
+    "intern_full": null,
+    "intern_p07": null,
+    "ds_full": 0.49000000000000005,
+    "ds_p07": 0.5426666666666665,
+    "intern_full_ok": 0,
+    "intern_p07_ok": 0,
+    "ds_full_ok": 2,
+    "ds_p07_ok": 2
+  },
+  {
+    "label": "B recent-window=5",
+    "intern_full": 0.4318518518518519,
+    "intern_p07": 0.30148148148148146,
+    "ds_full": 0.12222222222222223,
+    "ds_p07": 0.6296296296296297,
+    "intern_full_ok": 1,
+    "intern_p07_ok": 1,
+    "ds_full_ok": 0,
+    "ds_p07_ok": 2
+  },
+  {
+    "label": "C reputation noise=0.1",
+    "intern_full": 0.013333333333333334,
+    "intern_p07": 0.30814814814814817,
+    "ds_full": 0.5681481481481483,
+    "ds_p07": 0.04074074074074074,
+    "intern_full_ok": 0,
+    "intern_p07_ok": 1,
+    "ds_full_ok": 2,
+    "ds_p07_ok": 0
+  },
+  {
+    "label": "D exploration mutation",
+    "intern_full": 0.5733333333333334,
+    "intern_p07": 0.18888888888888888,
+    "ds_full": 0.05407407407407408,
+    "ds_p07": 0.038518518518518514,
+    "intern_full_ok": 1,
+    "intern_p07_ok": 0,
+    "ds_full_ok": 0,
+    "ds_p07_ok": 0
+  },
+  {
+    "label": "E all combined (skip Intern)",
+    "intern_full": 0.7000000000000001,
+    "intern_p07": 0.32888888888888884,
+    "ds_full": 0.059259259259259255,
+    "ds_p07": 0.1177777777777778,
+    "intern_full_ok": 2,
+    "intern_p07_ok": 0,
+    "ds_full_ok": 0,
+    "ds_p07_ok": 0
+  }
+]

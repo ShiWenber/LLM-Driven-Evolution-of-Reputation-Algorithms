@@ -1,0 +1,64 @@
+{
+  "run_type": "evolutionary",
+  "timestamp": "2026-06-26T22:53:49.410746",
+  "config": {
+    "run": "evolutionary",
+    "observability": "full",
+    "p_values": null,
+    "population": 8,
+    "generations": 2,
+    "rounds": 10,
+    "eliminate": 3,
+    "elitism": 2,
+    "tournament": 2,
+    "models": "deepseek-v4-flash",
+    "mutation_temperature": 0.8,
+    "seeds": 1,
+    "output": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\dryrun_complexity_ceiling_v2\\recent5",
+    "benefit": 2,
+    "cost": 1,
+    "recent_window": 5,
+    "reputation_noise": 0.0,
+    "exploration_mutation": false
+  },
+  "trials_summary": [
+    {
+      "model": "deepseek-v4-flash",
+      "observability": "full",
+      "seed": 0,
+      "trajectory": [
+        {
+          "fitness_mean": 5.625,
+          "fitness_std": 3.6033838263498934,
+          "fitness_max": 14.0,
+          "fitness_min": 2.0,
+          "cooperation_rate_mean": 0.5625,
+          "cooperation_rate_std": 0.36721077053920953,
+          "valid_agents": 8,
+          "total_agents": 8,
+          "generation": 0,
+          "num_survivors": 5,
+          "num_eliminated": 3,
+          "num_children": 3
+        },
+        {
+          "fitness_mean": 4.0,
+          "fitness_std": 2.7838821814150108,
+          "fitness_max": 9.0,
+          "fitness_min": 1.0,
+          "cooperation_rate_mean": 0.4,
+          "cooperation_rate_std": 0.32787192621510003,
+          "valid_agents": 8,
+          "total_agents": 8,
+          "generation": 1,
+          "num_survivors": 5,
+          "num_eliminated": 3,
+          "num_children": 3
+        }
+      ],
+      "final_mean_fitness": 3.375,
+      "final_mean_cooperation": 0.3375,
+      "num_valid": 8
+    }
+  ]
+}

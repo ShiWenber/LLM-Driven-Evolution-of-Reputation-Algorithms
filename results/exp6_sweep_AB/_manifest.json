@@ -1,0 +1,110 @@
+[
+  {
+    "obs": "private",
+    "seed": 0,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\private_seed0",
+    "ok": true,
+    "elapsed_sec": 428.7,
+    "stdout_tail": "Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\private_seed0\\evolutionary_20260617_235552.json\n\n============================================================\nAll experiments complete.\n============================================================\n",
+    "stderr_tail": ""
+  },
+  {
+    "obs": "partial_0.3",
+    "seed": 0,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\partial_0.3_seed0",
+    "ok": true,
+    "elapsed_sec": 476.3,
+    "stdout_tail": "s\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\partial_0.3_seed0\\evolutionary_20260618_000348.json\n\n============================================================\nAll experiments complete.\n============================================================\n",
+    "stderr_tail": ""
+  },
+  {
+    "obs": "partial_0.7",
+    "seed": 0,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\partial_0.7_seed0",
+    "ok": true,
+    "elapsed_sec": 447.8,
+    "stdout_tail": "s\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\partial_0.7_seed0\\evolutionary_20260618_001116.json\n\n============================================================\nAll experiments complete.\n============================================================\n",
+    "stderr_tail": ""
+  },
+  {
+    "obs": "full",
+    "seed": 0,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\full_seed0",
+    "ok": true,
+    "elapsed_sec": 463.4,
+    "stdout_tail": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\full_seed0\\evolutionary_20260618_001859.json\n\n============================================================\nAll experiments complete.\n============================================================\n",
+    "stderr_tail": ""
+  },
+  {
+    "obs": "private",
+    "seed": 1,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\private_seed1",
+    "ok": true,
+    "elapsed_sec": 437.0,
+    "stdout_tail": "Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\private_seed1\\evolutionary_20260618_002616.json\n\n============================================================\nAll experiments complete.\n============================================================\n",
+    "stderr_tail": ""
+  },
+  {
+    "obs": "partial_0.3",
+    "seed": 1,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\partial_0.3_seed1",
+    "ok": true,
+    "elapsed_sec": 464.5,
+    "stdout_tail": "s\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\partial_0.3_seed1\\evolutionary_20260618_003401.json\n\n============================================================\nAll experiments complete.\n============================================================\n",
+    "stderr_tail": ""
+  },
+  {
+    "obs": "partial_0.7",
+    "seed": 1,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\partial_0.7_seed1",
+    "ok": true,
+    "elapsed_sec": 437.2,
+    "stdout_tail": "s\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\partial_0.7_seed1\\evolutionary_20260618_004118.json\n\n============================================================\nAll experiments complete.\n============================================================\n",
+    "stderr_tail": ""
+  },
+  {
+    "obs": "full",
+    "seed": 1,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\full_seed1",
+    "ok": true,
+    "elapsed_sec": 340.9,
+    "stdout_tail": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\full_seed1\\evolutionary_20260618_004659.json\n\n============================================================\nAll experiments complete.\n============================================================\n",
+    "stderr_tail": ""
+  },
+  {
+    "obs": "private",
+    "seed": 2,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\private_seed2",
+    "ok": true,
+    "elapsed_sec": 420.9,
+    "stdout_tail": "Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\private_seed2\\evolutionary_20260618_005400.json\n\n============================================================\nAll experiments complete.\n============================================================\n",
+    "stderr_tail": ""
+  },
+  {
+    "obs": "partial_0.3",
+    "seed": 2,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\partial_0.3_seed2",
+    "ok": true,
+    "elapsed_sec": 420.0,
+    "stdout_tail": "s\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\partial_0.3_seed2\\evolutionary_20260618_010100.json\n\n============================================================\nAll experiments complete.\n============================================================\n",
+    "stderr_tail": ""
+  },
+  {
+    "obs": "partial_0.7",
+    "seed": 2,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\partial_0.7_seed2",
+    "ok": true,
+    "elapsed_sec": 485.7,
+    "stdout_tail": "s\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\partial_0.7_seed2\\evolutionary_20260618_010905.json\n\n============================================================\nAll experiments complete.\n============================================================\n",
+    "stderr_tail": ""
+  },
+  {
+    "obs": "full",
+    "seed": 2,
+    "outdir": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\full_seed2",
+    "ok": true,
+    "elapsed_sec": 512.4,
+    "stdout_tail": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp6_sweep_AB\\full_seed2\\evolutionary_20260618_011738.json\n\n============================================================\nAll experiments complete.\n============================================================\n",
+    "stderr_tail": ""
+  }
+]

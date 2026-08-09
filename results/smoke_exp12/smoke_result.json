@@ -1,0 +1,62 @@
+{
+  "trajectory": [
+    {
+      "fitness_mean": 10.8,
+      "fitness_std": 7.582435844326897,
+      "fitness_max": 24.0,
+      "fitness_min": -2.0,
+      "cooperation_rate_mean": 0.36,
+      "cooperation_rate_std": 0.3584328027316614,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 0,
+      "num_survivors": 10,
+      "num_eliminated": 5,
+      "num_children": 5
+    },
+    {
+      "fitness_mean": 1.6,
+      "fitness_std": 2.8237091446063163,
+      "fitness_max": 8.0,
+      "fitness_min": -3.0,
+      "cooperation_rate_mean": 0.05333333333333333,
+      "cooperation_rate_std": 0.06182412330330469,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 1,
+      "num_survivors": 10,
+      "num_eliminated": 5,
+      "num_children": 5
+    },
+    {
+      "fitness_mean": 1.8,
+      "fitness_std": 2.663331247391757,
+      "fitness_max": 6.0,
+      "fitness_min": -2.0,
+      "cooperation_rate_mean": 0.05999999999999999,
+      "cooperation_rate_std": 0.07013215039137555,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 2,
+      "num_survivors": 10,
+      "num_eliminated": 5,
+      "num_children": 5
+    },
+    {
+      "fitness_mean": 0.7333333333333333,
+      "fitness_std": 2.0154955277107964,
+      "fitness_max": 6.0,
+      "fitness_min": -1.0,
+      "cooperation_rate_mean": 0.024444444444444442,
+      "cooperation_rate_std": 0.03541639433446496,
+      "valid_agents": 15,
+      "total_agents": 15,
+      "generation": 3,
+      "num_survivors": 10,
+      "num_eliminated": 5,
+      "num_children": 5
+    }
+  ],
+  "n_final": 15,
+  "elapsed_proxy": "smoke"
+}

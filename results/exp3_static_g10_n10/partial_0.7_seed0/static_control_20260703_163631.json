@@ -1,0 +1,146 @@
+{
+  "run_type": "static_control",
+  "timestamp": "2026-07-03T16:35:01.763279",
+  "config": {
+    "run": "static",
+    "observability": "partial_0.7",
+    "p_values": null,
+    "population": 15,
+    "generations": 10,
+    "rounds": 30,
+    "eliminate": 5,
+    "elitism": 2,
+    "tournament": 3,
+    "models": "deepseek-v4-flash",
+    "mutation_temperature": 0.8,
+    "seeds": 1,
+    "output": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp3_static_g10_n10\\partial_0.7_seed0",
+    "benefit": 2,
+    "cost": 1,
+    "recent_window": 0,
+    "reputation_noise": 0.0,
+    "exploration_mutation": false
+  },
+  "trials_summary": [
+    {
+      "model": "deepseek-v4-flash",
+      "observability": "partial_0.7",
+      "seed": 0,
+      "trajectory": [
+        {
+          "fitness_mean": 14.0,
+          "fitness_std": 9.695359714832659,
+          "fitness_max": 30.0,
+          "fitness_min": -5.0,
+          "cooperation_rate_mean": 0.4666666666666667,
+          "cooperation_rate_std": 0.376533899905145,
+          "valid_agents": 15,
+          "total_agents": 15,
+          "generation": 0
+        },
+        {
+          "fitness_mean": 13.4,
+          "fitness_std": 13.787917415863307,
+          "fitness_max": 36.0,
+          "fitness_min": -10.0,
+          "cooperation_rate_mean": 0.4466666666666666,
+          "cooperation_rate_std": 0.3687416037964395,
+          "valid_agents": 15,
+          "total_agents": 15,
+          "generation": 1
+        },
+        {
+          "fitness_mean": 15.466666666666667,
+          "fitness_std": 9.694442852594586,
+          "fitness_max": 26.0,
+          "fitness_min": -8.0,
+          "cooperation_rate_mean": 0.5155555555555555,
+          "cooperation_rate_std": 0.3525287835196958,
+          "valid_agents": 15,
+          "total_agents": 15,
+          "generation": 2
+        },
+        {
+          "fitness_mean": 15.533333333333333,
+          "fitness_std": 12.679992989833323,
+          "fitness_max": 40.0,
+          "fitness_min": -2.0,
+          "cooperation_rate_mean": 0.5177777777777777,
+          "cooperation_rate_std": 0.36267864903952624,
+          "valid_agents": 15,
+          "total_agents": 15,
+          "generation": 3
+        },
+        {
+          "fitness_mean": 15.466666666666667,
+          "fitness_std": 11.11675412259452,
+          "fitness_max": 28.0,
+          "fitness_min": -10.0,
+          "cooperation_rate_mean": 0.5155555555555555,
+          "cooperation_rate_std": 0.38081134955594126,
+          "valid_agents": 15,
+          "total_agents": 15,
+          "generation": 4
+        },
+        {
+          "fitness_mean": 15.4,
+          "fitness_std": 12.558131495834349,
+          "fitness_max": 42.0,
+          "fitness_min": -4.0,
+          "cooperation_rate_mean": 0.5133333333333334,
+          "cooperation_rate_std": 0.37174264295691534,
+          "valid_agents": 15,
+          "total_agents": 15,
+          "generation": 5
+        },
+        {
+          "fitness_mean": 15.733333333333333,
+          "fitness_std": 10.376040777783317,
+          "fitness_max": 34.0,
+          "fitness_min": 0.0,
+          "cooperation_rate_mean": 0.5244444444444444,
+          "cooperation_rate_std": 0.3793691970288587,
+          "valid_agents": 15,
+          "total_agents": 15,
+          "generation": 6
+        },
+        {
+          "fitness_mean": 16.066666666666666,
+          "fitness_std": 9.780706632049762,
+          "fitness_max": 36.0,
+          "fitness_min": 2.0,
+          "cooperation_rate_mean": 0.5355555555555556,
+          "cooperation_rate_std": 0.3722736282910565,
+          "valid_agents": 15,
+          "total_agents": 15,
+          "generation": 7
+        },
+        {
+          "fitness_mean": 14.733333333333333,
+          "fitness_std": 10.478337442340532,
+          "fitness_max": 32.0,
+          "fitness_min": -5.0,
+          "cooperation_rate_mean": 0.49111111111111116,
+          "cooperation_rate_std": 0.3621881374556326,
+          "valid_agents": 15,
+          "total_agents": 15,
+          "generation": 8
+        },
+        {
+          "fitness_mean": 14.2,
+          "fitness_std": 11.536608398196297,
+          "fitness_max": 34.0,
+          "fitness_min": -6.0,
+          "cooperation_rate_mean": 0.4733333333333334,
+          "cooperation_rate_std": 0.3643766874682989,
+          "valid_agents": 15,
+          "total_agents": 15,
+          "generation": 9
+        }
+      ],
+      "final_mean_fitness": 14.2,
+      "final_mean_cooperation": 0.47333333333333333,
+      "num_valid": 15
+    }
+  ]
+}

@@ -124,9 +124,9 @@ Output ONLY the Python code, no prose, no markdown fences.
 # algorithms (no "reputation", no "leading-eight", no "IS/SS/..." etc.).
 # =======================================================================
 
-INIT_PROMPT_V3 = """You are a Python programmer designing a strategy for a
-multi-agent social-dynamics simulation. Your task is to write a single
-Python class named `LLMAgent` that decides how one agent behaves.
+INIT_PROMPT_V3 = """You are writing a Python class named `LLMAgent` that
+participates in a multi-agent social-dynamics simulation. The class
+decides what one agent does each round.
 
 The simulation:
   - 15 agents play 30 rounds per generation, for 30 generations.
@@ -134,29 +134,24 @@ The simulation:
     pairs; one agent sits out if 15 is odd).
   - In each pair, BOTH agents SIMULTANEOUSLY choose to either
     "cooperate" or "defect". The joint action is observed by the
-    players themselves and by every other agent in the population
-    (third-party observers). For each observed joint action, the
-    framework calls `observe(...)` on every agent that was not part
-    of the pair, and the players themselves are also notified via
-    the same `observe(...)` call (i.e. self-judgment is NOT a
-    separate event — you detect it by checking
-    `donor_id == self.agent_id` or `recipient_id == self.agent_id`).
+    players themselves and by every other agent in the population.
+    For each observed joint action, the framework calls
+    `observe(...)` on every agent that was not part of the pair, and
+    the players themselves are also notified via the same
+    `observe(...)` call. Self-judgment is detected by checking
+    `donor_id == self.agent_id` or `recipient_id == self.agent_id`.
 
 The class interface (REQUIRED):
 
 ```python
 class LLMAgent:
     def __init__(self, agent_id: int) -> None:
-        # `agent_id` is this agent's stable integer ID (0..N-1, never
-        # reused). Set any internal state you want here.
         ...
 
     def decide(self) -> bool:
-        # Return True to cooperate, False to defect. Called once per
-        # round for this agent. The framework sets
-        # `self._ctx_opponent_id` to the integer ID of the opponent
-        # you're paired with BEFORE this method is called; you can
-        # read it but you don't have to use it.
+        # Return True to cooperate, False to defect. The framework
+        # sets `self._ctx_opponent_id` to the opponent's integer ID
+        # before this method is called.
         ...
 
     def observe(
@@ -166,27 +161,14 @@ class LLMAgent:
         recipient_id: int,
         recipient_action: str,    # 'cooperate' or 'defect'
     ) -> None:
-        # Called for every joint action this agent witnesses (both
-        # third-party observations and self-judgments). Update any
-        # internal state here. Detecting self-judgment: check
-        # `donor_id == self.agent_id` or `recipient_id == self.agent_id`.
         ...
 ```
 
-Important rules:
+Rules:
   1. The class MUST be named `LLMAgent` (exact spelling).
-  2. The class MAY import `math` (already available) and `random`. No
-     other imports. Avoid `random` unless you have a good reason; keep
-     the strategy deterministic when possible.
-  3. The class MAY use any data structure you want for state:
-     counters, dicts, lists, sets, deques, etc. There is no required
-     state structure.
-  4. Do NOT assume any range or scale for your internal state — pick
-     numbers that work for your strategy.
-  5. The class should not crash on any input. Wrap risky code in
+  2. The class MAY import `math` and `random`. No other imports.
+  3. The class should not crash on any input. Wrap risky code in
      try/except if needed.
-  6. Methods may be called many times per generation; keep them
-     fast (no expensive I/O).
 
 Output ONLY the Python code for the class. No prose, no markdown
 fences. The code must define exactly one class named `LLMAgent`.
@@ -247,32 +229,12 @@ markdown fences. The child must define exactly one class named
 # recognizably the parent's strategy with a small perturbation).
 # Contrast with the μ path, which uses INIT_PROMPT_V3 with NO
 # reference to j.
-SMALL_MUTATION_PROMPT_V3 = """You are mutating an existing strategy for a
-multi-agent social-dynamics simulation. The parent is a Python class
-named `LLMAgent`. Produce a child class also named `LLMAgent` that is
-recognizably related to the parent but explores a different parameter,
-threshold, structural choice, or mechanism.
+SMALL_MUTATION_PROMPT_V3 = """You are rewriting a Python class named `LLMAgent`
+that participates in a multi-agent social-dynamics simulation. A
+parent implementation is shown below. Produce a new implementation of
+the same class.
 
-You are free to:
-  - Change thresholds, learning rates, decay factors
-  - Add or remove a clause in decide() or observe()
-  - Replace a hand-rolled reputation update with a different update rule
-  - Restructure the state (e.g., swap a dict for a deque, add a counter)
-  - Combine the parent's logic with a small new mechanism
-
-The child does not need to behave identically to the parent. Aim for
-meaningful exploration within the parent's strategy family.
-
-The simulation summary:
-  - 15 agents, 30 rounds per generation, 30 generations total.
-  - Random pairing, simultaneous cooperation/defection choice.
-  - Every joint action is observed by both players and by every
-    third-party agent. The framework calls `observe(...)` on every
-    observer with the same (donor_id, donor_action, recipient_id,
-    recipient_action) tuple. Self-judgment is detected via
-    `donor_id == self.agent_id` or `recipient_id == self.agent_id`.
-
-The class interface (REQUIRED, unchanged):
+The class interface (REQUIRED):
 
 ```python
 class LLMAgent:
@@ -280,15 +242,16 @@ class LLMAgent:
         ...
 
     def decide(self) -> bool:
-        # self._ctx_opponent_id is set by the framework just before.
+        # self._ctx_opponent_id is set by the framework just before
+        # decide() runs.
         ...
 
     def observe(
         self,
         donor_id: int,
-        donor_action: str,
+        donor_action: str,        # 'cooperate' or 'defect'
         recipient_id: int,
-        recipient_action: str,
+        recipient_action: str,    # 'cooperate' or 'defect'
     ) -> None:
         ...
 ```

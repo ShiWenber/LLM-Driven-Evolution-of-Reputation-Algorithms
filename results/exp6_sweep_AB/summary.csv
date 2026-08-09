@@ -1,0 +1,9 @@
+observability,label,mean_final_coop,std_final_coop,n_seeds
+private,A/B,0.039,0.06,3
+partial_0.3,A/B,0.335,0.26,3
+partial_0.7,A/B,0.006,0.007,3
+full,A/B,0.347,0.157,3
+private,donate,0.016,0.015,3
+partial_0.3,donate,0.138,0.235,3
+partial_0.7,donate,0.758,0.297,3
+full,donate,0.892,0.076,3

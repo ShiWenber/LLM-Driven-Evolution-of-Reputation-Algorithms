@@ -1,0 +1,23 @@
+{
+  "n_agents": 4,
+  "model": "deepseek-v4-flash",
+  "interface": "with donor_reputation + recipient_reputation in observation",
+  "strategies": [
+    {
+      "agent_id": 0,
+      "code": "# Strategy Pair 0: Always Cooperate (unconditional cooperation)\ndef evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # No reputation tracking \u2013 simply return the current reputation unchanged.\n    # This agent does not condition its own behavior on others' reputation.\n    return current_reputation\n\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Always choose option A (assumed to be the cooperative action)\n    return True  # A"
+    },
+    {
+      "agent_id": 1,
+      "code": "# Strategy Pair 1: Image Scoring (simple indirect reciprocity)\ndef evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # Assume A = cooperate (+), B = defect (-)\n    if observation['action'] == 'A':\n        # Cooperating improves reputation\n        new_rep = current_reputation + 0.2\n    else:  # 'B'\n        # Defecting hurts reputation\n        new_rep = current_reputation - 0.2\n\n    # Clamp to [-1, 1]\n    return max(-1.0, min(1.0, new_rep))\n\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Cooperate (A) if recipient's reputation is positive, else defect (B)\n    # Use a small threshold to avoid defecting due to noise\n    return recipient_reputation > 0.0"
+    },
+    {
+      "agent_id": 2,
+      "code": "# Strategy Pair 2: Standing (conditional on recipient's prior reputation)\ndef evaluate(\n    current_reputation: float,\n    observation: dict,\n    my_history: list[dict],\n    round_num: int\n) -> float:\n    # A = cooperate: always good\n    # B = defect: only bad if recipient had good reputation\n    if observation['action'] == 'A':\n        new_rep = current_reputation + 0.3\n    else:  # 'B'\n        recipient_rep = observation['recipient_reputation']\n        if recipient_rep > 0.0:\n            # Defecting against a good recipient is punished\n            new_rep = current_reputation - 0.3\n        else:\n            # Defecting against a bad recipient is excused (no change)\n            new_rep = current_reputation + 0.1  # slight reward for justified defection\n\n    return max(-1.0, min(1.0, new_rep))\n\n\ndef decide(\n    recipient_reputation: float,\n    round_num: int,\n    my_history: list[dict]\n) -> bool:\n    # Cooperate (A) unless the recipient is clearly bad\n    # (standing strategy often cooperates even with slightly negative reputation)\n    return recipient_reputation > -0.5"
+    },
+    {
+      "agent_id": 3,
+      "code": "def evaluate(current_reputation, observation, my_history, round_num):\n    if observation[\"action\"] == \"A\":\n        return current_reputation + 1.0\n    else:\n        return current_reputation - 1.0\n\ndef decide(recipient_reputation, round_num, my_history):\n    return recipient_reputation >= 0.0\n"
+    }
+  ]
+}

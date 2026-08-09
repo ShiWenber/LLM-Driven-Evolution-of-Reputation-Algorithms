@@ -1,0 +1,106 @@
+{
+  "run_type": "evolutionary",
+  "timestamp": "2026-06-30T10:10:01.309062",
+  "config": {
+    "run": "evolutionary",
+    "observability": "full",
+    "p_values": null,
+    "population": 10,
+    "generations": 5,
+    "rounds": 15,
+    "eliminate": 2,
+    "elitism": 1,
+    "tournament": 2,
+    "models": "paratera-intern",
+    "mutation_temperature": 0.8,
+    "seeds": 1,
+    "output": "C:\\Users\\shiwenbo\\.mavis\\agents\\mavis\\workspace\\llm-reputation-paper\\llm-reputation\\results\\exp8_intern_ceiling\\D_exploration\\full_seed0",
+    "benefit": 2,
+    "cost": 1,
+    "recent_window": 0,
+    "reputation_noise": 0.0,
+    "exploration_mutation": true
+  },
+  "trials_summary": [
+    {
+      "model": "Intern-S2-Preview",
+      "observability": "full",
+      "seed": 0,
+      "trajectory": [
+        {
+          "fitness_mean": 9.5,
+          "fitness_std": 4.129164564412516,
+          "fitness_max": 17.0,
+          "fitness_min": 2.0,
+          "cooperation_rate_mean": 0.6333333333333333,
+          "cooperation_rate_std": 0.2848001248439177,
+          "valid_agents": 10,
+          "total_agents": 10,
+          "generation": 0,
+          "num_survivors": 8,
+          "num_eliminated": 2,
+          "num_children": 2
+        },
+        {
+          "fitness_mean": 9.2,
+          "fitness_std": 5.134199061197375,
+          "fitness_max": 17.0,
+          "fitness_min": -1.0,
+          "cooperation_rate_mean": 0.6133333333333333,
+          "cooperation_rate_std": 0.27936435786342617,
+          "valid_agents": 10,
+          "total_agents": 10,
+          "generation": 1,
+          "num_survivors": 8,
+          "num_eliminated": 2,
+          "num_children": 2
+        },
+        {
+          "fitness_mean": 9.9,
+          "fitness_std": 9.7,
+          "fitness_max": 28.0,
+          "fitness_min": -4.0,
+          "cooperation_rate_mean": 0.66,
+          "cooperation_rate_std": 0.2835489375751565,
+          "valid_agents": 10,
+          "total_agents": 10,
+          "generation": 2,
+          "num_survivors": 8,
+          "num_eliminated": 2,
+          "num_children": 2
+        },
+        {
+          "fitness_mean": 7.5,
+          "fitness_std": 3.5846896657869842,
+          "fitness_max": 16.0,
+          "fitness_min": 4.0,
+          "cooperation_rate_mean": 0.5,
+          "cooperation_rate_std": 0.23523038352503134,
+          "valid_agents": 10,
+          "total_agents": 10,
+          "generation": 3,
+          "num_survivors": 8,
+          "num_eliminated": 2,
+          "num_children": 2
+        },
+        {
+          "fitness_mean": 12.3,
+          "fitness_std": 6.435060217278467,
+          "fitness_max": 26.0,
+          "fitness_min": 3.0,
+          "cooperation_rate_mean": 0.8200000000000001,
+          "cooperation_rate_std": 0.208806130178211,
+          "valid_agents": 10,
+          "total_agents": 10,
+          "generation": 4,
+          "num_survivors": 8,
+          "num_eliminated": 2,
+          "num_children": 2
+        }
+      ],
+      "final_mean_fitness": 11.7,
+      "final_mean_cooperation": 0.62,
+      "num_valid": 10
+    }
+  ]
+}
