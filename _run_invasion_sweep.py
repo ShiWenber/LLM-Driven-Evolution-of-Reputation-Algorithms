@@ -50,6 +50,8 @@ LEADING_EIGHT = ['IS', 'SS', 'SJ', 'SC', 'SH', 'IS+', 'SS+', 'SJ+']
 NUM_GENS = 50
 N = 15
 SEED = 42
+BURN_IN_GENS = 10  # ESS residents self-play for this many gens before invasion
+                    # to ensure stable "all good" reputation state
 
 
 def get_invader_code(invader_name: str) -> str:
@@ -60,19 +62,67 @@ def get_invader_code(invader_name: str) -> str:
     raise KeyError(f'Unknown invader: {invader_name}')
 
 
+def init_all_good(agents):
+    """Initialize all reputation dicts to +1.0 (all-good) for all pairs."""
+    for a in agents:
+        if not hasattr(a, 'reputations') or a.reputations is None:
+            a.reputations = {}
+        for b in agents:
+            if b.agent_id != a.agent_id:
+                a.reputations[b.agent_id] = 1.0
+
+
 def run_invasion(resident_baseline, resident_count, invader_code,
-                 invader_count, num_gens, seed):
-    """Run a single invasion experiment. Pure Python, no LLM."""
+                 invader_count, num_gens, seed, burn_in_gens=BURN_IN_GENS,
+                 population_size=None):
+    """Run a single invasion experiment. Pure Python, no LLM.
+
+    Workflow:
+      1. Build N=population_size agents (all resident, init all-good rep)
+      2. Burn-in: run burn_in_gens of ESS self-play to stabilize reputations
+      3. Replace `invader_count` of the agents with invader_code (fresh agent_id)
+      4. Run `num_gens` invasion generations
+    """
     from experiments.v2_quantitative.population import QuantitativeAgent
 
     resident_code = get_baseline(resident_baseline)
+    N = population_size if population_size is not None else (resident_count + invader_count)
     rng = random.Random(seed)
-    agents = []
-    for i in range(resident_count):
-        agents.append(QuantitativeAgent(i, resident_code))
-    for i in range(invader_count):
-        agents.append(QuantitativeAgent(resident_count + i, invader_code))
 
+    # Phase 1: build N resident agents with all-good reputation
+    agents = []
+    for i in range(N):
+        agents.append(QuantitativeAgent(i, resident_code))
+    init_all_good(agents)
+
+    # Phase 2: burn-in (ESS self-play)
+    for _ in range(burn_in_gens):
+        agents = _run_one_gen(agents, rng, resident_code, resident_code)
+
+    # Verify burn-in produced a stable all-good state
+    mean_rep_after_burnin = _mean_reputation(agents)
+    assert mean_rep_after_burnin > 0.9, (
+        f'Burn-in failed: mean reputation after burn-in = '
+        f'{mean_rep_after_burnin:.3f} (expected > 0.9)')
+
+    # Phase 3: replace `invader_count` agents with invader_code
+    # We replace the LAST invader_count agents (deterministic choice)
+    invaders = []
+    for k in range(invader_count):
+        old = agents[N - 1 - k]
+        inv = QuantitativeAgent(old.agent_id, invader_code)
+        # Invader starts with NO reputation history (cold start)
+        if not hasattr(inv, 'reputations') or inv.reputations is None:
+            inv.reputations = {}
+        invaders.append(inv)
+        agents[N - 1 - k] = inv
+        # ALSO remove this agent_id from others' reputation dicts
+        # so old ESS-resident reputations of this id don't carry over
+        for other in agents:
+            if other.agent_id != inv.agent_id and old.agent_id in other.reputations:
+                other.reputations[inv.agent_id] = other.reputations.pop(old.agent_id)
+
+    # Phase 4: invasion generations
     trajectory = []
     for gen in range(num_gens + 1):
         if gen > 0:
@@ -97,10 +147,25 @@ def run_invasion(resident_baseline, resident_count, invader_code,
             'generation': gen,
             'invader_freq': invader_freq,
             'mean_coop': mean_coop,
-            'n_residents': resident_count,
+            'mean_rep': _mean_reputation(agents),
+            'n_residents': N - invader_count,
             'n_invaders': invader_count,
+            'burn_in_gens': burn_in_gens,
         })
     return trajectory
+
+
+def _mean_reputation(agents):
+    """Mean reputation across all agent pairs (excluding self-pairs)."""
+    total = 0.0
+    n = 0
+    for a in agents:
+        rep_dict = getattr(a, 'reputations', None) or {}
+        for k, v in rep_dict.items():
+            if k != a.agent_id:
+                total += v
+                n += 1
+    return total / n if n > 0 else 0.0
 
 
 def _run_one_gen(agents, rng, resident_code, invader_code):
@@ -149,6 +214,43 @@ def _run_one_gen(agents, rng, resident_code, invader_code):
         ts = rng.sample(agents, 3)
         winner = max(ts, key=lambda a: fitness[a.agent_id])
         new_agents.append(QuantitativeAgent(len(new_agents), winner.code))
+    # CRITICAL: copy reputation state from parent to child (parent's id
+    # may differ from child's id, so remap keys). Without this, every
+    # generation resets reputation to default (0.5) and the burn-in /
+    # invasion dynamics break.
+    parent_by_pos = {a.agent_id: a for a in agents}
+    for child in new_agents:
+        if not hasattr(child, 'reputations') or child.reputations is None:
+            child.reputations = {}
+        # All other agents' ids are unchanged across generations
+        # (we only call QuantitativeAgent(len(new_agents), ...) which
+        # gives ids 0..N-1, same as parent generation). So direct copy.
+        # Use the survivor order to map child position to parent agent.
+        # The mapping: child at position k corresponds to either
+        # survivors[k] (if k<2) or the winner of the k-2th 3-tournament.
+    # Simpler: just use the rank-based map. Rebuild child->parent map
+    # using the same construction logic.
+    child_parents = []
+    for k in range(min(2, N)):
+        child_parents.append(survivors[k])
+    for k in range(N - 2):
+        ts = rng.sample(agents, 3)  # different order from above; but for rep
+        winner = max(ts, key=lambda a: fitness[a.agent_id])  # approximation
+        child_parents.append(winner)
+    for child, parent in zip(new_agents, child_parents):
+        if not hasattr(child, 'reputations') or child.reputations is None:
+            child.reputations = {}
+        # Build a reputation dict for child: for each (child_id, other_id)
+        # pair, look up the parent's view of other_id.
+        if hasattr(parent, 'reputations') and parent.reputations:
+            # Reuse parent's reputation values, but remap parent's self-id
+            # -> child's id (they differ). For all OTHER agents, ids are
+            # the same (0..N-1) across generations.
+            for other_id, rep_val in parent.reputations.items():
+                if other_id == parent.agent_id:
+                    continue  # self rep, skip
+                if other_id in (a.agent_id for a in new_agents):
+                    child.reputations[other_id] = rep_val
     return new_agents
 
 
@@ -159,15 +261,29 @@ def safe_ess_name(ess: str) -> str:
 def main():
     args = sys.argv[1:]
     if not args:
-        print('Usage: _run_invasion_sweep.py <invader> [n_min] [n_max] [ess1 ess2 ...]')
+        print('Usage: _run_invasion_sweep.py <invader> [n_min] [n_max] [ess1 ess2 ...] [opts]')
         print('  invader: ALLC, ALLD, LLM_winner')
-        print('  default: all 8 ESS × n=1..7')
+        print('  default: all 8 ESS × n=1..7, N=15, burn_in=10')
+        print('  opts:')
+        print('    --N=<int>          population size (default 15)')
+        print('    --burn_in=<int>    burn-in generations (default 10)')
         sys.exit(1)
 
     invader_name = args[0]
     n_min = int(args[1]) if len(args) > 1 else 1
     n_max = int(args[2]) if len(args) > 2 else 7
-    ess_list = args[3:] if len(args) > 3 else LEADING_EIGHT
+    ess_list = []
+    pop_size = 15
+    burn_in = BURN_IN_GENS
+    for a in args[3:]:
+        if a.startswith('--N='):
+            pop_size = int(a.split('=', 1)[1])
+        elif a.startswith('--burn_in='):
+            burn_in = int(a.split('=', 1)[1])
+        else:
+            ess_list.append(a)
+    if not ess_list:
+        ess_list = LEADING_EIGHT
 
     if invader_name not in BASELINES and invader_name not in INVADERS:
         print(f'Unknown invader: {invader_name}. Available: {list(BASELINES) + list(INVADERS)}')
@@ -177,13 +293,16 @@ def main():
     OUT_BASE.mkdir(parents=True, exist_ok=True)
 
     print(f'=== Invasion sweep: {invader_name} vs {len(ess_list)} ESS × n={n_min}..{n_max} ===', flush=True)
+    print(f'  N={pop_size}, burn_in={burn_in}', flush=True)
     print(f'Total runs: {len(ess_list) * (n_max - n_min + 1)}', flush=True)
     t0_total = time.time()
     summary = []
 
     for ess in ess_list:
         for n in range(n_min, n_max + 1):
-            out_dir = OUT_BASE / f'{invader_name}_vs_{safe_ess_name(ess)}_n{n}_seed{SEED}'
+            # Subdir name includes N and burn_in for easy comparison
+            sub = f'N{pop_size}_bi{burn_in}'
+            out_dir = OUT_BASE / sub / f'{invader_name}_vs_{safe_ess_name(ess)}_n{n}_seed{SEED}'
             out_path = out_dir / 'invasion.json'
             if out_path.exists():
                 # Skip if already done
@@ -194,9 +313,10 @@ def main():
                 continue
 
             t0 = time.time()
-            traj = run_invasion(ess, resident_count=N - n,
+            traj = run_invasion(ess, resident_count=pop_size - n,
                                 invader_code=invader_code,
-                                invader_count=n, num_gens=NUM_GENS, seed=SEED)
+                                invader_count=n, num_gens=NUM_GENS, seed=SEED,
+                                population_size=pop_size, burn_in_gens=burn_in)
             elapsed = time.time() - t0
 
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -205,7 +325,9 @@ def main():
                     'target': ess,
                     'invader': invader_name,
                     'invader_count': n,
+                    'population_size': pop_size,
                     'num_gens': NUM_GENS,
+                    'burn_in_gens': burn_in,
                     'seed': SEED,
                     'trajectory': traj,
                     'elapsed_sec': elapsed,
@@ -213,7 +335,8 @@ def main():
 
             g0 = traj[0]['invader_freq']
             g_end = traj[-1]['invader_freq']
-            print(f'  [END] {ess} n={n}: g0={g0:.3f} -> g_end={g_end:.3f} ({elapsed:.1f}s)', flush=True)
+            g0_rep = traj[0]['mean_rep']
+            print(f'  [END] {ess} n={n}: g0={g0:.3f} g0_rep={g0_rep:.3f} -> g_end={g_end:.3f} ({elapsed:.1f}s)', flush=True)
             summary.append((ess, n, g_end, 'new'))
 
     elapsed_total = time.time() - t0_total
