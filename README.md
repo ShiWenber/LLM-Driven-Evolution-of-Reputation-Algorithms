@@ -244,7 +244,7 @@ full batch plan and trial-specific options.
 
 ---
 
-## Demo: current experimental results and interpretation
+## Demo
 
 This section is a compact, presentation-ready summary of the current experimental
 results. The key idea is that the LLM-generated strategies do not behave like a
@@ -335,5 +335,73 @@ Taken together, the figures support the following narrative:
 This is exactly the kind of result a demo section should emphasize: the figures show not
 only whether cooperation emerges, but also whether the emergence is stable, reproducible,
 and comparable to known theoretical mechanisms.
+
+To make the experimental story concrete, the same narrative can be read directly from the
+embedded figures below. They are intentionally placed within the Demo section so the reader
+sees the result progression as a single argument: first the overall dynamics, then the v2-v3
+comparison, and finally the structural view of how the strategy population moves in embedding
+space.
+
+![Evolution curves](README.assets/evolution_curves.png)
+
+Figure: baseline vs. production cooperation trajectories. The blue curve reflects the stable
+reference behavior, while the red curves show three independent LLM-evolved seeds. The spread
+is the point: some seeds converge cleanly, some fluctuate, and some collapse, which is exactly
+what we want to highlight in a genuine evolutionary story rather than a single smooth mean.
+
+![LLM-only comparison](README.assets/llm_only.png)
+
+Figure: v2 vs. v3 comparison for the LLM-only runs. The corrected implementation changes the
+landscape materially: the updated system reveals a more bimodal outcome, with some seeds
+improving sharply while others settle into a low-cooperation basin. This is not a simple
+"better or worse" story; it is a case where the implementation details directly shape the
+attractor structure.
+
+![Overview of strategies](README.assets/overview.png)
+
+Figure: canonical leading-eight norms versus the LLM trajectories over the same horizon. The
+classical strategies remain nearly perfectly stable, while the evolved LLM policies remain
+seed-sensitive and less reliable. This contrast makes the main scientific result clear: the LLM
+can discover cooperation, but it does not yet match the robustness of the classical norms.
+
+The next layer of evidence comes from the shared-code embedding plots, which show how the
+population rearranges itself over generations rather than only reporting the scalar cooperation
+rate. These are the visualizations that explain why the same overall task can lead to different
+attractors depending on seed and implementation details.
+
+![v3 cluster composition](README.assets/v3_3seed_shared_codeemb/seed0/plot_strategy_cluster_composition_per_generation.png)
+
+This stacked composition view shows that the v3 population is not drifting randomly; it forms
+coherent groups across generations. The emergence of persistent structure indicates that the
+LLM is not just mutating code at random, but is repeatedly converging toward a small set of
+stable behavioral archetypes.
+
+![v3 PCA trajectory](README.assets/v3_3seed_shared_codeemb/seed0/plot_strategy_pca_evolution.gif)
+
+The PCA animation makes that convergence concrete: the population moves through embedding space
+as a structured cloud and then settles into a much smaller region. In other words, the code is
+not merely changing superficially; it is reorganizing into recognizable cooperative patterns.
+
+For comparison, the v2 version of the same representation shows the older dynamics before the
+reputation bookkeeping fix. The cluster structure is less decisive and the latent motion is more
+diffuse, which is consistent with the observation that the earlier implementation masked the true
+attractor geometry.
+
+![v2 cluster composition](README.assets/v2_3seed_shared_codeemb/seed0/plot_strategy_cluster_composition_per_generation.png)
+
+![v2 PCA trajectory](README.assets/v2_3seed_shared_codeemb/seed0/plot_strategy_pca_evolution.gif)
+
+The short video below makes the same point in motion and is useful as a live demo asset during
+presentations or walkthroughs.
+
+<video controls width="960" poster="README.assets/overview.png">
+  <source src="README.assets/v3_3seed_shared_codeemb/seed0/plot_strategy_pca_evolution.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
+Taken together, the figures form one continuous narrative: the environment supports cooperation,
+the LLM can discover cooperative strategies, the corrected implementation changes the attractor
+structure, and the leading-eight norms remain the robustness benchmark. That is the core demo
+story this repository is meant to communicate.
 
 ---
