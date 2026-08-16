@@ -2,29 +2,52 @@
 
 ![LLM-evolved Evolution of Reputation Algorithms](README.assets/project_overall_architecture.png)
 
+![Visualization of LLM-evolved strategies](README.assets/visual_clustering_analysis_workflow-v4.png)
+
 ## Demo
+
+### PCA strategy-space evolution (seed 0)
+
+| `agent-type1` | `agent-type2` |
+| --- | --- |
+| ![agent-type1 seed0 PCA strategy evolution](README.assets/agent-type1_seed0_pca_evolution.gif) | ![agent-type2 seed0 PCA strategy evolution](README.assets/agent-type2_seed0_pca_evolution.gif) |
+
+The animations use each agent type's latest shared embedding, clustering, and
+PCA coordinates. Each frame shows how the seed-0 population moves through its
+strategy space over generations; colors identify the strategy clusters used in
+the composition plots below.
 
 A compact research showcase of how LLM-evolved strategies behave in reputation-driven cooperation games.
 
 The core result is that cooperation can emerge from LLM-generated strategies, but the outcome is strongly seed-dependent and sensitive to the implementation details of the reputation logic. Classical indirect-reciprocity norms remain more stable, while learned strategies are promising but less robust.
 
-### 1) Fresh six-run evolution curves
+### 1) Six-run comparison: agent-type1 vs. agent-type2
 
-![Evolution curves](README.assets/g100_3seed_1000inter.png)
+![Cooperation evolution comparison between agent-type1 and agent-type2](README.assets/g100_3seed_1000inter.png)
 
-This uses the newest six-run experiment curves rather than the older single-summary plot. The blue reference remains near the cooperative attractor, while the new production trajectories show stronger seed-to-seed variability and a clearer multi-basin pattern across the full run.
+The figure compares six matched runs: three seeds for `agent-type1` and three
+for `agent-type2`. Both panels use 100 generations, 1,000 target interactions
+per generation, a population of 16, and generation-level state reset. Thin
+lines show individual seeds, thick lines show the three-seed mean, and shaded
+bands show one standard deviation. This makes the higher initial cooperation
+of `agent-type2` and the seed-dependent outcomes of both agent types directly
+comparable.
 
-### 2) v2 vs. v3: different prompt structures, different search dynamics
+### 2) agent-type1 vs. agent-type2: different strategy interfaces
 
-![v2 prompt dynamics](README.assets/evolution_curves_v2_genreset.png)
+The two agent types solve the same reputation game but expose different strategy
+interfaces to the LLM:
 
-V2 uses a compact two-function prompt: the model writes an `evaluate(...)` function and a `decide(...)` function under a fully specified interface. The prompt is explicit about the game and the output contract, so the search space is narrower and more direct.
+| Agent type | Generated strategy | State and memory | Search space |
+| --- | --- | --- | --- |
+| `agent-type1` | Two functions: `evaluate(...)` and `decide(...)` | Limited to values passed through the fixed function interface | Narrower and more explicitly guided |
+| `agent-type2` | A complete `LLMAgent` class with `__init__`, `decide()`, and `observe(...)` | May maintain internal state and update it after interactions | Richer and less constrained |
 
-![v3 prompt dynamics](README.assets/evolution_curves_v3_genreset.png)
-
-V3 instead asks for a full `LLMAgent` class with `__init__`, `decide()`, and `observe(...)`. That interface gives the LLM more freedom over memory, state, and social reasoning, while also removing some of the explicit guidance present in the v2 prompt. The result is a qualitatively different evolutionary landscape: the same task now explores a richer and less constrained strategy space.
-
-The corrected v3 dynamics are not simply "better" in every seed. The earlier bug masked the real attractor geometry. After the fix, some seeds improve sharply while others fall into a low-cooperation basin, revealing a more bimodal and structure-rich outcome.
+This distinction matters when reading the results: differences between the two
+agent types reflect a change in the representation available to evolution, not
+just a new experiment revision. The corrected `agent-type2` dynamics are not
+uniformly better across seeds. Some seeds improve sharply, while others enter a
+low-cooperation basin, producing a more bimodal evolutionary landscape.
 
 ### 3) Compared against the leading-eight norms
 
@@ -32,33 +55,55 @@ The canonical leading-eight strategies stay near cooperation rate 1.0 across the
 
 ### 4) Population structure in embedding space
 
-![v3 cluster composition](README.assets/v3_3seed_shared_codeemb/seed0/plot_strategy_cluster_composition_per_generation.png)
+| `agent-type1` | `agent-type2` |
+| --- | --- |
+| ![agent-type1 seed0 strategy-cluster composition](README.assets/agent-type1_seed0_cluster_composition.png) | ![agent-type2 seed0 strategy-cluster composition](README.assets/agent-type2_seed0_cluster_composition.png) |
 
-The v3 population is not drifting randomly. It reorganizes into coherent groups as generations proceed, indicating that the LLM is converging toward a small set of stable behavioral archetypes.
-
-![v3 PCA trajectory](README.assets/v3_3seed_shared_codeemb/seed0/plot_strategy_pca_evolution.gif)
-
-The PCA animation shows the population moving through code space and then settling into a narrower region, which is strong evidence of meaningful evolutionary organization rather than uncontrolled mutation noise.
-
-![v2 cluster composition](README.assets/v2_3seed_shared_codeemb/seed0/plot_strategy_cluster_composition_per_generation.png)
-
-![v2 PCA trajectory](README.assets/v2_3seed_shared_codeemb/seed0/plot_strategy_pca_evolution.gif)
+Both panels show seed 0 from the latest shared-clustering analysis. The
+`agent-type1` population moves among a larger set of strategy families, whereas
+`agent-type2` rapidly becomes dominated by one of two broad families. Showing
+the same cluster-composition view side by side makes the agent type explicit
+without conflating their different strategy spaces.
 
 This is the core story of the project: the environment supports cooperation, the LLM can discover cooperative policies, the corrected implementation changes the attractor structure, and the classical norms remain the reliability benchmark.
 
-### 5) Survivor ancestry tree: where final winners come from
+### 5) Seed-0 survivor ancestry: agent-type1 vs. agent-type2
 
-![Survivor ancestry tree](README.assets/lineage_tree_seed0_survivors.png)
+| `agent-type1` | `agent-type2` |
+| --- | --- |
+| ![agent-type1 seed0 final-survivor ancestry tree](README.assets/agent-type1_seed0_survivor_tree.png) | ![agent-type2 seed0 final-survivor ancestry tree](README.assets/agent-type2_seed0_survivor_tree.png) |
 
-This refreshed tree (latest rerun) traces only the ancestry paths of final surviving lineages in the seed-0 gen-reset run. Final survivors are explicitly marked with triangles, making the end-state winners visually separable from internal and extinct branches.
+Both trees are freshly generated from the matched seed-0 gen-reset runs and
+show only ancestry paths leading to final survivors. Squares mark roots and
+triangles mark final survivors. The comparison exposes the different branching
+patterns produced by the fixed two-function interface and the stateful class
+interface.
 
-![Lineage survival intervals](README.assets/lineage_survival_seed0.png)
+### 6) Seed-0 lineage survival intervals
 
-The survival-interval view complements the tree by showing when each collapsed lineage was active. Together, the two figures indicate that long-lived lineages and late-stage survivors are concentrated in a narrow behavioral region.
+| `agent-type1` | `agent-type2` |
+| --- | --- |
+| ![agent-type1 seed0 lineage survival intervals](README.assets/agent-type1_seed0_lineage_survival.png) | ![agent-type2 seed0 lineage survival intervals](README.assets/agent-type2_seed0_lineage_survival.png) |
 
-### 6) Best surviving strategy inside the dominant survivor family
+Each horizontal interval runs from a collapsed lineage's birth to its last
+appearance. Colors use the same automatic code-embedding analysis applied to
+each run: K=20 for `agent-type1` and K=2 for `agent-type2`.
 
-Using the same final population from `LLM_v2_fermi_z_v3_g100_1000inter_N16_genreset_seed0`, we select the most frequent surviving strategy family and then choose the highest-fitness individual inside that family. For this run, the selected winner is `agent 10` with fitness `19.0`.
+### 7) Representative final survivor from each dominant lineage family
+
+The selection rule is identical for both runs: group final agents by root
+lineage, choose the root family with the most final members, then choose the
+highest-fitness member of that family (breaking ties by agent ID).
+
+| Agent type | Dominant root lineage | Final members | Representative | Fitness | Behavioral summary |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `agent-type1` | 532 | 13/16 | agent 10 | 19.0 | Cooperates with non-negative-reputation opponents and uses own reputation to update assessments |
+| `agent-type2` | 11 | 13/16 | agent 1 | 26.0 | Maintains opponent histories, estimates conditional cooperation, and adapts trust, generosity, exploration, and risk tolerance |
+
+#### agent-type1 representative (complete strategy)
+
+Source: agent 10 in the
+[`agent-type1` seed-0 evolution record](results/quantitative_baseline/LLM_v2_fermi_z_v3_g100_1000inter_N16_genreset_seed0/evolutionary.json).
 
 ```python
 def evaluate(target_reputation: float, target_action: str, my_reputation: float) -> float:
@@ -81,11 +126,42 @@ def decide(my_reputation: float, opponent_reputation: float) -> bool:
   return my_reputation < 0.0
 ```
 
-Why this is a good social norm discovered by evolution:
+#### agent-type2 representative (decision core)
 
-- It is reputation-conditioned: cooperation is directed toward non-negative-reputation opponents, while low-reputation opponents are treated more cautiously.
-- It is reciprocity-preserving: cooperative actions are rewarded in `evaluate`, and harmful behavior is penalized, which stabilizes indirect reciprocity.
-- It is robust under selection pressure: this rule survives to the final generation and reaches top fitness within the dominant surviving family.
+The complete evolved class is stored as agent 1 in the
+[`agent-type2` seed-0 evolution record](results/quantitative_baseline/LLM_v3_fermi_z_v3_g100_1000inter_N16_genreset_seed0/evolutionary.json).
+Its `observe(...)` method maintains the histories and adaptive statistics
+consumed by the following abridged decision core:
+
+```python
+def decide(self) -> bool:
+    # Abridged for readability; see the linked evolution record for exact code.
+    opponent = self._ctx_opponent_id
+    if opponent is None:
+        return random.random() < 0.5
+
+    history = self.opponent_history.get(opponent, [])
+    if history:
+        observed_cooperation = sum(a == "cooperate" for a in history) / len(history)
+        self.trust = 0.7 * observed_cooperation + 0.3 * self.reputation
+    else:
+        self.trust = self.reputation
+
+    threshold = (
+        0.5 - self.generosity
+        + self.round_num * 0.001
+        + self.strategy_adjustment
+    )
+    if random.random() < self.exploration_rate:
+        return random.random() < 0.5
+    if self.trust > threshold:
+        return True
+    return random.random() < 0.2 * self.risk_tolerance
+```
+
+The contrast is structural as well as behavioral: `agent-type1` expresses a
+compact reputation rule, while `agent-type2` combines opponent modeling with
+persistent state and online adaptation.
 
 ---
 
@@ -127,7 +203,7 @@ The project dependencies and executable entry points are defined in
 │   ├── game/                # Quantitative reputation games
 │   ├── sandbox/             # Strategy validation and execution
 │   ├── tools/               # Re-run orchestration
-│   ├── run_fermi_v3.py      # CLI entry for the v3 Fermi evolution experiment
+│   ├── run_fermi_v3.py      # Legacy-named CLI for agent-type2 evolution
 │   └── v2_quantitative/     # Quantitative-assessment engine
 ├── results/                 # Experiment outputs and figures
 ├── PAPER_DRAFT.md
@@ -140,9 +216,14 @@ The Agent 2 invasion runner and dashboard are maintained under
 Analysis commands resolve project-relative result directories at runtime;
 paths can be overridden with explicit CLI options.
 
-The baseline-versus-production evolution plot is provided by
+The matched `agent-type1` versus `agent-type2` evolution plot is provided by
 `experiments.analysis.plot_evolution_curves` and writes PNG/PDF figures under
-`results/quantitative_baseline/plots/` by default.
+`results/quantitative_baseline/plots/` by default. To refresh the figure used
+at the top of this README, run:
+
+```powershell
+uv run plot-evolution-curves --output README.assets/g100_3seed_1000inter.png --no-pdf
+```
 
 ## Common commands
 
@@ -171,7 +252,7 @@ uv run make-figures --help
 # Plot lineage survival and final-survivor trees
 uv run plot-lineage --help
 
-# v3 Fermi-style LLM evolution experiment (see section below)
+# agent-type2 Fermi-style LLM evolution experiment (legacy module name; see below)
 uv run python -m experiments.run_fermi_v3 --help
 ```
 
@@ -241,10 +322,10 @@ every trajectory uses the `1000/800/200` interaction split, and that the four
 norms have matching population-frequency trajectories before producing the
 figure.
 
-## v3 Fermi-style LLM evolution experiment
+## agent-type2 Fermi-style LLM evolution experiment
 
-The entry point `experiments/run_fermi_v3.py` is a command-line launcher for
-the v3 (full `LLMAgent` class) population evolution with the Fermi imitation
+The entry point `experiments/run_fermi_v3.py` uses a legacy filename and is a
+command-line launcher for the `agent-type2` (full `LLMAgent` class) population evolution with the Fermi imitation
 selection scheme. It is a thin CLI wrapper over
 `experiments.v2_quantitative.population.V2EvolutionaryPopulation` and mirrors
 the production-run script `_run_fermi_3seed_100gen_v3.py` at the repo root.
@@ -284,7 +365,7 @@ Common options:
 | `--provider S` | `deepseek` | API provider for key/base-url lookup |
 | `--model S` | provider default | LLM model name |
 | `--llm-thinking` | off | Enable LLM thinking mode |
-| `--agent-type {v2,v3}` | `v3` | Agent family to evolve |
+| `--agent-type {v2,v3}` | `v3` | Legacy CLI values: `v2` selects `agent-type1`; `v3` selects `agent-type2` |
 | `--label S` | `LLM_v3_fermi_z_v3_g100_1000inter` | Output directory / summary label |
 | `--output-root PATH` | `results/quantitative_baseline` | Root for per-seed result folders |
 | `--dry-run` | off | Validate and print the seed plan without running |
