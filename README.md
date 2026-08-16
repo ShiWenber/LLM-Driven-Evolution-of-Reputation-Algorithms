@@ -4,19 +4,25 @@
 
 A compact research showcase of how LLM-evolved strategies behave in reputation-driven cooperation games.
 
-![Overall cooperation dynamics](README.assets/evolution_curves.png)
+![Overall cooperation dynamics](README.assets/g100_3seed_1000inter.png)
 
 The core result is that cooperation can emerge from LLM-generated strategies, but the outcome is strongly seed-dependent and sensitive to the implementation details of the reputation logic. Classical indirect-reciprocity norms remain more stable, while learned strategies are promising but less robust.
 
-### 1) Baseline vs. production evolution
+### 1) Fresh six-run evolution curves
 
-![Evolution curves](README.assets/evolution_curves.png)
+![Evolution curves](README.assets/g100_3seed_1000inter.png)
 
-The blue baseline remains near the high-cooperation regime, while the red production curves from three LLM seeds show much more variability. Some seeds rise toward cooperation, others oscillate, and some drift toward low-cooperation states. This means the search process can discover strong policies, but the final result is path-dependent rather than guaranteed.
+This uses the newest six-run experiment curves rather than the older single-summary plot. The blue reference remains near the cooperative attractor, while the new production trajectories show stronger seed-to-seed variability and a clearer multi-basin pattern across the full run.
 
-### 2) v2 vs. v3: the implementation fix changes the attractor structure
+### 2) v2 vs. v3: different prompt structures, different search dynamics
 
-![LLM-only comparison](README.assets/llm_only.png)
+![v2 prompt dynamics](README.assets/evolution_curves_v2_genreset.png)
+
+V2 uses a compact two-function prompt: the model writes an `evaluate(...)` function and a `decide(...)` function under a fully specified interface. The prompt is explicit about the game and the output contract, so the search space is narrower and more direct.
+
+![v3 prompt dynamics](README.assets/evolution_curves_v3_genreset.png)
+
+V3 instead asks for a full `LLMAgent` class with `__init__`, `decide()`, and `observe(...)`. That interface gives the LLM more freedom over memory, state, and social reasoning, while also removing some of the explicit guidance present in the v2 prompt. The result is a qualitatively different evolutionary landscape: the same task now explores a richer and less constrained strategy space.
 
 The corrected v3 dynamics are not simply "better" in every seed. The earlier bug masked the real attractor geometry. After the fix, some seeds improve sharply while others fall into a low-cooperation basin, revealing a more bimodal and structure-rich outcome.
 
