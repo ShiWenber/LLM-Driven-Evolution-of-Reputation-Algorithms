@@ -241,3 +241,99 @@ full batch plan and trial-specific options.
 - The package exposes `uv run` entry points for the main CLI, re-run tool,
   invasion runner, and invasion dashboard.
 - Paper drafts and supplementary artifacts remain under active development.
+
+---
+
+## Demo: current experimental results and interpretation
+
+This section is a compact, presentation-ready summary of the current experimental
+results. The key idea is that the LLM-generated strategies do not behave like a
+single fixed algorithm; instead, they evolve into a family of attractors whose
+stability depends strongly on the seed and on the implementation details of the
+reputation update logic.
+
+### 1) Baseline vs. production evolution
+
+The first figure compares the baseline trajectory with the production LLM-evolution
+runs:
+
+- [results/quantitative_baseline/plots/evolution_curves.png](results/quantitative_baseline/plots/evolution_curves.png)
+
+Interpretation:
+
+- The blue baseline curve remains relatively stable and stays near the high-cooperation
+  regime, indicating that the canonical rules and the controlled environment provide a
+  strong cooperative attractor.
+- The red production curves from the three LLM seeds are much noisier and more variable.
+  Some seeds drift upward, some oscillate, and some fall into lower-cooperation states.
+- The overall mean is still well above the low end of the spectrum, but the width of the
+  spread shows that LLM-evolved strategies are not uniformly stable: they can succeed,
+  fluctuate, or fail depending on the random seed and mutation path.
+
+This tells us that the evolutionary search is capable of discovering cooperative
+policies, but the final outcome is seeded and path-dependent rather than guaranteed.
+
+### 2) v2 vs. v3: the bug fix materially changes the outcome
+
+The second figure isolates the effect of the reputation-store and agent-identity fix:
+
+- [results/quantitative_baseline/plots/llm_only.png](results/quantitative_baseline/plots/llm_only.png)
+
+Interpretation:
+
+- For seed 0, the v3 curve rises strongly and ends near a full-cooperation regime,
+  while the earlier v2 version collapses to a much worse state. This is a large
+  qualitative improvement.
+- For seed 1, v3 is again better than v2 and remains in the cooperative neighborhood
+  for most of the run, although it still does not reach the perfect attractor.
+- For seed 2, the story flips: v2 is relatively better in the middle of the run, but
+  v3 ends in a sharp collapse to near zero cooperation. This is not a contradiction;
+  it shows that the fixed implementation makes the dynamics more sensitive to the
+  actual evolved strategy, exposing a much more decisive basin structure.
+
+In other words, the v3 fix does not simply "improve all runs." It removes hidden
+mechanical errors and exposes the underlying evolutionary structure: the LLM can
+strongly converge to good norms in some seeds, but it can also converge to a bad
+all-defection basin in others.
+
+### 3) LLM evolution versus the leading eight
+
+The third figure compares the LLM runs against the canonical leading-eight norms:
+
+- [results/quantitative_baseline/plots/overview.png](results/quantitative_baseline/plots/overview.png)
+
+Interpretation:
+
+- All eight leading-eight strategies stay at or near cooperation rate 1.0 across the full
+  horizon. Their behavior is highly stable and robust.
+- The LLM v3 trajectories are visibly less reliable: they eventually move toward the
+  cooperative basin, but with larger fluctuations and seed-dependent variance.
+- The result is not that the LLM is always worse; rather, it is that the LLM can match
+  the cooperative attractor in favorable seeds but cannot yet match the textbook baselines'
+  consistency and reliability across seeds.
+
+This is the central empirical message of the project:
+
+- the LLM is capable of generating reputation-evaluation algorithms that can move into
+  high-cooperation regimes,
+- but the exploration process remains stochastic and fragile,
+- and the resulting strategies are not yet as robust as classical indirect-reciprocity
+  norms under the same experimental conditions.
+
+### 4) Short takeaway
+
+Taken together, the figures support the following narrative:
+
+1. The environment is cooperative-friendly when the rules are well-formed.
+2. The LLM can discover strong cooperative policies, but only in a subset of evolutionary
+   trajectories.
+3. The v3 fix changes the observed dynamics substantially, revealing a more bimodal
+   structure: success in some seeds, collapse in others.
+4. The leading-eight baselines remain the reliability benchmark: they are stable
+   attractors, whereas learned LLM strategies are promising but less robust.
+
+This is exactly the kind of result a demo section should emphasize: the figures show not
+only whether cooperation emerges, but also whether the emergence is stable, reproducible,
+and comparable to known theoretical mechanisms.
+
+---
