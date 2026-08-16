@@ -5,7 +5,7 @@ and V2DonorGame.
 
 Supports two agent types:
   - `agent_type="v2"`: type-1 agents. The LLM emits two top-level
-    Python functions (`evaluate` + `decide`); the framework maintains a
+    Python functions (`observe` + `decide`); the framework maintains a
     scalar reputation matrix for them.
   - `agent_type="v3"`: type-2 agents. The LLM emits a full Python class
     named `LLMAgent` with `__init__(agent_id)`, `decide()`, and
@@ -60,23 +60,27 @@ from .baselines import get_baseline
 FALLBACK_STRATEGIES = [
     # Always cooperate
     '''
-def evaluate(target_reputation, target_action, my_reputation):
-    if target_action == 'cooperate':
-        new = target_reputation + 0.333
-    else:
-        new = target_reputation - 0.333
-    return max(-1.0, min(1.0, new))
+def observe(donor_reputation, donor_action, recipient_reputation, recipient_action, my_reputation):
+    def _upd(target_reputation, target_action):
+        if target_action == 'cooperate':
+            new = target_reputation + 0.333
+        else:
+            new = target_reputation - 0.333
+        return max(-1.0, min(1.0, new))
+    return _upd(donor_reputation, donor_action), _upd(recipient_reputation, recipient_action)
 def decide(my_reputation, opponent_reputation):
     return True
 ''',
     # Always defect
     '''
-def evaluate(target_reputation, target_action, my_reputation):
-    if target_action == 'cooperate':
-        new = target_reputation + 0.333
-    else:
-        new = target_reputation - 0.333
-    return max(-1.0, min(1.0, new))
+def observe(donor_reputation, donor_action, recipient_reputation, recipient_action, my_reputation):
+    def _upd(target_reputation, target_action):
+        if target_action == 'cooperate':
+            new = target_reputation + 0.333
+        else:
+            new = target_reputation - 0.333
+        return max(-1.0, min(1.0, new))
+    return _upd(donor_reputation, donor_action), _upd(recipient_reputation, recipient_action)
 def decide(my_reputation, opponent_reputation):
     return False
 ''',
@@ -205,7 +209,7 @@ class V2EvolutionaryPopulation:
         # the LLM is not used. If None, LLM evolution runs.
         # agent_type:
         #   "v2" (default) — type-1 agents. LLM emits two top-level
-        #       functions (`evaluate` + `decide`); framework maintains
+        #       functions (`observe` + `decide`); framework maintains
         #       a scalar `reputations` dict.
         #   "v3" — type-2 agents. LLM emits a full `LLMAgent` class
         #       with `__init__(agent_id)`, `decide()`, and
@@ -438,7 +442,7 @@ class V2EvolutionaryPopulation:
     def _validate_code(self, code: str) -> None:
         """Validate that `code` is acceptable for the current agent_type.
 
-        For v2: instantiates the V2StrategyExecutor (which loads evaluate
+        For v2: instantiates the V2StrategyExecutor (which loads observe
         and decide). For v3: instantiates the V3StrategyExecutor (which
         loads the LLMAgent class). Raises on any error.
         """

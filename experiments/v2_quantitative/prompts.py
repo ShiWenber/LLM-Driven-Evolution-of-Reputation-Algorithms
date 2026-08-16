@@ -1,7 +1,9 @@
 """Prompts for the v2 quantitative interface LLM evolution (2-player PD).
 
 The interface is:
-  evaluate(target_reputation, target_action, my_reputation) -> float
+    observe(donor_reputation, donor_action,
+                    recipient_reputation, recipient_action,
+                    my_reputation) -> tuple[float, float] | dict
   decide(my_reputation, opponent_reputation) -> bool
 
 The game is a 2-player simultaneous Prisoner's Dilemma. Each round,
@@ -24,10 +26,8 @@ to the partner at cost=1 to self) or 'defect' (no exchange). Payoffs:
   (D, D) -> each gets 0
 
 After each joint action, the framework records both actions and the
-agents' IDs. It then calls each observer's `evaluate` to update the
-observer's private rating of EACH player in the joint action (twice per
-joint action per observer: once for the donor, once for the
-recipient, using each player's own action as `target_action`).
+agents' IDs. It then calls each observer's `observe` ONCE to update the
+observer's private rating of BOTH players in that joint action.
 
 Your strategy consists of TWO functions. Define BOTH.
 
@@ -35,13 +35,15 @@ The interface is the leading-eight / quantitative-assessment style
 extended to symmetric 2-player PD:
 
 ```python
-def evaluate(
-    target_reputation: float,    # observer's current rating of the target being judged
-    target_action: str,           # target's last action: 'cooperate' or 'defect'
+def observe(
+    donor_reputation: float,      # observer's current rating of donor
+    donor_action: str,            # donor's last action: 'cooperate' or 'defect'
+    recipient_reputation: float,  # observer's current rating of recipient
+    recipient_action: str,        # recipient's last action: 'cooperate' or 'defect'
     my_reputation: float          # observer's own self-rating
-) -> float:
-    # Return the NEW target_reputation after observing target's action.
-    # Will be clamped to [-1.0, 1.0].
+) -> tuple[float, float]:
+    # Return (new_donor_reputation, new_recipient_reputation).
+    # Values will be clamped to [-1.0, 1.0].
     pass
 
 def decide(
@@ -54,13 +56,10 @@ def decide(
 
 Important rules:
   1. Both functions MUST be defined.
-  2. evaluate() is called twice per observed joint action: once for the
-     donor (with target_action=donor's action) and once for the
-     recipient (with target_action=recipient's action). The same
-     function handles both. There is no separate "self-evaluation"
-     function; if the observer is one of the two players in the joint
-     action, the framework calls evaluate() for the observer's own
-     rating update just like for any other target.
+  2. observe() is called once per observed joint action with BOTH
+      players. There is no separate "self-evaluation" function; if the
+      observer is one of the two players in the joint action, the
+      framework calls observe() the same way.
   3. Reputation is in [-1.0, 1.0]. Treat 0.0 as neutral.
   4. The functions will be called many times; keep them deterministic or
      near-deterministic (no random.random unless you really want it).
@@ -68,7 +67,7 @@ Important rules:
      available) and `random` (NOT recommended).
 
 Generate ONE strategy pair. Output ONLY the Python code, no prose,
-no markdown fences. The code must define `evaluate` and `decide`.
+no markdown fences. The code must define `observe` and `decide`.
 """
 
 
@@ -80,11 +79,13 @@ The interface is leading-eight / quantitative-assessment style
 extended to symmetric 2-player PD:
 
 ```python
-def evaluate(
-    target_reputation: float,
-    target_action: str,        # 'cooperate' or 'defect'
+def observe(
+    donor_reputation: float,
+    donor_action: str,         # 'cooperate' or 'defect'
+    recipient_reputation: float,
+    recipient_action: str,     # 'cooperate' or 'defect'
     my_reputation: float
-) -> float:
+) -> tuple[float, float]:
     pass
 
 def decide(
@@ -94,10 +95,8 @@ def decide(
     pass
 ```
 
-`evaluate` is called twice per observed joint action: once for the
-donor (target_action=donor's action) and once for the recipient
-(target_action=recipient's action). Use the same judging rule for
-both — there is no separate function for self vs others.
+`observe` is called once per observed joint action with donor and
+recipient together. Use one joint judging rule for both sides.
 
 The parent strategy to mutate is below.
 
@@ -272,14 +271,20 @@ markdown fences. The child must define exactly one class named
 # v2 quantitative interface is two free functions, not a class.
 SMUTATION_PROMPT_V2 = """You are mutating an existing strategy for a 2-player
 Prisoner's Dilemma game with reputation. The parent is two functions,
-`evaluate` and `decide`. Produce a child that is a SMALL variant of
+`observe` and `decide`. Produce a child that is a SMALL variant of
 the parent — adjust a single number or threshold, do NOT rewrite the
 logic. Output ONLY the Python code, no prose, no fences.
 
 Interface:
 
 ```python
-def evaluate(target_reputation: float, target_action: str, my_reputation: float) -> float:
+def observe(
+    donor_reputation: float,
+    donor_action: str,
+    recipient_reputation: float,
+    recipient_action: str,
+    my_reputation: float,
+) -> tuple[float, float]:
     pass
 
 def decide(my_reputation: float, opponent_reputation: float) -> bool:

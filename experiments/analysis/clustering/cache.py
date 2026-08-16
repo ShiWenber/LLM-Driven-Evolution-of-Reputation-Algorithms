@@ -94,6 +94,14 @@ class AnalysisCache:
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS leaf_names (
+                code_hash TEXT PRIMARY KEY,
+                leaf_name TEXT NOT NULL,
+                llm_model TEXT NOT NULL,
+                prompt_version INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS clustering_runs (
                 run_id TEXT PRIMARY KEY,
                 experiment_id TEXT NOT NULL,
@@ -295,6 +303,43 @@ class AnalysisCache:
                     json.dumps(request, ensure_ascii=False, sort_keys=True),
                     json.dumps(names, ensure_ascii=False, sort_keys=True), now,
                 ),
+            )
+
+    def get_leaf_names(
+        self, code_hashes: list[str]
+    ) -> dict[str, str]:
+        """Return cached LLM leaf names keyed by code hash."""
+        if not code_hashes or not self.path.exists():
+            return {}
+        found = {}
+        with self.connection() as connection:
+            for start in range(0, len(code_hashes), 500):
+                batch = code_hashes[start : start + 500]
+                marks = ",".join("?" for _ in batch)
+                rows = connection.execute(
+                    "SELECT code_hash, leaf_name FROM leaf_names "
+                    f"WHERE code_hash IN ({marks})",
+                    batch,
+                ).fetchall()
+                found.update({row[0]: row[1] for row in rows})
+        return found
+
+    def put_leaf_names(
+        self, *, llm_model: str, prompt_version: int,
+        names: dict[str, str],
+    ) -> None:
+        """Cache LLM names for strategy leaves (keyed by code hash)."""
+        if not names:
+            return
+        now = datetime.now(timezone.utc).isoformat()
+        rows = [
+            (digest, name, llm_model, prompt_version, now)
+            for digest, name in names.items()
+        ]
+        with self.connection() as connection:
+            connection.executemany(
+                "INSERT OR REPLACE INTO leaf_names VALUES (?, ?, ?, ?, ?)",
+                rows,
             )
 
     def put_clustering_run(

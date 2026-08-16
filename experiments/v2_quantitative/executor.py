@@ -1,18 +1,17 @@
 """Minimal executor for the v2 quantitative interface (2-player PD version).
 
 The v2 interface has two functions:
-  evaluate(target_reputation, target_action, my_reputation) -> float
+    observe(donor_reputation, donor_action,
+                    recipient_reputation, recipient_action,
+                    my_reputation) -> tuple[float, float] | dict
   decide(my_reputation, opponent_reputation) -> bool
 
 This module compiles the agent's Python source and exposes those two
-callables, with safety: only the two functions can be invoked, and the
-return values are clamped.
+callables, with safety: only the two functions can be invoked, and
+returned reputations are clamped.
 
-The 3-arg `evaluate` is the new (PD) shape. Each call updates the
-observer's view of a SINGLE target (the donor or the recipient in a
-joint action). The framework calls evaluate() twice per observed
-joint action (once for the donor, once for the recipient), using
-each player's own action as `target_action`.
+The 5-arg `observe` is the PD shape. Each call updates the observer's
+view of BOTH players in one joint action.
 """
 from __future__ import annotations
 import math
@@ -33,33 +32,52 @@ class V2StrategyExecutor:
             exec(self.code, ns)
         except Exception as e:
             raise ValueError(f"Failed to compile strategy code: {e}")
-        if "evaluate" not in ns or "decide" not in ns:
+        if "observe" not in ns or "decide" not in ns:
             raise ValueError(
-                "Strategy must define both evaluate(target_reputation, "
-                "target_action, my_reputation) and decide(my_reputation, "
+                "Strategy must define both observe(donor_reputation, "
+                "donor_action, recipient_reputation, recipient_action, "
+                "my_reputation) and decide(my_reputation, "
                 "opponent_reputation)"
             )
-        self._evaluate: Callable = ns["evaluate"]
+        self._observe: Callable = ns["observe"]
         self._decide: Callable = ns["decide"]
 
-    def evaluate(
+    def observe(
         self,
-        target_reputation: float,
-        target_action: str,
+        donor_reputation: float,
+        donor_action: str,
+        recipient_reputation: float,
+        recipient_action: str,
         my_reputation: float,
-    ) -> float:
-        """Return observer's new rating of `target` after seeing target's action."""
+    ) -> tuple[float, float]:
+        """Return observer's new ratings of (donor, recipient)."""
         try:
-            v = float(self._evaluate(
-                float(target_reputation),
-                str(target_action),
+            out = self._observe(
+                float(donor_reputation),
+                str(donor_action),
+                float(recipient_reputation),
+                str(recipient_action),
                 float(my_reputation),
-            ))
+            )
         except Exception:
-            v = float(target_reputation)
-        if v != v:  # NaN
-            v = 0.0
-        return max(-1.0, min(1.0, v))
+            out = (float(donor_reputation), float(recipient_reputation))
+
+        donor_v = float(donor_reputation)
+        recipient_v = float(recipient_reputation)
+        if isinstance(out, dict):
+            donor_v = float(out.get("donor_reputation", donor_v))
+            recipient_v = float(out.get("recipient_reputation", recipient_v))
+        elif isinstance(out, (tuple, list)) and len(out) >= 2:
+            donor_v = float(out[0])
+            recipient_v = float(out[1])
+
+        if donor_v != donor_v:  # NaN
+            donor_v = 0.0
+        if recipient_v != recipient_v:  # NaN
+            recipient_v = 0.0
+        donor_v = max(-1.0, min(1.0, donor_v))
+        recipient_v = max(-1.0, min(1.0, recipient_v))
+        return donor_v, recipient_v
 
     def decide(self, my_reputation: float, opponent_reputation: float) -> bool:
         try:

@@ -9,7 +9,7 @@
 Reusable pipeline logic (data loading, embedding/K-means/projection) lives in the
 ``clustering`` sub-package; this module only draws figures and exposes the CLI.
 
-K is auto-selected by silhouette (max over K in [2, 8]) unless an explicit
+K is auto-selected by silhouette (max over K in [2, 20]) unless an explicit
 ``--k`` is given.
 
 Usage:

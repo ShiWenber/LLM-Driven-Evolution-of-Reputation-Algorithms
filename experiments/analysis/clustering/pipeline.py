@@ -14,7 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
-from sklearn.cluster import KMeans
+from sklearn.cluster import AgglomerativeClustering, KMeans
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
 
@@ -28,15 +28,139 @@ from experiments.evolution_log import (
     F_PARENT_ID, F_PARENT_LINEAGE_ID, F_POPULATION,
 )
 
-from .cache import AnalysisCache, stable_hash
+from .cache import AnalysisCache, code_hash, stable_hash
 
 DEFAULT_CODE_EMBEDDING_MODEL = "Salesforce/SFR-Embedding-Code-400M_R"
 DEFAULT_CODE_EMBEDDING_REVISION = "cb950dc80d677c6fdc00f56c8ddd20ca2642c59e"
 CODE_EMBEDDING_MAX_TOKENS = 8192
 EMBEDDING_CACHE_VERSION = 1
 CLUSTER_NAMING_PROMPT_VERSION = 1
+LEAF_NAMING_PROMPT_VERSION = 1
 CODE_CHUNK_OVERLAP = 256
 CODE_AGGREGATION_VERSION = "full-code-token-weighted-v1"
+CLUSTERING_METHODS = ("kmeans", "hierarchical")
+
+
+class _HierarchicalClusterModel:
+    """KMeans-compatible adapter around :class:`AgglomerativeClustering`.
+
+    Agglomerative clustering exposes ``labels_``/``n_clusters`` but neither
+    ``cluster_centers_`` nor ``predict``. This wrapper derives per-cluster
+    centroids as the mean of their members and predicts by nearest centroid,
+    so downstream pipeline code (representative selection, shared-state
+    re-projection) works unchanged.
+
+    The full merge tree is preserved on ``children_`` / ``distances_``
+    (same semantics as sklearn's attributes) and can be converted to a
+    scipy linkage matrix via :meth:`linkage_matrix` for dendrograms.
+    """
+
+    def __init__(self, X, labels, n_clusters, *, children=None, distances=None):
+        self.labels_ = np.asarray(labels)
+        self.n_clusters = n_clusters
+        self._centers = np.vstack(
+            [X[self.labels_ == c].mean(axis=0) for c in range(n_clusters)]
+        )
+        self.children_ = None if children is None else np.asarray(children, dtype=int)
+        self.distances_ = None if distances is None else np.asarray(distances, dtype=float)
+
+    @property
+    def cluster_centers_(self):
+        return self._centers
+
+    def predict(self, X):
+        X = np.asarray(X)
+        if hasattr(X, "toarray"):
+            X = X.toarray()
+        distances = np.linalg.norm(
+            X[:, None, :] - self._centers[None, :, :], axis=2
+        )
+        return np.argmin(distances, axis=1)
+
+    def linkage_matrix(self) -> np.ndarray:
+        """Return a scipy-compatible linkage matrix from the merge tree.
+
+        sklearn's ``children_`` / ``distances_`` already use scipy's node
+        numbering (leaves 0..n-1, internal nodes n..2n-2), so the matrix is
+        ``[left, right, distance, member_count]`` per merge.
+        """
+        if self.children_ is None or self.distances_ is None:
+            raise RuntimeError(
+                "linkage_matrix() requires a hierarchical fit with the merge "
+                "tree retained; re-run fit_clusterer(method='hierarchical')"
+            )
+        n_samples = self.children_.shape[0] + 1
+        return _linkage_from_children(
+            self.children_, self.distances_, n_samples
+        )
+
+
+def _linkage_from_children(children, distances, n_samples: int) -> np.ndarray:
+    """Build a scipy linkage matrix from sklearn's merge tree arrays."""
+    from scipy.cluster.hierarchy import linkage as _validate  # noqa: F401
+
+    children = np.asarray(children, dtype=int)
+    distances = np.asarray(distances, dtype=float)
+    member_counts = np.ones(n_samples + len(children), dtype=int)
+    for i, (left, right) in enumerate(children):
+        member_counts[n_samples + i] = member_counts[left] + member_counts[right]
+    linkage = np.zeros((len(children), 4), dtype=float)
+    linkage[:, 0] = children[:, 0]
+    linkage[:, 1] = children[:, 1]
+    linkage[:, 2] = distances
+    linkage[:, 3] = member_counts[n_samples : n_samples + len(children)]
+    return linkage
+
+
+def _cut_tree(children, distances, n_samples: int, k: int) -> np.ndarray:
+    """Cut a full merge tree into exactly ``k`` flat clusters.
+
+    Reuses the scipy linkage matrix + ``fcluster(criterion="maxclust")``,
+    which is the canonical way to cut a dendrogram at a fixed cluster count.
+    """
+    if k <= 1:
+        return np.zeros(n_samples, dtype=int)
+    if k >= n_samples:
+        return np.arange(n_samples, dtype=int)
+    from scipy.cluster.hierarchy import fcluster
+
+    linkage = _linkage_from_children(children, distances, n_samples)
+    labels = fcluster(linkage, t=k, criterion="maxclust") - 1  # 1-based -> 0-based
+    return labels.astype(int)
+
+
+def fit_clusterer(X, k: int, seed: int, method: str = "kmeans"):
+    """Fit a partition into ``k`` clusters with the requested algorithm.
+
+    ``method`` is one of :data:`CLUSTERING_METHODS`. The returned object
+    always provides ``labels_``, ``n_clusters``, ``cluster_centers_`` and
+    ``predict`` so callers are agnostic to the underlying algorithm.
+    """
+    if method == "hierarchical":
+        # Build the full merge tree once (distance_threshold=0 keeps every
+        # merge), then cut it at the requested K. sklearn 1.9 only exposes
+        # ``distances_`` in distance_threshold mode, which is exactly the
+        # data a dendrogram needs.
+        model = AgglomerativeClustering(
+            n_clusters=None, linkage="ward", distance_threshold=0
+        )
+        model.fit(X)
+        labels = _cut_tree(
+            model.children_, model.distances_, X.shape[0], k
+        )
+        return _HierarchicalClusterModel(
+            X,
+            labels,
+            k,
+            children=model.children_,
+            distances=model.distances_,
+        )
+    if method != "kmeans":
+        raise ValueError(
+            f"unknown clustering method {method!r}; "
+            f"choose from {CLUSTERING_METHODS}"
+        )
+    return KMeans(n_clusters=k, n_init=20, random_state=seed).fit(X)
 
 
 def _resolve_embedding_device(device: str) -> str:
@@ -288,20 +412,19 @@ def project_embeddings(X, *, seed: int = 42):
     return reducer.transform(X), reducer, "PCA"
 
 
-def _choose_k(X, n_unique: int, seed: int) -> int:
+def _choose_k(X, n_unique: int, seed: int, method: str = "kmeans") -> int:
     if n_unique < 3:
         print(f"-> too few unique codes ({n_unique}); using K=1")
         return 1
 
     best_k, best_s = None, -1.0
-    # Search K over [2, min(30, n_unique-1)]. The old hard cap of 8
-    # systematically under-clustered these runs: with 200-390 unique
-    # strategies per experiment the silhouette peak sits at K≈12-20
-    # (e.g. v2 seed0: K=15 gives 0.54 vs K=8's 0.45), so the 8-cap
-    # was truncating the search at a clearly sub-optimal point.
-    max_k = min(30, n_unique - 1)
+    # Search K over [2, min(20, n_unique-1)]. The adaptive range is 2-20:
+    # experiments can carry 200-390 unique strategies, so a cap of 8
+    # systematically under-clustered (silhouette peak often sits at K≈12-20,
+    # e.g. v2 seed0: K=15 gives 0.54 vs K=8's 0.45).
+    max_k = min(20, n_unique - 1)
     for kk in range(2, max_k + 1):
-        km = KMeans(n_clusters=kk, n_init=20, random_state=seed).fit(X)
+        km = fit_clusterer(X, kk, seed, method)
         score = silhouette_score(X, km.labels_)
         print(f"  K={kk}: silhouette={score:.4f}")
         if score > best_s:
@@ -432,6 +555,112 @@ def summarize_cluster_names(
     return names
 
 
+def summarize_leaf_names(
+    codes: list[str],
+    *,
+    llm_model: str | None = None,
+    naming_cache: bool = True,
+    embedding_cache_path: str | Path | None = None,
+    refresh_cluster_names: bool = False,
+    batch_size: int = 20,
+    max_code_chars: int = 1200,
+) -> dict[str, str]:
+    """Ask the LLM for a concise behavioral label per unique strategy code.
+
+    Each leaf (unique strategy) is named individually so a dendrogram can show
+    *what each strategy is* instead of just a truncated first line. Codes are
+    submitted in small batches to stay within the LLM context window; results
+    are cached by code hash in the shared SQLite cache.
+
+    Returns ``{code_text: label}`` for every input code.
+    """
+    unique = sorted(set(codes))
+    cache = AnalysisCache(embedding_cache_path) if naming_cache else None
+    cache_hashes = cache.put_codes(unique) if cache else [
+        code_hash(code) for code in unique
+    ]
+    cached = cache.get_leaf_names(cache_hashes) if cache else {}
+
+    resolved_llm_model = get_model("deepseek", llm_model)
+    names: dict[str, str] = {}
+    missing = []
+    for digest, code in zip(cache_hashes, unique):
+        if digest in cached:
+            names[code] = cached[digest]
+        else:
+            missing.append(code)
+    print(f"  leaf naming: {len(names)} cached, "
+          f"{len(missing)} to name · model={resolved_llm_model}")
+
+    from openai import OpenAI
+
+    client = OpenAI(
+        api_key=require_api_key("deepseek"),
+        base_url=get_base_url("deepseek"),
+    )
+    for start in range(0, len(missing), batch_size):
+        batch = missing[start : start + batch_size]
+        section = "\n\n".join(
+            f"STRATEGY {i}:\n```python\n{code[:max_code_chars]}\n```"
+            for i, code in enumerate(batch)
+        )
+        response = client.chat.completions.create(
+            model=resolved_llm_model,
+            temperature=0,
+            response_format={"type": "json_object"},
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You name individual evolved game-strategy Python "
+                        "functions. Infer each strategy's core behavioral "
+                        "logic (how it updates reputation and when it "
+                        "cooperates), not surface syntax. Return only JSON "
+                        "with integer keys matching each STRATEGY index and "
+                        "concise English noun phrases of at most six words, "
+                        "e.g. "
+                        '{"0":"Conditional reputation cooperator",'
+                        '"1":"Fixed threshold defector"}.'
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": "Name every strategy below.\n\n" + section,
+                },
+            ],
+        )
+        content = response.choices[0].message.content
+        if not content:
+            raise RuntimeError("DeepSeek returned an empty leaf-name response")
+        payload = _extract_json_object(content)
+        raw = payload.get("strategies", payload)
+        if not isinstance(raw, dict):
+            raise RuntimeError("DeepSeek leaf-name response missing 'strategies'")
+        try:
+            batch_names = {
+                int(key): str(value).strip()
+                for key, value in raw.items()
+                if str(value).strip()
+            }
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError("DeepSeek returned non-integer leaf indices") from exc
+        if set(batch_names) != set(range(len(batch))):
+            raise RuntimeError(
+                f"DeepSeek must name every strategy in the batch; "
+                f"got indices {sorted(batch_names)} for {len(batch)} strategies"
+            )
+        for i, code in enumerate(batch):
+            names[code] = batch_names[i]
+        if cache:
+            cache.put_leaf_names(
+                llm_model=resolved_llm_model,
+                prompt_version=LEAF_NAMING_PROMPT_VERSION,
+                names={code_hash(code): batch_names[i]
+                       for i, code in enumerate(batch)},
+            )
+    return names
+
+
 def serialize_id_list(ids) -> str:
     """Render agent ids for an annotation: single id as-is, many ids as a list."""
     ids = sorted(ids)
@@ -453,12 +682,18 @@ def cluster_codes(
     embedding_cache_path: str | Path | None = None,
     llm_model: str | None = None,
     refresh_cluster_names: bool = False,
+    clustering_method: str = "kmeans",
+    name_leaves: bool = False,
     analysis_source_path: str | Path | None = None,
 ):
     """Deduplicate, embed, cluster, and name strategy code.
 
     Returns ``(X, labels, km, unique_codes, cluster_names)``. If ``k`` is not
-    supplied, silhouette score selects K from ``[2, min(30, n_unique - 1)]``.
+    supplied, silhouette score selects K from ``[2, min(20, n_unique - 1)]``.
+
+    With ``name_leaves=True`` each unique strategy code also receives an
+    LLM-generated behavioral label (stored on ``km.leaf_names``), which is
+    useful for hierarchical dendrogram leaves.
     """
     unique = sorted(set(codes))
     if analysis_source_path:
@@ -476,11 +711,11 @@ def cluster_codes(
         embedding_cache_path=embedding_cache_path,
     )
     if k is None:
-        k = _choose_k(X, len(unique), seed)
+        k = _choose_k(X, len(unique), seed, method=clustering_method)
     if not 1 <= k <= len(unique):
         raise ValueError(f"k must be between 1 and {len(unique)}, got {k}")
 
-    km = KMeans(n_clusters=k, n_init=20, random_state=seed).fit(X)
+    km = fit_clusterer(X, k, seed, clustering_method)
     names = summarize_cluster_names(
         X,
         km.labels_,
@@ -491,6 +726,15 @@ def cluster_codes(
         embedding_cache_path=embedding_cache_path,
         refresh_cluster_names=refresh_cluster_names,
     )
+    km.leaf_names = None
+    if name_leaves:
+        km.leaf_names = summarize_leaf_names(
+            unique,
+            llm_model=llm_model,
+            naming_cache=embedding_cache,
+            embedding_cache_path=embedding_cache_path,
+            refresh_cluster_names=refresh_cluster_names,
+        )
     run_id = None
     if analysis_source_path:
         run_id = AnalysisCache(embedding_cache_path).put_clustering_run(
@@ -520,6 +764,7 @@ def cluster_strategies(
     embedding_cache_path: str | Path | None = None,
     llm_model: str | None = None,
     refresh_cluster_names: bool = False,
+    clustering_method: str = "kmeans",
     analysis_source_path: str | Path | None = None,
     shared_state: dict | None = None,
 ) -> dict:
@@ -588,15 +833,15 @@ def cluster_strategies(
         Zu = reducer.transform(Xu)
     else:
         if k is None:
-            k = _choose_k(Xu, len(unique), seed)
+            k = _choose_k(Xu, len(unique), seed, method=clustering_method)
         if not 1 <= k <= len(unique):
             raise ValueError(f"k must be between 1 and {len(unique)}, got {k}")
 
         # Cluster and project on UNIQUE strategy codes only. Repeated code
         # occurrences are just abundance in the population; fitting on the
-        # full rows would let frequent strategies drag K-means centroids and
+        # full rows would let frequent strategies drag the centroids and
         # PCA axes toward themselves, corrupting the semantic structure.
-        km = KMeans(n_clusters=k, n_init=30, random_state=seed).fit(Xu)
+        km = fit_clusterer(Xu, k, seed, clustering_method)
         labels_u = km.labels_
         Zu, reducer, projection_label = project_embeddings(Xu, seed=seed)
 
@@ -639,7 +884,8 @@ def cluster_strategies(
             model_name=code_embedding_model,
             cluster_count=k, seed=seed,
             parameters={"scope": "all_generations", "requested_k": k,
-                        "projection": projection_label},
+                        "projection": projection_label,
+                        "clustering_method": clustering_method},
             cluster_names=cluster_names, assignments=assignments,
         )
 
@@ -661,6 +907,7 @@ def cluster_strategies(
         "all_codes": all_codes,
         "embedding_method": "code",
         "embedding_label": "Code embedding",
+        "clustering_method": clustering_method,
         "code_embedding_model": code_embedding_model,
         "projection_label": projection_label,
         "projection_explained_variance_ratio": reducer.explained_variance_ratio_,

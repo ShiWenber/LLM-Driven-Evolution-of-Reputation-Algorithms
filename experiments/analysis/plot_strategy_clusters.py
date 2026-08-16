@@ -63,6 +63,7 @@ def plot_clusters(
     embedding_cache_path: str | Path | None = None,
     llm_model: str | None = None,
     refresh_cluster_names: bool = False,
+    clustering_method: str = "kmeans",
     analysis_source_path: str | Path | None = None,
 ):
     """2-D projection scatter of the clustered unique codes.
@@ -83,6 +84,7 @@ def plot_clusters(
         embedding_cache_path=embedding_cache_path,
         llm_model=llm_model,
         refresh_cluster_names=refresh_cluster_names,
+        clustering_method=clustering_method,
         analysis_source_path=analysis_source_path,
     )
     Z, reducer, projection_label = project_embeddings(X, seed=seed)
@@ -123,7 +125,9 @@ def plot_clusters(
                   fontsize=10, color="#344054", labelpad=8)
     ax.set_title("Final-generation strategy landscape", loc="left", fontsize=16,
                  fontweight="semibold", color="#172033", pad=14)
-    ax.text(0, 1.01, f"Code embedding + K-means · {len(unique)} unique strategies · K = {n_clusters}",
+    method_label = "Ward hierarchical" if clustering_method == "hierarchical" else "K-means"
+    ax.text(0, 1.01,
+            f"Code embedding + {method_label} · {len(unique)} unique strategies · K = {n_clusters}",
             transform=ax.transAxes, fontsize=9.5, color="#667085", va="bottom")
     ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=8,
               frameon=False, title="Strategy clusters", title_fontsize=9)

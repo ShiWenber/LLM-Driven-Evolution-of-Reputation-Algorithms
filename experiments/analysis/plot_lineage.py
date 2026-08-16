@@ -30,12 +30,17 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from experiments.evolution_log import (
-    F_CODE, F_CONFIG_SCHEMA_VERSION, F_LINEAGE_ID, F_POPULATION,
-    K_FINAL_POPULATION, K_TRAJECTORY, load_evolution_json,
+    F_CODE,
+    F_CONFIG_SCHEMA_VERSION,
+    F_LINEAGE_ID,
+    F_POPULATION,
+    K_FINAL_POPULATION,
+    K_TRAJECTORY,
+    load_evolution_json,
 )
 
-from .clustering.cli_args import add_clustering_method_args, clustering_method_kwargs
 from .clustering.cache import AnalysisCache
+from .clustering.cli_args import add_clustering_method_args, clustering_method_kwargs
 from .clustering.pipeline import (
     DEFAULT_CODE_EMBEDDING_MODEL,
     DEFAULT_CODE_EMBEDDING_REVISION,
@@ -43,13 +48,36 @@ from .clustering.pipeline import (
 )
 from .lineage.build import build_lineage_tree
 
-# tab10 palette: one color per K-means cluster id (cluster ids are integers).
-_CMAP = plt.cm.tab10
+
+def _cluster_color_lookup(name_map: dict[int, str]) -> dict[int, tuple]:
+    """Build a stable cluster->color mapping based on cluster count.
+
+    - k <= 10: use a highly distinguishable discrete palette (tab10)
+    - k > 10: sample a continuous palette (turbo) so each cluster gets
+      a unique color across the full automatic K-selection range.
+    """
+    cluster_ids = sorted(name_map)
+    n = len(cluster_ids)
+    if n == 0:
+        return {}
+
+    if n <= 10:
+        cmap = plt.get_cmap("tab10", n)
+        return {cluster_id: cmap(i) for i, cluster_id in enumerate(cluster_ids)}
+
+    cmap = plt.get_cmap("turbo")
+    if n == 1:
+        return {cluster_ids[0]: cmap(0.5)}
+    return {
+        cluster_id: cmap(i / (n - 1))
+        for i, cluster_id in enumerate(cluster_ids)
+    }
 
 
 def _lineage_clusters(
     data: dict,
     *,
+    clustering_method: str = "kmeans",
     code_embedding_model: str = DEFAULT_CODE_EMBEDDING_MODEL,
     code_embedding_revision: str = DEFAULT_CODE_EMBEDDING_REVISION,
     embedding_device: str = "auto",
@@ -84,6 +112,7 @@ def _lineage_clusters(
     codes = list(code_of.values())
     _, labels, km, unique, names = cluster_codes(
         codes,
+        clustering_method=clustering_method,
         code_embedding_model=code_embedding_model,
         code_embedding_revision=code_embedding_revision,
         embedding_device=embedding_device,
@@ -102,6 +131,7 @@ def _lineage_clusters(
 def lineage_survival_plot(data: dict, out_path: Path, *, clusters=None):
     tree = build_lineage_tree(data)
     clus_by_lid, name_map, embedding_label = (clusters or _lineage_clusters(data))[:3]
+    color_map = _cluster_color_lookup(name_map)
     lineages = tree["lineages"]
 
     # order lineages by birth_gen, then root id
@@ -112,7 +142,7 @@ def lineage_survival_plot(data: dict, out_path: Path, *, clusters=None):
     for i, lin in enumerate(roots):
         y = i
         c = clus_by_lid.get(lin["root_lineage_id"], -1)
-        color = _CMAP(c) if c >= 0 else "#7f7f7f"
+        color = color_map.get(c, "#7f7f7f") if c >= 0 else "#7f7f7f"
         ax.hlines(y, lin["birth_gen"], lin["death_gen"], color=color, lw=3.5, alpha=0.85)
         # mark independent_init roots with a hollow marker
         if lin["origin"] == "independent_init":
@@ -133,7 +163,7 @@ def lineage_survival_plot(data: dict, out_path: Path, *, clusters=None):
 
     # legend for cluster colors
     handles = [
-        plt.Line2D([0], [0], color=_CMAP(c), lw=3,
+        plt.Line2D([0], [0], color=color_map.get(c, "#7f7f7f"), lw=3,
                    label=f"cluster {c}: {name_map.get(c, '')}")
         for c in sorted(name_map)
     ]
@@ -200,6 +230,7 @@ def lineage_backtrack_tree(
     """
     tree = build_lineage_tree(data)
     clus_by_lid, name_map, embedding_label = (clusters or _lineage_clusters(data))[:3]
+    color_map = _cluster_color_lookup(name_map)
     parent_of = {int(k): v for k, v in tree["parent_of"].items()}
 
     if survivors_only:
@@ -235,13 +266,13 @@ def lineage_backtrack_tree(
     for lid in nodes:
         x, y = pos[lid]
         c = clus_by_lid.get(lid, -1)
-        color = _CMAP(c) if c >= 0 else "#7f7f7f"
+        color = color_map.get(c, "#7f7f7f") if c >= 0 else "#7f7f7f"
         is_survivor = any(s["lineage_id"] == lid for s in tree["survivors"])
         is_root = parent_of.get(lid) is None
         if is_root:
             ax.plot(x, y, "s", ms=9, color=color, zorder=3)
         elif is_survivor:
-            ax.plot(x, y, "o", ms=9, color=color, mec="black", mew=0.8, zorder=3)
+            ax.plot(x, y, "^", ms=10, color=color, mec="black", mew=0.8, zorder=3)
         else:
             ax.plot(x, y, "o", ms=6, color=color, alpha=0.8, zorder=2)
 
@@ -251,13 +282,13 @@ def lineage_backtrack_tree(
     ax.set_yticks([])
 
     handles = [
-        plt.Line2D([0], [0], marker="o", ls="", color=_CMAP(c),
+        plt.Line2D([0], [0], marker="o", ls="", color=color_map.get(c, "#7f7f7f"),
                    label=f"cluster {c}: {name_map.get(c, '')}")
         for c in sorted(name_map)
     ]
     handles += [
         plt.Line2D([0], [0], marker="s", ls="", color="k", label="root"),
-        plt.Line2D([0], [0], marker="o", ls="", color="k", mec="k", mfc="none", label="final survivor"),
+        plt.Line2D([0], [0], marker="^", ls="", color="k", mec="k", mfc="none", label="final survivor"),
     ]
     ax.legend(handles=handles, fontsize=7, loc="upper right", ncol=2)
     fig.tight_layout()

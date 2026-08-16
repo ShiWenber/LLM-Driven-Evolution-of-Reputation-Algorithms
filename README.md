@@ -1,10 +1,10 @@
 # LLM-Driven Evolution of Reputation Algorithms
 
+![LLM-evolved Evolution of Reputation Algorithms](README.assets/project_overall_architecture.png)
+
 ## Demo
 
 A compact research showcase of how LLM-evolved strategies behave in reputation-driven cooperation games.
-
-![Overall cooperation dynamics](README.assets/g100_3seed_1000inter.png)
 
 The core result is that cooperation can emerge from LLM-generated strategies, but the outcome is strongly seed-dependent and sensitive to the implementation details of the reputation logic. Classical indirect-reciprocity norms remain more stable, while learned strategies are promising but less robust.
 
@@ -28,8 +28,6 @@ The corrected v3 dynamics are not simply "better" in every seed. The earlier bug
 
 ### 3) Compared against the leading-eight norms
 
-![Overview of strategies](README.assets/overview.png)
-
 The canonical leading-eight strategies stay near cooperation rate 1.0 across the full horizon. The LLM trajectories are less reliable and more variable, which makes the empirical message precise: learned systems can discover effective cooperation, but they do not yet match the robustness of classical indirect-reciprocity norms.
 
 ### 4) Population structure in embedding space
@@ -46,12 +44,48 @@ The PCA animation shows the population moving through code space and then settli
 
 ![v2 PCA trajectory](README.assets/v2_3seed_shared_codeemb/seed0/plot_strategy_pca_evolution.gif)
 
-<video controls width="960" poster="README.assets/overview.png">
-  <source src="README.assets/v3_3seed_shared_codeemb/seed0/plot_strategy_pca_evolution.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
-
 This is the core story of the project: the environment supports cooperation, the LLM can discover cooperative policies, the corrected implementation changes the attractor structure, and the classical norms remain the reliability benchmark.
+
+### 5) Survivor ancestry tree: where final winners come from
+
+![Survivor ancestry tree](README.assets/lineage_tree_seed0_survivors.png)
+
+This refreshed tree (latest rerun) traces only the ancestry paths of final surviving lineages in the seed-0 gen-reset run. Final survivors are explicitly marked with triangles, making the end-state winners visually separable from internal and extinct branches.
+
+![Lineage survival intervals](README.assets/lineage_survival_seed0.png)
+
+The survival-interval view complements the tree by showing when each collapsed lineage was active. Together, the two figures indicate that long-lived lineages and late-stage survivors are concentrated in a narrow behavioral region.
+
+### 6) Best surviving strategy inside the dominant survivor family
+
+Using the same final population from `LLM_v2_fermi_z_v3_g100_1000inter_N16_genreset_seed0`, we select the most frequent surviving strategy family and then choose the highest-fitness individual inside that family. For this run, the selected winner is `agent 10` with fitness `19.0`.
+
+```python
+def evaluate(target_reputation: float, target_action: str, my_reputation: float) -> float:
+  # Update based on target's action relative to observer's reputation
+  # If observer is cooperative (positive reputation), reward cooperation and punish defection
+  # If observer is selfish (negative reputation), reward defection and punish cooperation
+  if target_action == 'cooperate':
+    # Cooperation is good if observer is cooperative
+    return target_reputation + (my_reputation * 0.2)
+  else:  # defect
+    # Defection is bad if observer is cooperative
+    return target_reputation - (my_reputation * 0.2)
+
+def decide(my_reputation: float, opponent_reputation: float) -> bool:
+  # Cooperate if opponent is sufficiently cooperative relative to self
+  # Also cooperate if both are neutral or unknown
+  if opponent_reputation >= 0.0:
+    return True
+  # If opponent is untrustworthy, defect unless we are also untrustworthy (then mirror)
+  return my_reputation < 0.0
+```
+
+Why this is a good social norm discovered by evolution:
+
+- It is reputation-conditioned: cooperation is directed toward non-negative-reputation opponents, while low-reputation opponents are treated more cautiously.
+- It is reciprocity-preserving: cooperative actions are rewarded in `evaluate`, and harmful behavior is penalized, which stabilizes indirect reciprocity.
+- It is robust under selection pressure: this rule survives to the final generation and reaches top fitness within the dominant surviving family.
 
 ---
 

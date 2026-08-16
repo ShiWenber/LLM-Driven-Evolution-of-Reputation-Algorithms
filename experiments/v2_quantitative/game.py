@@ -16,8 +16,8 @@ Game model:
     rules (full / partial / private). For each observed joint action,
     the framework calls observer.observe_and_judge(donor_id, donor_action,
     recipient_id, recipient_action) on the observer. The agent's
-    observe_and_judge internally calls its evaluate() function twice
-    (once for each player in the joint action).
+    observe_and_judge internally calls its observe() function once
+    with both players in the joint action.
 
 Backward-compatible with the type1 QuantitativeAgent interface
 (choose / observe_and_judge / self_judge / record_donation / etc.).
@@ -130,7 +130,7 @@ class V2DonorGame:
             # `total - window` interactions count as burn-in).
             self._interaction_deltas.append(pair_delta)
             # Store actions as STRING so the strategy code can
-            # pattern-match on them in evaluate().
+            # pattern-match on them in observe().
             donor_action_str = "cooperate" if action1 else "defect"
             recipient_action_str = "cooperate" if action2 else "defect"
             interaction = {

@@ -2,12 +2,20 @@
 from __future__ import annotations
 
 from .pipeline import (
+    CLUSTERING_METHODS,
     DEFAULT_CODE_EMBEDDING_MODEL,
     DEFAULT_CODE_EMBEDDING_REVISION,
 )
 
 
 def add_clustering_method_args(parser) -> None:
+    parser.add_argument(
+        "--clustering-method",
+        choices=CLUSTERING_METHODS,
+        default="kmeans",
+        help="partitioning algorithm after embedding (default: kmeans; "
+             "hierarchical = Ward agglomerative)",
+    )
     parser.add_argument(
         "--code-embedding-model",
         default=DEFAULT_CODE_EMBEDDING_MODEL,
@@ -55,6 +63,7 @@ def add_clustering_method_args(parser) -> None:
 
 def clustering_method_kwargs(args) -> dict:
     return {
+        "clustering_method": args.clustering_method,
         "code_embedding_model": args.code_embedding_model,
         "code_embedding_revision": args.code_embedding_revision,
         "embedding_device": args.embedding_device,

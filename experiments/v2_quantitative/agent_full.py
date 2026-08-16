@@ -1,7 +1,7 @@
 """v2 quantitative interface — agent type 2: full Python class.
 
 Type 1 (QuantitativeAgent in agent.py) constrains the LLM to two functions
-(evaluate + decide) and forces it to use a private scalar `reputations`
+(observe + decide) and forces it to use a private scalar `reputations`
 matrix as the only state. This is fine for studying quantitative-assessment
 strategies, but it caps what the LLM can express: every strategy is a
 function `(reputation, action) -> reputation` plus a threshold rule.
