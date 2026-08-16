@@ -1,5 +1,56 @@
 # LLM-Driven Evolution of Reputation Algorithms
 
+## Demo
+
+A compact research showcase of how LLM-evolved strategies behave in reputation-driven cooperation games.
+
+![Overall cooperation dynamics](README.assets/evolution_curves.png)
+
+The core result is that cooperation can emerge from LLM-generated strategies, but the outcome is strongly seed-dependent and sensitive to the implementation details of the reputation logic. Classical indirect-reciprocity norms remain more stable, while learned strategies are promising but less robust.
+
+### 1) Baseline vs. production evolution
+
+![Evolution curves](README.assets/evolution_curves.png)
+
+The blue baseline remains near the high-cooperation regime, while the red production curves from three LLM seeds show much more variability. Some seeds rise toward cooperation, others oscillate, and some drift toward low-cooperation states. This means the search process can discover strong policies, but the final result is path-dependent rather than guaranteed.
+
+### 2) v2 vs. v3: the implementation fix changes the attractor structure
+
+![LLM-only comparison](README.assets/llm_only.png)
+
+The corrected v3 dynamics are not simply "better" in every seed. The earlier bug masked the real attractor geometry. After the fix, some seeds improve sharply while others fall into a low-cooperation basin, revealing a more bimodal and structure-rich outcome.
+
+### 3) Compared against the leading-eight norms
+
+![Overview of strategies](README.assets/overview.png)
+
+The canonical leading-eight strategies stay near cooperation rate 1.0 across the full horizon. The LLM trajectories are less reliable and more variable, which makes the empirical message precise: learned systems can discover effective cooperation, but they do not yet match the robustness of classical indirect-reciprocity norms.
+
+### 4) Population structure in embedding space
+
+![v3 cluster composition](README.assets/v3_3seed_shared_codeemb/seed0/plot_strategy_cluster_composition_per_generation.png)
+
+The v3 population is not drifting randomly. It reorganizes into coherent groups as generations proceed, indicating that the LLM is converging toward a small set of stable behavioral archetypes.
+
+![v3 PCA trajectory](README.assets/v3_3seed_shared_codeemb/seed0/plot_strategy_pca_evolution.gif)
+
+The PCA animation shows the population moving through code space and then settling into a narrower region, which is strong evidence of meaningful evolutionary organization rather than uncontrolled mutation noise.
+
+![v2 cluster composition](README.assets/v2_3seed_shared_codeemb/seed0/plot_strategy_cluster_composition_per_generation.png)
+
+![v2 PCA trajectory](README.assets/v2_3seed_shared_codeemb/seed0/plot_strategy_pca_evolution.gif)
+
+<video controls width="960" poster="README.assets/overview.png">
+  <source src="README.assets/v3_3seed_shared_codeemb/seed0/plot_strategy_pca_evolution.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
+This is the core story of the project: the environment supports cooperation, the LLM can discover cooperative policies, the corrected implementation changes the attractor structure, and the classical norms remain the reliability benchmark.
+
+---
+
+## Project overview
+
 This repository contains the experimental code and paper artifacts for
 studying cooperation in LLM-coded populations with private reputation stores,
 quantitative assessment, and controlled observability.
@@ -244,164 +295,3 @@ full batch plan and trial-specific options.
 
 ---
 
-## Demo
-
-This section is a compact, presentation-ready summary of the current experimental
-results. The key idea is that the LLM-generated strategies do not behave like a
-single fixed algorithm; instead, they evolve into a family of attractors whose
-stability depends strongly on the seed and on the implementation details of the
-reputation update logic.
-
-### 1) Baseline vs. production evolution
-
-The first figure compares the baseline trajectory with the production LLM-evolution
-runs:
-
-- [results/quantitative_baseline/plots/evolution_curves.png](results/quantitative_baseline/plots/evolution_curves.png)
-
-Interpretation:
-
-- The blue baseline curve remains relatively stable and stays near the high-cooperation
-  regime, indicating that the canonical rules and the controlled environment provide a
-  strong cooperative attractor.
-- The red production curves from the three LLM seeds are much noisier and more variable.
-  Some seeds drift upward, some oscillate, and some fall into lower-cooperation states.
-- The overall mean is still well above the low end of the spectrum, but the width of the
-  spread shows that LLM-evolved strategies are not uniformly stable: they can succeed,
-  fluctuate, or fail depending on the random seed and mutation path.
-
-This tells us that the evolutionary search is capable of discovering cooperative
-policies, but the final outcome is seeded and path-dependent rather than guaranteed.
-
-### 2) v2 vs. v3: the bug fix materially changes the outcome
-
-The second figure isolates the effect of the reputation-store and agent-identity fix:
-
-- [results/quantitative_baseline/plots/llm_only.png](results/quantitative_baseline/plots/llm_only.png)
-
-Interpretation:
-
-- For seed 0, the v3 curve rises strongly and ends near a full-cooperation regime,
-  while the earlier v2 version collapses to a much worse state. This is a large
-  qualitative improvement.
-- For seed 1, v3 is again better than v2 and remains in the cooperative neighborhood
-  for most of the run, although it still does not reach the perfect attractor.
-- For seed 2, the story flips: v2 is relatively better in the middle of the run, but
-  v3 ends in a sharp collapse to near zero cooperation. This is not a contradiction;
-  it shows that the fixed implementation makes the dynamics more sensitive to the
-  actual evolved strategy, exposing a much more decisive basin structure.
-
-In other words, the v3 fix does not simply "improve all runs." It removes hidden
-mechanical errors and exposes the underlying evolutionary structure: the LLM can
-strongly converge to good norms in some seeds, but it can also converge to a bad
-all-defection basin in others.
-
-### 3) LLM evolution versus the leading eight
-
-The third figure compares the LLM runs against the canonical leading-eight norms:
-
-- [results/quantitative_baseline/plots/overview.png](results/quantitative_baseline/plots/overview.png)
-
-Interpretation:
-
-- All eight leading-eight strategies stay at or near cooperation rate 1.0 across the full
-  horizon. Their behavior is highly stable and robust.
-- The LLM v3 trajectories are visibly less reliable: they eventually move toward the
-  cooperative basin, but with larger fluctuations and seed-dependent variance.
-- The result is not that the LLM is always worse; rather, it is that the LLM can match
-  the cooperative attractor in favorable seeds but cannot yet match the textbook baselines'
-  consistency and reliability across seeds.
-
-This is the central empirical message of the project:
-
-- the LLM is capable of generating reputation-evaluation algorithms that can move into
-  high-cooperation regimes,
-- but the exploration process remains stochastic and fragile,
-- and the resulting strategies are not yet as robust as classical indirect-reciprocity
-  norms under the same experimental conditions.
-
-### 4) Short takeaway
-
-Taken together, the figures support the following narrative:
-
-1. The environment is cooperative-friendly when the rules are well-formed.
-2. The LLM can discover strong cooperative policies, but only in a subset of evolutionary
-   trajectories.
-3. The v3 fix changes the observed dynamics substantially, revealing a more bimodal
-   structure: success in some seeds, collapse in others.
-4. The leading-eight baselines remain the reliability benchmark: they are stable
-   attractors, whereas learned LLM strategies are promising but less robust.
-
-This is exactly the kind of result a demo section should emphasize: the figures show not
-only whether cooperation emerges, but also whether the emergence is stable, reproducible,
-and comparable to known theoretical mechanisms.
-
-To make the experimental story concrete, the same narrative can be read directly from the
-embedded figures below. They are intentionally placed within the Demo section so the reader
-sees the result progression as a single argument: first the overall dynamics, then the v2-v3
-comparison, and finally the structural view of how the strategy population moves in embedding
-space.
-
-![Evolution curves](README.assets/evolution_curves.png)
-
-Figure: baseline vs. production cooperation trajectories. The blue curve reflects the stable
-reference behavior, while the red curves show three independent LLM-evolved seeds. The spread
-is the point: some seeds converge cleanly, some fluctuate, and some collapse, which is exactly
-what we want to highlight in a genuine evolutionary story rather than a single smooth mean.
-
-![LLM-only comparison](README.assets/llm_only.png)
-
-Figure: v2 vs. v3 comparison for the LLM-only runs. The corrected implementation changes the
-landscape materially: the updated system reveals a more bimodal outcome, with some seeds
-improving sharply while others settle into a low-cooperation basin. This is not a simple
-"better or worse" story; it is a case where the implementation details directly shape the
-attractor structure.
-
-![Overview of strategies](README.assets/overview.png)
-
-Figure: canonical leading-eight norms versus the LLM trajectories over the same horizon. The
-classical strategies remain nearly perfectly stable, while the evolved LLM policies remain
-seed-sensitive and less reliable. This contrast makes the main scientific result clear: the LLM
-can discover cooperation, but it does not yet match the robustness of the classical norms.
-
-The next layer of evidence comes from the shared-code embedding plots, which show how the
-population rearranges itself over generations rather than only reporting the scalar cooperation
-rate. These are the visualizations that explain why the same overall task can lead to different
-attractors depending on seed and implementation details.
-
-![v3 cluster composition](README.assets/v3_3seed_shared_codeemb/seed0/plot_strategy_cluster_composition_per_generation.png)
-
-This stacked composition view shows that the v3 population is not drifting randomly; it forms
-coherent groups across generations. The emergence of persistent structure indicates that the
-LLM is not just mutating code at random, but is repeatedly converging toward a small set of
-stable behavioral archetypes.
-
-![v3 PCA trajectory](README.assets/v3_3seed_shared_codeemb/seed0/plot_strategy_pca_evolution.gif)
-
-The PCA animation makes that convergence concrete: the population moves through embedding space
-as a structured cloud and then settles into a much smaller region. In other words, the code is
-not merely changing superficially; it is reorganizing into recognizable cooperative patterns.
-
-For comparison, the v2 version of the same representation shows the older dynamics before the
-reputation bookkeeping fix. The cluster structure is less decisive and the latent motion is more
-diffuse, which is consistent with the observation that the earlier implementation masked the true
-attractor geometry.
-
-![v2 cluster composition](README.assets/v2_3seed_shared_codeemb/seed0/plot_strategy_cluster_composition_per_generation.png)
-
-![v2 PCA trajectory](README.assets/v2_3seed_shared_codeemb/seed0/plot_strategy_pca_evolution.gif)
-
-The short video below makes the same point in motion and is useful as a live demo asset during
-presentations or walkthroughs.
-
-<video controls width="960" poster="README.assets/overview.png">
-  <source src="README.assets/v3_3seed_shared_codeemb/seed0/plot_strategy_pca_evolution.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
-
-Taken together, the figures form one continuous narrative: the environment supports cooperation,
-the LLM can discover cooperative strategies, the corrected implementation changes the attractor
-structure, and the leading-eight norms remain the robustness benchmark. That is the core demo
-story this repository is meant to communicate.
-
----
