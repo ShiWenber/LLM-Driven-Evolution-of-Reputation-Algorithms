@@ -18,29 +18,47 @@ import time
 import traceback
 from pathlib import Path
 
-sys.path.insert(0, r'C:\Users\shiwenbo\.minimax\agents\mavis\workspace\llm-reputation-paper\llm-reputation')
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
 from experiments.config.load_env import get_api_key, get_base_url
+from experiments.evolution_log import (
+    evolution_json_path, run_dir, write_evolution_json,
+)
 from experiments.v2_quantitative.population import V2EvolutionaryPopulation
 
-ROOT = Path(r'C:\Users\shiwenbo\.minimax\agents\mavis\workspace\llm-reputation-paper\llm-reputation')
 OUT_BASE = ROOT / 'results' / 'quantitative_baseline'
 
 api_key = get_api_key('deepseek')
 base_url = get_base_url('deepseek')
 
-LABEL = "LLM_v3_fermi_z_v3_g100_1000inter"
+# Agent type override via argv. Two calling conventions:
+#   python _run_fermi_3seed_100gen_v3.py            -> agent_type=v3, seeds=[0,1,2]
+#   python _run_fermi_3seed_100gen_v3.py 0          -> agent_type=v3, seeds=[0]
+#   python _run_fermi_3seed_100gen_v3.py v2         -> agent_type=v2, seeds=[0,1,2]
+#   python _run_fermi_3seed_100gen_v3.py 0 v2      -> agent_type=v2, seeds=[0]
+AGENT_TYPE = 'v3'
+if len(sys.argv) > 1 and sys.argv[1].lower() in ('v2', 'v3'):
+    AGENT_TYPE = sys.argv[1].lower()
+elif len(sys.argv) > 2:
+    t = sys.argv[2].lower()
+    if t in ('v2', 'v3'):
+        AGENT_TYPE = t
+    else:
+        raise SystemExit(f"unknown agent_type {sys.argv[2]!r}; use 'v2' or 'v3'")
+
+LABEL = f"LLM_{AGENT_TYPE}_fermi_z_v3_g100_1000inter_N16_genreset"
 
 # Accept seed override via argv: pass a single int to run only that seed.
-if len(sys.argv) > 1:
+if len(sys.argv) > 1 and sys.argv[1].lower() not in ('v2', 'v3'):
     seeds = [int(sys.argv[1])]
 else:
     seeds = [0, 1, 2]
 
 NUM_GENS = 100
 
-print(f"=== {LABEL} seeds={seeds} (sequential) ===", flush=True)
+print(f"=== {LABEL} seeds={seeds} (sequential) ==", flush=True)
 print(f"  api_key: {api_key[:8]}...{api_key[-4:]}", flush=True)
-print(f"  num_gens: {NUM_GENS}, target_interactions: 1000", flush=True)
+print(f"  num_gens: {NUM_GENS}, target_interactions: 1000, agent_type={AGENT_TYPE}", flush=True)
 print(f"  Z-like: mu=0.1, beta=5.0, updates_per_gen=15", flush=True)
 print(f"  prompts: v4 (truly minimal init + mutation)", flush=True)
 print(f"  estimated: ~5-7h/seed x {len(seeds)} seed(s)", flush=True)
@@ -50,9 +68,9 @@ summary = []
 overall_t0 = time.time()
 
 for seed in seeds:
-    seed_dir = OUT_BASE / f"{LABEL}_seed{seed}"
+    seed_dir = run_dir(OUT_BASE, LABEL, seed)
     seed_dir.mkdir(parents=True, exist_ok=True)
-    out_path = seed_dir / 'evolutionary.json'
+    out_path = evolution_json_path(OUT_BASE, LABEL, seed)
     if out_path.exists():
         out_path.unlink()
         print(f"  [seed {seed}] removed existing {out_path}", flush=True)
@@ -63,7 +81,7 @@ for seed in seeds:
 
     try:
         pop = V2EvolutionaryPopulation(
-            population_size=15,
+            population_size=16,
             target_interactions_per_gen=1000,
             benefit=2.0,
             cost=1.0,
@@ -79,7 +97,7 @@ for seed in seeds:
             seed=seed,
             results_dir=str(OUT_BASE),
             use_baseline=None,
-            agent_type='v3',
+            agent_type=AGENT_TYPE,
             llm_thinking=False,
             use_fermi=True,
             fermi_beta=5.0,
@@ -90,8 +108,7 @@ for seed in seeds:
         result = pop.run_evolution(num_generations=NUM_GENS)
         elapsed = time.time() - t0
 
-        with open(out_path, 'w') as f:
-            json.dump(result, f, indent=2)
+        write_evolution_json(out_path, result)
 
         last = result['trajectory'][-1]
         seed_summary.update({
@@ -108,7 +125,7 @@ for seed in seeds:
         print(f"  gen 0 coop: {seed_summary['gen0_coop']:.3f}", flush=True)
         print(f"  final coop: {seed_summary['final_coop']:.3f}", flush=True)
         print(f"  final fitness: {seed_summary['final_fitness']:.1f}", flush=True)
-        print(f"  FALLBACK: init={seed_summary['fallback_init']}/15, "
+        print(f"  FALLBACK: init={seed_summary['fallback_init']}/16, "
               f"mutation={seed_summary['fallback_mutation']}/{(NUM_GENS-1)*15}", flush=True)
     except Exception as e:
         elapsed = time.time() - t0
@@ -127,6 +144,7 @@ for seed in seeds:
     with open(summary_path, 'w') as f:
         json.dump({
             'label': LABEL,
+            'agent_type': AGENT_TYPE,
             'num_gens': NUM_GENS,
             'target_interactions_per_gen': 1000,
             'scheme': 'fermi_z_like (mu=0.1, beta=5.0, updates_per_gen=15)',

@@ -19,19 +19,35 @@ Type 2 baseline mode currently only supports ALLCClass and ALLDClass
 strategies). The 8 leading-eight rules live in type-1 land.
 """
 from __future__ import annotations
-import json
 import random
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from ..evolution_log import (
+    ORIGIN_INITIAL, ORIGIN_IMITATE, ORIGIN_INDEPENDENT_INIT, ORIGIN_MUTATE,
+    build_evolution_results, lineage_event, make_config, population_entry,
+    trajectory_entry,
+    F_BIRTH_GEN, F_ORIGIN, F_PARENT_ID, F_PARENT_LINEAGE_ID,
+    F_CONFIG_AGENT_TYPE, F_CONFIG_BENEFIT, F_CONFIG_COST,
+    F_CONFIG_ELITE_COUNT, F_CONFIG_FALLBACK_INIT_COUNT,
+    F_CONFIG_FALLBACK_MUTATION_COUNT, F_CONFIG_FERMI_BETA,
+    F_CONFIG_FORBID_SELF_PAIRING, F_CONFIG_LLM_MAX_TOKENS,
+    F_CONFIG_LLM_MODEL, F_CONFIG_LLM_THINKING,
+    F_CONFIG_MUTATION_RATE_ON_ADOPTION, F_CONFIG_NUM_ELIMINATE,
+    F_CONFIG_NUM_GENERATIONS, F_CONFIG_NUM_ROUNDS_PER_GEN,
+    F_CONFIG_OBSERVABILITY, F_CONFIG_OBSERVABILITY_P,
+    F_CONFIG_POPULATION_SIZE, F_CONFIG_SEED,
+    F_CONFIG_TARGET_INTERACTIONS_PER_GEN, F_CONFIG_TOURNAMENT_SIZE,
+    F_CONFIG_UPDATES_PER_GEN, F_CONFIG_USE_BASELINE, F_CONFIG_USE_FERMI,
+)
 from .agent import QuantitativeAgent
-from .executor import V2StrategyExecutor
 from .agent_full import (
     FullAgent, V3StrategyExecutor,
     ALLCClass, ALLDClass,
     ALLC_CLASS_SOURCE, ALLD_CLASS_SOURCE,
 )
+from .executor import V2StrategyExecutor
 from .game import V2DonorGame
 from .prompts import (
     INIT_PROMPT_V2, MUTATION_PROMPT_V2, SMUTATION_PROMPT_V2,
@@ -73,7 +89,7 @@ def decide(my_reputation, opponent_reputation):
 # Why this matters: when the LLM init silently fails (content='',
 # reasoning_content consumed all max_tokens, etc.), every init
 # attempt returns the FALLBACK. With the old `return True`, the
-# whole population starts as 15/15 perfect cooperators -> 1.000
+# whole population starts as 16/16 perfect cooperators -> 1.000
 # cooperation in gen 0 -> selection has nothing to amplify, and
 # downstream metrics look deceptively good. With neutral FALLBACK,
 # a heavy-FALLBACK run sits at ~0.5 cooperation, which is a clear
@@ -85,7 +101,7 @@ class LLMAgent:
         self.agent_id = agent_id
         self._ctx_opponent_id = None
         # Deterministic per-agent RNG, seeded by agent_id. Each
-        # instance gets its own stream so a population of 15
+        # instance gets its own stream so a population of 16
         # FALLBACKs averages to ~0.5, not 1.0 or 0.0.
         self._rng = _rnd.Random(agent_id * 7919 + 42)
 
@@ -118,16 +134,16 @@ class V2EvolutionaryPopulation:
 
     def __init__(
         self,
-        population_size: int = 15,
+        population_size: int = 16,
         num_rounds_per_gen: int = 30,
         # target_interactions_per_gen: if set (and > 0), overrides
         # num_rounds_per_gen at construction time so the caller can
         # think in terms of total PD games per gen rather than
         # rounds. Computed as ceil(target / (population_size // 2));
-        # with N=15 we get 7 pairs per round, so target=1000 ->
-        # 143 rounds = 1001 games. The LLM call count is governed
+        # with N=16 we get 8 pairs per round, so target=1000 ->
+        # 125 rounds = 1000 games. The LLM call count is governed
         # separately by num_eliminate (5/gen) and does NOT scale
-        # with rounds, so going from 30 -> 143 rounds is ~4.77x
+        # with rounds, so going from 30 -> 125 rounds is ~4.17x
         # more game time but the same ~5 LLM calls per gen.
         target_interactions_per_gen: Optional[int] = None,
         # fitness_window_interactions: if set, only the LAST
@@ -164,7 +180,7 @@ class V2EvolutionaryPopulation:
         # (no LLM call). Synchronous commit: all updates are decided
         # from the old generation's fitness, then written in one shot.
         #
-        # Coverage math (N=15, 1001 inter/gen, updates_per_gen=N=15):
+        # Coverage math (N=16, 1000 inter/gen, updates_per_gen=15):
         #   Fermi events per gen  = 15
         #   Mutations per gen      = 15 * 0.1 = 1.5
         #   Fermi:mutation ratio   = 10:1 (drift-dominated)
@@ -211,7 +227,7 @@ class V2EvolutionaryPopulation:
             raise ValueError(f"agent_type must be 'v2' or 'v3', got {agent_type!r}")
         self.population_size = population_size
         # If caller asked for a target interaction count, derive the
-        # round count from it. With N=15 we get 7 pairs/round; with
+        # round count from it. With N=16 we get 8 pairs/round; with
         # N=20 we get 10 pairs/round. The result is rounded UP so we
         # hit the target (slightly over is fine; missing it by
         # hundreds would be a measurement bug).
@@ -280,6 +296,21 @@ class V2EvolutionaryPopulation:
         # can flag runs where the LLM is misbehaving heavily.
         self._fallback_init_count: int = 0
         self._fallback_mutation_count: int = 0
+        # --- Lineage tracking (recorded directly, no post-hoc inference) ---
+        # Each birth event (gen-0 init, Fermi imitation, independent μ-init,
+        # or tournament mutation) is assigned a fresh, never-reused
+        # `lineage_id`. A lineage persists as long as some slot keeps
+        # carrying (or imitating) it. Because the Fermi path re-instantiates
+        # the occupant object each update while PRESERVING its slot id, we
+        # keep lineage state keyed by agent_id (= slot id in Fermi mode) on
+        # the population manager, NOT on the agent object (which is rebuilt).
+        self._next_lineage_id: int = 0
+        # agent_id -> lineage_id of the slot's current occupant
+        self._slot_lineage: Dict[int, int] = {}
+        # agent_id -> birth record of the slot's current occupant
+        self._slot_birth: Dict[int, Dict] = {}
+        # global birth-event log (full phylogeny, incl. extinct lineages)
+        self._lineage_events: List[Dict] = []
         # Echo the effective interaction count so callers can verify
         # the override took effect (and so log analysis can grep for
         # it).
@@ -292,6 +323,47 @@ class V2EvolutionaryPopulation:
                 f"{self.num_rounds_per_gen} -> {actual} games/gen "
                 f"(N={population_size}, pairs={pairs_per_round})"
             )
+
+    def _new_lineage(
+        self,
+        slot_id: int,
+        parent_slot_id: Optional[int],
+        parent_lineage_id: Optional[int],
+        origin: str,
+        birth_gen: int,
+    ) -> int:
+        """Record one birth event and assign a fresh lineage_id.
+
+        `origin` is one of:
+          * "initial"          — gen-0 initialization (root, no parent)
+          * "imitate"          — Fermi 1-μ path: small LLM mutation of a
+                                 role model (parent = role model slot)
+          * "independent_init" — Fermi μ path: fresh LLM init, no parent
+          * "mutate"           — legacy tournament path: mutated copy of a
+                                 survivor (parent = survivor slot)
+        """
+        lid = self._next_lineage_id
+        self._next_lineage_id += 1
+        rec = lineage_event(
+            lineage_id=lid,
+            parent_lineage_id=parent_lineage_id,
+            parent_id=parent_slot_id,
+            origin=origin,
+            birth_gen=birth_gen,
+        )
+        self._slot_lineage[slot_id] = lid
+        self._slot_birth[slot_id] = rec
+        self._lineage_events.append(rec)
+        return lid
+
+    def _init_lineage(self) -> None:
+        """Reset lineage state and register each initial agent as a root."""
+        self._next_lineage_id = 0
+        self._slot_lineage = {}
+        self._slot_birth = {}
+        self._lineage_events = []
+        for a in self.agents:
+            self._new_lineage(a.agent_id, None, None, ORIGIN_INITIAL, 0)
 
     def _get_llm_client(self):
         if self._llm_client is not None:
@@ -339,6 +411,29 @@ class V2EvolutionaryPopulation:
         aid = self._next_agent_id
         self._next_agent_id += 1
         return self._make_agent(code, aid)
+
+    def _agent_record(self, a) -> Dict:
+        """Build one schema-compliant population record for agent `a`.
+
+        Works identically for v2 (QuantitativeAgent) and v3 (FullAgent)
+        because both expose `agent_id` / `code` / `fitness` /
+        `cooperation_rate` / `get_self_reputation()`. Lineage fields come
+        from the population manager's slot bookkeeping, so the record is
+        uniform across both agent types.
+        """
+        birth = self._slot_birth.get(a.agent_id, {})
+        return population_entry(
+            agent_id=a.agent_id,
+            code=a.code,
+            fitness=a.fitness,
+            cooperation_rate=a.cooperation_rate,
+            self_reputation=a.get_self_reputation(),
+            lineage_id=self._slot_lineage.get(a.agent_id),
+            parent_id=birth.get(F_PARENT_ID),
+            parent_lineage_id=birth.get(F_PARENT_LINEAGE_ID),
+            origin=birth.get(F_ORIGIN),
+            birth_gen=birth.get(F_BIRTH_GEN),
+        )
 
     def _validate_code(self, code: str) -> None:
         """Validate that `code` is acceptable for the current agent_type.
@@ -573,8 +668,9 @@ class V2EvolutionaryPopulation:
             self._init_population_baseline()
         else:
             self._init_population_llm()
+        # Register the gen-0 population as root lineages.
+        self._init_lineage()
         trajectory: List[Dict] = []
-        final_population: List[Dict] = []
         # Generation 0: just initialize; we record initial stats by running
         # one generation with the initial population (no selection/mutation yet)
         for gen in range(num_generations):
@@ -583,39 +679,24 @@ class V2EvolutionaryPopulation:
             # Update fitness on agents
             for i, a in enumerate(self.agents):
                 a.fitness = stats["payoffs"][i] if i < len(stats["payoffs"]) else 0.0
-            trajectory.append({
-                "generation": gen,
-                "cooperation_rate_mean": stats["cooperation_rate_mean"],
-                "n_interactions": stats["n_interactions"],
-                "fitness_mean": sum(stats["payoffs"]) / max(1, len(stats["payoffs"])),
-                "fitness_max": max(stats["payoffs"]) if stats["payoffs"] else 0.0,
-                "population": [
-                    {
-                        "agent_id": a.agent_id,
-                        "code": a.code,
-                        "fitness": a.fitness,
-                        "cooperation_rate": a.cooperation_rate,
-                        "self_reputation": a.get_self_reputation(),
-                    } for a in self.agents
-                ],
-            })
+            trajectory.append(trajectory_entry(
+                generation=gen,
+                cooperation_rate_mean=stats["cooperation_rate_mean"],
+                n_interactions=stats["n_interactions"],
+                fitness_mean=sum(stats["payoffs"]) / max(1, len(stats["payoffs"])),
+                fitness_max=max(stats["payoffs"]) if stats["payoffs"] else 0.0,
+                population=[self._agent_record(a) for a in self.agents],
+            ))
             print(f"  Gen {gen}: coop={stats['cooperation_rate_mean']:.3f}, "
                   f"fitness_mean={sum(stats['payoffs'])/max(1,len(stats['payoffs'])):.1f}")
             # Selection + mutation (only for LLM mode)
             if not self.use_baseline and gen < num_generations - 1:
                 if self.use_fermi:
-                    self._select_and_reproduce_fermi()
+                    self._select_and_reproduce_fermi(next_gen=gen + 1)
                 else:
-                    self._select_and_reproduce()
+                    self._select_and_reproduce(next_gen=gen + 1)
         # Build final population
-        for a in self.agents:
-            final_population.append({
-                "agent_id": a.agent_id,
-                "code": a.code,
-                "fitness": a.fitness,
-                "cooperation_rate": a.cooperation_rate,
-                "self_reputation": a.get_self_reputation(),
-            })
+        final_population = [self._agent_record(a) for a in self.agents]
         # FALLBACK diagnostics (Fix E). Print init and mutation
         # FALLBACK ratios so reviewers can judge run reliability.
         # Init ratio >30% usually means the LLM init is broken
@@ -648,40 +729,50 @@ class V2EvolutionaryPopulation:
                 f"— LLM init is likely broken; run "
                 f"results are NOT reliable."
             )
-        return {
-            "trajectory": trajectory,
-            "final_population": final_population,
-            "config": {
-                "schema_version": 3,
-                "agent_type": self.agent_type,
-                "population_size": self.population_size,
-                "num_rounds_per_gen": self.num_rounds_per_gen,
-                "benefit": self.benefit,
-                "cost": self.cost,
-                "observability": self.observability,
-                "observability_p": self.observability_p,
-                "elite_count": self.elite_count,
-                "num_eliminate": self.num_eliminate,
-                "tournament_size": self.tournament_size,
-                "llm_model": self.llm_model,
-                "seed": self.seed,
-                "use_baseline": self.use_baseline,
-                "num_generations": num_generations,
-                "num_rounds_per_gen": self.num_rounds_per_gen,
-                "target_interactions_per_gen": self.target_interactions_per_gen,
-                "llm_thinking": self.llm_thinking,
-                "llm_max_tokens": self._llm_max_tokens,
-                "use_fermi": self.use_fermi,
-                "fermi_beta": self.fermi_beta,
-                "mutation_rate_on_adoption": self.mutation_rate_on_adoption,
-                "updates_per_gen": self.updates_per_gen,
-                "forbid_self_pairing": self.forbid_self_pairing,
-                "fallback_init_count": self._fallback_init_count,
-                "fallback_mutation_count": self._fallback_mutation_count,
-            },
-        }
+        return build_evolution_results(
+            trajectory=trajectory,
+            final_population=final_population,
+            # Full birth-event log: the complete phylogeny (roots + every
+            # imitation / independent-init / mutation birth, including
+            # lineages that later went extinct). Together with the
+            # per-agent lineage_id/parent_id fields this lets the
+            # evolutionary tree be built directly, with no code-similarity
+            # inference.
+            lineage_events=self._lineage_events,
+            config=make_config(
+                **{
+                    F_CONFIG_AGENT_TYPE: self.agent_type,
+                    F_CONFIG_POPULATION_SIZE: self.population_size,
+                    F_CONFIG_NUM_ROUNDS_PER_GEN: self.num_rounds_per_gen,
+                    F_CONFIG_BENEFIT: self.benefit,
+                    F_CONFIG_COST: self.cost,
+                    F_CONFIG_OBSERVABILITY: self.observability,
+                    F_CONFIG_OBSERVABILITY_P: self.observability_p,
+                    F_CONFIG_ELITE_COUNT: self.elite_count,
+                    F_CONFIG_NUM_ELIMINATE: self.num_eliminate,
+                    F_CONFIG_TOURNAMENT_SIZE: self.tournament_size,
+                    F_CONFIG_LLM_MODEL: self.llm_model,
+                    F_CONFIG_SEED: self.seed,
+                    F_CONFIG_USE_BASELINE: self.use_baseline,
+                    F_CONFIG_NUM_GENERATIONS: num_generations,
+                    F_CONFIG_TARGET_INTERACTIONS_PER_GEN:
+                        self.target_interactions_per_gen,
+                    F_CONFIG_LLM_THINKING: self.llm_thinking,
+                    F_CONFIG_LLM_MAX_TOKENS: self._llm_max_tokens,
+                    F_CONFIG_USE_FERMI: self.use_fermi,
+                    F_CONFIG_FERMI_BETA: self.fermi_beta,
+                    F_CONFIG_MUTATION_RATE_ON_ADOPTION:
+                        self.mutation_rate_on_adoption,
+                    F_CONFIG_UPDATES_PER_GEN: self.updates_per_gen,
+                    F_CONFIG_FORBID_SELF_PAIRING: self.forbid_self_pairing,
+                    F_CONFIG_FALLBACK_INIT_COUNT: self._fallback_init_count,
+                    F_CONFIG_FALLBACK_MUTATION_COUNT:
+                        self._fallback_mutation_count,
+                }
+            ),
+        )
 
-    def _select_and_reproduce(self):
+    def _select_and_reproduce(self, next_gen: Optional[int] = None):
         """Tournament + elite selection; replace num_eliminate worst with mutated
         copies of the survivors."""
         N = len(self.agents)
@@ -707,12 +798,32 @@ class V2EvolutionaryPopulation:
         )[:n_needed]
         # Population turnover: keep n_needed survivors, replace the rest with
         # mutated copies that get a fresh, never-reused agent_id.
-        new_agents = list(survivors[:n_needed])
+        # Full re-instantiation per generation (lifecycle = one
+        # generation): survivors are rebuilt from their own code with
+        # the SAME agent_id. Both internal state AND the reputation
+        # matrix reset each generation (no cross-gen memory); only
+        # lineage (bloodline) persists. Applies to both v2 and v3
+        # agents.
+        new_agents = []
+        for a in survivors[:n_needed]:
+            try:
+                new_agents.append(self._make_agent(a.code, a.agent_id))
+            except Exception as e:
+                # Defensive: survivor code already instantiated
+                # successfully before, so this should never fire;
+                # keep the old object rather than crash the run.
+                print(
+                    f"  [_select_and_reproduce re-instantiate fallback] "
+                    f"{type(e).__name__}: {e}"
+                )
+                new_agents.append(a)
+        if next_gen is None:
+            next_gen = 1
         for _ in range(N - n_needed):
             parent = self.rng.choice(survivors)
             new_code = self._mutate(parent.code, parent.fitness)
             try:
-                new_agents.append(self._new_agent(new_code))
+                child = self._new_agent(new_code)
             except Exception as e:
                 # Defense in depth: if a mutated class somehow slips past
                 # _validate_code but fails to instantiate for the actual
@@ -725,9 +836,21 @@ class V2EvolutionaryPopulation:
                     f"  [_select_and_reproduce fallback] using parent_code "
                     f"for agent after mutate: {type(e).__name__}: {e}"
                 )
-                new_agents.append(self._new_agent(parent.code))
-        # Drop reputations pointing at removed agents. Each survivor retains
-        # its own agent_id (stable), so we can safely pop by id.
+                child = self._new_agent(parent.code)
+            new_agents.append(child)
+            self._new_lineage(
+                child.agent_id,
+                parent.agent_id,
+                self._slot_lineage.get(parent.agent_id),
+                ORIGIN_MUTATE,
+                next_gen,
+            )
+        # Reputations reset every generation: each agent is rebuilt
+        # (or newly imitated) with its own initial matrix
+        # {agent_id: INITIAL_REPUTATION}, so old ids never appear in
+        # the new agents' matrices. The pop loop below is therefore a
+        # no-op; kept as defense-in-depth in case reputation carryover
+        # is ever re-enabled.
         old_ids = {a.agent_id for a in self.agents}
         new_ids = {a.agent_id for a in new_agents}
         ids_to_drop = old_ids - new_ids
@@ -739,7 +862,7 @@ class V2EvolutionaryPopulation:
         # order and may differ across generations.
         self.agents = new_agents
 
-    def _select_and_reproduce_fermi(self):
+    def _select_and_reproduce_fermi(self, next_gen: Optional[int] = None):
         """Synchronous Fermi imitation + LLM mutation (Moran-process style, Z-like).
 
         Per generation we run `updates_per_gen` independent update
@@ -785,6 +908,8 @@ class V2EvolutionaryPopulation:
         # always read phi and code from the OLD generation.
         next_agents = list(self.agents)
         old_agents = list(self.agents)
+        # slot agent_id -> (parent agent_id or None, parent_lineage or None, origin)
+        updates = {}
         for _ in range(self.updates_per_gen):
             # Sample learner i
             i = self.rng.randrange(N)
@@ -811,17 +936,40 @@ class V2EvolutionaryPopulation:
             # In both cases exactly one LLM call per copy event.
             if self.rng.random() < mu:
                 new_agent = self._llm_init_one_agent(old_agents[i].agent_id)
+                updates[new_agent.agent_id] = (None, None, ORIGIN_INDEPENDENT_INIT)
             else:
                 new_agent = self._llm_small_mutate(
                     old_agents[j].code, old_agents[i].agent_id
                 )
+                # Parent lineage is j's lineage from the OLD generation
+                # (synchronous commit: j's code hasn't been overwritten yet).
+                updates[new_agent.agent_id] = (
+                    old_agents[j].agent_id,
+                    self._slot_lineage.get(old_agents[j].agent_id),
+                    ORIGIN_IMITATE,
+                )
             next_agents[i] = new_agent
         # Synchronous commit. The set of agent_ids is preserved
-        # (every slot retains its old id) so no reputation ids to
-        # drop. Inherit reputations from the old agent at the same
-        # slot so the new individual sees history built up by the
-        # previous gen.
+        # (every slot retains its old id). Reputations are NOT
+        # inherited: each generation is a fresh lifecycle, so every
+        # agent (rebuilt or newly imitated) starts from its own
+        # initial matrix {agent_id: INITIAL_REPUTATION}.
         for slot, new_a in enumerate(next_agents):
             old_a = old_agents[slot]
-            new_a.reputations = dict(old_a.reputations)
+            if new_a is old_a:
+                # Full re-instantiation per generation (lifecycle =
+                # one generation): an untouched slot is rebuilt from
+                # its own code with the SAME agent_id, so agent
+                # internal state starts fresh each generation.
+                # Applies to both v2 and v3 agents. No new lineage
+                # event is recorded for a rebuild (the strategy
+                # bloodline is unchanged).
+                new_a = self._make_agent(old_a.code, old_a.agent_id)
+                next_agents[slot] = new_a
         self.agents = next_agents
+        # Record lineage for every slot that was updated this generation.
+        # Unchanged slots keep their existing lineage (same occupant).
+        if next_gen is None:
+            next_gen = 1
+        for slot, (parent_slot, parent_lineage, origin) in updates.items():
+            self._new_lineage(slot, parent_slot, parent_lineage, origin, next_gen)

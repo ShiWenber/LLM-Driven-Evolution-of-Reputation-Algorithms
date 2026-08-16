@@ -205,10 +205,9 @@ class V2DonorGame:
     def run_generation(self) -> Dict:
         """Run a full generation: T rounds, then return aggregate stats.
 
-        With population_size=15 and T=30, each round we form 7 pairs
-        and 1 agent sits out. Total of 7*30 = 210 joint actions per
-        generation; each player participates in ~14 joint actions
-        (half of 30 * 7/7.5 ≈ 28 total).
+        With population_size=16 and T=16 (T = N), each round we form
+        8 pairs and nobody sits out. Total of 8*16 = 128 joint actions
+        per generation; each player participates in all 16 rounds.
         """
         self.round_num = 0
         self.payoffs = [0.0] * self.population_size
