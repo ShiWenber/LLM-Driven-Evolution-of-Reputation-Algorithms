@@ -6,32 +6,35 @@
 
 ## Demo
 
-### PCA strategy-space evolution (seed 0)
+### PCA strategy-space evolution
 
 | `agent-type1` | `agent-type2` |
 | --- | --- |
-| ![agent-type1 seed0 PCA strategy evolution](README.assets/agent-type1_seed0_pca_evolution.gif) | ![agent-type2 seed0 PCA strategy evolution](README.assets/agent-type2_seed0_pca_evolution.gif) |
+| ![agent-type1 seed4 PCA strategy evolution in the joint six-seed space](README.assets/agent-type1_joint6_seed4_pca_evolution.gif) | ![agent-type2 seed0 PCA strategy evolution](README.assets/agent-type2_seed0_pca_evolution.gif) |
 
-The animations use each agent type's latest shared embedding, clustering, and
-PCA coordinates. Each frame shows how the seed-0 population moves through its
-strategy space over generations; colors identify the strategy clusters used in
-the composition plots below.
+For `agent-type1`, a single embedding, K-means model, and PCA projection are fit
+jointly on every strategy from seeds 0–5. Only seed 4 is rendered because it has
+the highest final cooperation rate (`1.000`) among the six runs. Its animation
+therefore moves inside the common six-seed coordinate system, and its colors
+use the common `K=19` cluster labels. The `agent-type2` panel continues to show
+its seed-0 analysis.
 
 A compact research showcase of how LLM-evolved strategies behave in reputation-driven cooperation games.
 
 The core result is that cooperation can emerge from LLM-generated strategies, but the outcome is strongly seed-dependent and sensitive to the implementation details of the reputation logic. Classical indirect-reciprocity norms remain more stable, while learned strategies are promising but less robust.
 
-### 1) Six-run comparison: agent-type1 vs. agent-type2
+### 1) Cooperation evolution: agent-type1 vs. agent-type2
 
 ![Cooperation evolution comparison between agent-type1 and agent-type2](README.assets/g100_3seed_1000inter.png)
 
-The figure compares six matched runs: three seeds for `agent-type1` and three
-for `agent-type2`. Both panels use 100 generations, 1,000 target interactions
-per generation, a population of 16, and generation-level state reset. Thin
-lines show individual seeds, thick lines show the three-seed mean, and shaded
-bands show one standard deviation. This makes the higher initial cooperation
-of `agent-type2` and the seed-dependent outcomes of both agent types directly
-comparable.
+The figure uses all six updated `agent-type1` runs (seeds 0–5) and the three
+available `agent-type2` runs (seeds 0–2). Both panels use 100 generations,
+1,000 target interactions per generation, a population of 16, and
+generation-level state reset. Thin lines show individual seeds, thick lines
+show the mean for each agent type, and shaded bands show one standard
+deviation. The updated `agent-type1` prompt and interface can produce high
+cooperation, but its runs remain substantially more variable than the three
+`agent-type2` runs.
 
 ### 2) agent-type1 vs. agent-type2: different strategy interfaces
 
@@ -40,7 +43,7 @@ interfaces to the LLM:
 
 | Agent type | Generated strategy | State and memory | Search space |
 | --- | --- | --- | --- |
-| `agent-type1` | Two functions: `evaluate(...)` and `decide(...)` | Limited to values passed through the fixed function interface | Narrower and more explicitly guided |
+| `agent-type1` | Two functions: `observe(...)` and `decide(...)` | Updates donor and recipient reputations through a fixed functional interface | Narrower and more explicitly guided |
 | `agent-type2` | A complete `LLMAgent` class with `__init__`, `decide()`, and `observe(...)` | May maintain internal state and update it after interactions | Richer and less constrained |
 
 This distinction matters when reading the results: differences between the two
@@ -57,39 +60,42 @@ The canonical leading-eight strategies stay near cooperation rate 1.0 across the
 
 | `agent-type1` | `agent-type2` |
 | --- | --- |
-| ![agent-type1 seed0 strategy-cluster composition](README.assets/agent-type1_seed0_cluster_composition.png) | ![agent-type2 seed0 strategy-cluster composition](README.assets/agent-type2_seed0_cluster_composition.png) |
+| ![agent-type1 seed4 strategy-cluster composition from six-seed joint clustering](README.assets/agent-type1_joint6_seed4_cluster_composition.png) | ![agent-type2 seed0 strategy-cluster composition](README.assets/agent-type2_seed0_cluster_composition.png) |
 
-Both panels show seed 0 from the latest shared-clustering analysis. The
-`agent-type1` population moves among a larger set of strategy families, whereas
-`agent-type2` rapidly becomes dominated by one of two broad families. Showing
-the same cluster-composition view side by side makes the agent type explicit
-without conflating their different strategy spaces.
+The `agent-type1` panel shows seed 4 using labels learned jointly from all six
+agent-type1 runs; it is not a seed-4-only clustering. The `agent-type2` panel
+shows seed 0 in its own shared analysis. The agent-type1 population moves among
+a larger set of strategy families, whereas agent-type2 rapidly becomes
+dominated by one of two broad families.
 
 This is the core story of the project: the environment supports cooperation, the LLM can discover cooperative policies, the corrected implementation changes the attractor structure, and the classical norms remain the reliability benchmark.
 
-### 5) Seed-0 survivor ancestry: agent-type1 vs. agent-type2
+### 5) Final-survivor ancestry: agent-type1 vs. agent-type2
 
 | `agent-type1` | `agent-type2` |
 | --- | --- |
-| ![agent-type1 seed0 final-survivor ancestry tree](README.assets/agent-type1_seed0_survivor_tree.png) | ![agent-type2 seed0 final-survivor ancestry tree](README.assets/agent-type2_seed0_survivor_tree.png) |
+| ![agent-type1 seed4 final-survivor ancestry tree using six-seed joint clusters](README.assets/agent-type1_joint6_seed4_survivor_tree.png) | ![agent-type2 seed0 final-survivor ancestry tree](README.assets/agent-type2_seed0_survivor_tree.png) |
 
-Both trees are freshly generated from the matched seed-0 gen-reset runs and
-show only ancestry paths leading to final survivors. Squares mark roots and
-triangles mark final survivors. The comparison exposes the different branching
-patterns produced by the fixed two-function interface and the stateful class
-interface.
+The agent-type1 tree is the highest-final-cooperation run (seed 4), colored by
+the six-seed joint clusters; the agent-type2 tree remains seed 0. Both show only
+ancestry paths leading to final survivors. Squares mark roots and triangles
+mark final survivors.
 
-### 6) Seed-0 lineage survival intervals
+### 6) Lineage survival intervals
 
 | `agent-type1` | `agent-type2` |
 | --- | --- |
-| ![agent-type1 seed0 lineage survival intervals](README.assets/agent-type1_seed0_lineage_survival.png) | ![agent-type2 seed0 lineage survival intervals](README.assets/agent-type2_seed0_lineage_survival.png) |
+| ![agent-type1 seed4 lineage survival intervals using six-seed joint clusters](README.assets/agent-type1_joint6_seed4_lineage_survival.png) | ![agent-type2 seed0 lineage survival intervals](README.assets/agent-type2_seed0_lineage_survival.png) |
 
 Each horizontal interval runs from a collapsed lineage's birth to its last
-appearance. Colors use the same automatic code-embedding analysis applied to
-each run: K=20 for `agent-type1` and K=2 for `agent-type2`.
+appearance. Agent-type1 uses the common six-seed analysis (`K=19`) and displays
+seed 4; agent-type2 uses its seed-0 analysis (`K=2`).
 
 ### 7) Representative final survivor from each dominant lineage family
+
+This section documents the representatives used by the bidirectional invasion
+experiment: seed 4 for `agent-type1` and seed 0 for `agent-type2`, matching the
+representative runs used by the visual analyses above.
 
 The selection rule is identical for both runs: group final agents by root
 lineage, choose the root family with the most final members, then choose the
@@ -97,33 +103,53 @@ highest-fitness member of that family (breaking ties by agent ID).
 
 | Agent type | Dominant root lineage | Final members | Representative | Fitness | Behavioral summary |
 | --- | ---: | ---: | ---: | ---: | --- |
-| `agent-type1` | 532 | 13/16 | agent 10 | 19.0 | Cooperates with non-negative-reputation opponents and uses own reputation to update assessments |
+| `agent-type1` | 14 | 15/16 | agent 0 | 25.0 | Uses context-sensitive bounded reputation updates and cooperates with neutral-to-good opponents |
 | `agent-type2` | 11 | 13/16 | agent 1 | 26.0 | Maintains opponent histories, estimates conditional cooperation, and adapts trust, generosity, exploration, and risk tolerance |
 
 #### agent-type1 representative (complete strategy)
 
-Source: agent 10 in the
-[`agent-type1` seed-0 evolution record](results/quantitative_baseline/LLM_v2_fermi_z_v3_g100_1000inter_N16_genreset_seed0/evolutionary.json).
+Source: agent 0 in the
+[`agent-type1` seed-4 evolution record](results/quantitative_baseline/LLM_agent-type1_fermi_z_v3_g100_1000inter_N16_genreset_seed4/evolutionary.json).
 
 ```python
-def evaluate(target_reputation: float, target_action: str, my_reputation: float) -> float:
-  # Update based on target's action relative to observer's reputation
-  # If observer is cooperative (positive reputation), reward cooperation and punish defection
-  # If observer is selfish (negative reputation), reward defection and punish cooperation
-  if target_action == 'cooperate':
-    # Cooperation is good if observer is cooperative
-    return target_reputation + (my_reputation * 0.2)
-  else:  # defect
-    # Defection is bad if observer is cooperative
-    return target_reputation - (my_reputation * 0.2)
+def observe(
+    donor_reputation: float,
+    donor_action: str,
+    recipient_reputation: float,
+    recipient_action: str,
+    my_reputation: float,
+) -> tuple[float, float]:
+    if donor_action == "cooperate":
+        weight = 0.4 if recipient_reputation >= 0 else 0.2
+        donor_new = donor_reputation + weight * (1 - abs(donor_reputation))
+        if recipient_action == "defect":
+            donor_new -= 0.3
+    else:
+        donor_new = donor_reputation - 0.5 if recipient_reputation >= 0 else donor_reputation + 0.3 * (1 - abs(donor_reputation))
+        if recipient_action == "cooperate":
+            donor_new -= 0.4
+
+    if recipient_action == "cooperate":
+        weight = 0.4 if donor_reputation >= 0 else 0.2
+        recipient_new = recipient_reputation + weight * (1 - abs(recipient_reputation))
+        if donor_action == "defect":
+            recipient_new -= 0.3
+    else:
+        recipient_new = recipient_reputation - 0.5 if donor_reputation >= 0 else recipient_reputation + 0.3 * (1 - abs(recipient_reputation))
+        if donor_action == "cooperate":
+            recipient_new -= 0.4
+
+    return (
+        max(-1.0, min(1.0, donor_new)),
+        max(-1.0, min(1.0, recipient_new)),
+    )
 
 def decide(my_reputation: float, opponent_reputation: float) -> bool:
-  # Cooperate if opponent is sufficiently cooperative relative to self
-  # Also cooperate if both are neutral or unknown
-  if opponent_reputation >= 0.0:
-    return True
-  # If opponent is untrustworthy, defect unless we are also untrustworthy (then mirror)
-  return my_reputation < 0.0
+    if opponent_reputation >= 0.3 and my_reputation > -0.35:
+        return True
+    if opponent_reputation < -0.2:
+        return False
+    return opponent_reputation > -0.1
 ```
 
 #### agent-type2 representative (decision core)
@@ -159,9 +185,10 @@ def decide(self) -> bool:
     return random.random() < 0.2 * self.risk_tolerance
 ```
 
-The contrast is structural as well as behavioral: `agent-type1` expresses a
-compact reputation rule, while `agent-type2` combines opponent modeling with
-persistent state and online adaptation.
+The contrast is structural as well as behavioral: the updated `agent-type1`
+expresses observation and action as two stateless functions, while
+`agent-type2` combines opponent modeling with persistent state and online
+adaptation.
 
 ### 8) Best evolved strategies vs. the Leading Eight: bidirectional invasion
 
@@ -183,16 +210,20 @@ The formal batch contains 96 runs: two agent types, eight norms, two invasion
 directions, and three seeds. Every run uses 50 generations, 1,000 interactions
 per generation, an 800-interaction burn-in, a 200-interaction fitness window,
 `b=2`, `c=1`, full observation, observer-private reputations, `beta=5`, and 15
-Fermi updates per generation.
+Fermi updates per generation. As in the population module, every slot is
+re-instantiated after selection: its stable ID and selected strategy type are
+preserved, while private reputations and strategy-internal state reset.
 
-The main signal is asymmetric for `agent-type2`: it fixed in two of three runs
-against `IS`, `SC`, and `IS+`, while none of those norms fixed when invading it.
-It did not fix against the other five norms, and `SJ` and `SJ+` each fixed in
-two of three reverse-direction runs. The `agent-type1` outcomes were identical
-across norms but strongly seed-dependent: seed 1 fixed and seeds 0 and 2 became
-extinct in both directions. Because each cell contains only three seeds, these
-fractions are descriptive results rather than precise estimates of fixation
-probability.
+The updated result is strongly asymmetric for `agent-type2`: it fixed in two
+of three runs against `IS`, `SS`, `SC`, `SH`, `IS+`, and `SS+`, and none of
+those six norms fixed in the reverse direction. `SJ` and `SJ+` show the opposite
+pattern, fixing in two of three runs against `agent-type2` while resisting all
+three outward invasion attempts. The seed-4 `agent-type1` representative fixed
+in one of three runs against every Leading Eight norm, and every norm likewise
+fixed in one of three reverse-direction runs; it shows no directional advantage
+in this three-seed batch.
+Because each cell contains only three seeds, these fractions are descriptive
+results rather than precise estimates of fixation probability.
 
 Run or resume this single-invader batch with:
 
