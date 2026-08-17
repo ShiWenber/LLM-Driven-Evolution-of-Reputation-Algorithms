@@ -163,6 +163,48 @@ The contrast is structural as well as behavioral: `agent-type1` expresses a
 compact reputation rule, while `agent-type2` combines opponent modeling with
 persistent state and online adaptation.
 
+### 8) Best evolved strategies vs. the Leading Eight: bidirectional invasion
+
+We tested the two representative strategies selected above against all eight
+canonical norms (`IS`, `SS`, `SJ`, `SC`, `SH`, `IS+`, `SS+`, and `SJ+`). The
+experiment uses the project's existing agent executors, private-reputation game
+logic, and fixed-strategy Fermi imitation module rather than a separate game
+implementation.
+
+For each agent type and norm, the experiment starts with one invader in a
+population of 15 and tests both directions. Bar length is the number of
+fixations across seeds `0`, `1`, and `2`; leftward bars show a Leading Eight
+norm invading the evolved strategy, and rightward bars show the evolved
+strategy invading the norm.
+
+![Bidirectional invasion results for the best agent-type1 and agent-type2 strategies against the Leading Eight](README.assets/best_vs_leading_eight_invasion.png)
+
+The formal batch contains 96 runs: two agent types, eight norms, two invasion
+directions, and three seeds. Every run uses 50 generations, 1,000 interactions
+per generation, an 800-interaction burn-in, a 200-interaction fitness window,
+`b=2`, `c=1`, full observation, observer-private reputations, `beta=5`, and 15
+Fermi updates per generation.
+
+The main signal is asymmetric for `agent-type2`: it fixed in two of three runs
+against `IS`, `SC`, and `IS+`, while none of those norms fixed when invading it.
+It did not fix against the other five norms, and `SJ` and `SJ+` each fixed in
+two of three reverse-direction runs. The `agent-type1` outcomes were identical
+across norms but strongly seed-dependent: seed 1 fixed and seeds 0 and 2 became
+extinct in both directions. Because each cell contains only three seeds, these
+fractions are descriptive results rather than precise estimates of fixation
+probability.
+
+Run or resume this single-invader batch with:
+
+```powershell
+uv run run-best-leading-eight-invasion --invader-counts 1 --workers 8
+```
+
+The runner also supports an initial-frequency sweep with `n=1..14`. Formal
+outputs remain available for reproducibility. Regenerate the README figure with
+`uv run plot-best-leading-eight-invasion`; the experiment runner is
+`experiments.analysis.invasion.run_best_leading_eight_invasion`.
+
 ---
 
 ## Project overview
@@ -240,6 +282,10 @@ uv run rerun-experiments --experiments 2 --seeds 0 1 2
 # Agent 2 invasion experiment (336 fixed-strategy runs by default)
 uv run run-agent2-invasion --help
 
+# Best agent-type1 and agent-type2 representatives vs. all Leading Eight norms
+uv run run-best-leading-eight-invasion --invader-counts 1 --workers 8
+uv run plot-best-leading-eight-invasion
+
 # Generate the invasion dashboard
 uv run plot-agent2-invasion
 
@@ -269,7 +315,7 @@ uv run python -m experiments.run_fermi_v3 --dry-run --seed 0
 `uv run` requires a command or module; there is no single implicit default
 task for this project.
 
-## Agent 2 bidirectional invasion experiment
+## Historical Agent 2 / Schmid L1-L2-L7-L8 invasion experiment
 
 The current invasion study uses the evolved `agent_id=2` strategy from
 generation 99 of the seed-2 production run against the four norms identified
