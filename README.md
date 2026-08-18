@@ -36,7 +36,37 @@ deviation. The updated `agent-type1` prompt and interface can produce high
 cooperation, but its runs remain substantially more variable than the three
 `agent-type2` runs.
 
-### 2) agent-type1 vs. agent-type2: different strategy interfaces
+### 2) Observability sweep: observation probability x agent type
+
+![Final cooperation and fitness across third-party observation probability p, for agent-type1 (n=6 seeds) and agent-type2 (n=3 seeds)](README.assets/observability_comparison.png)
+
+Third-party observation was made probabilistic: with probability *p* each
+non-player agent observes a joint action (self-judgments always happen; `p=1.0`
+is the original full-observability setting). Both agent types were re-run at
+`p = 0.5` and `p = 0.1` under otherwise identical settings (100 generations,
+1,000 interactions/gen, N=16, Fermi Z-like). Final-generation cooperation rate
+and fitness, mean ± SE:
+
+| agent-type | p | n | coop mean ± SE | fitness mean ± SE |
+| --- | ---: | ---: | ---: | ---: |
+| `agent-type1` | 1.0 | 6 | 0.730 ± 0.106 | 20.79 ± 2.84 |
+| `agent-type1` | 0.5 | 6 | 0.811 ± 0.158 | 20.90 ± 4.10 |
+| `agent-type1` | 0.1 | 6 | 0.866 ± 0.057 | 21.77 ± 1.82 |
+| `agent-type2` | 1.0 | 3 | 0.753 ± 0.106 | 18.56 ± 2.47 |
+| `agent-type2` | 0.5 | 3 | 0.762 ± 0.165 | 18.33 ± 4.45 |
+| `agent-type2` | 0.1 | 3 | 0.644 ± 0.058 | 15.73 ± 1.41 |
+
+Directionally, lower observability raises final cooperation for `agent-type1`
+(0.730 → 0.866; Cohen's *d* = -0.66 for p=1.0 vs p=0.1) and lowers it for
+`agent-type2` (0.753 → 0.644; *d* = +0.74). At `p=0.1` the two agent types
+separate clearly (cooperation *d* = +1.71, Mann-Whitney *p* = 0.053; fitness
+*d* = +1.52, *p* = 0.092). None of the within-type pairwise Mann-Whitney tests
+reaches significance (*p* > 0.18), so with 3–6 seeds per cell these are
+*exploratory* trends, not confirmatory effects. `agent-type2`'s class-based
+mutations also broke more often at low observability (syntax/missing-method
+failures), inflating wall-clock time ~4x per seed.
+
+### 3) agent-type1 vs. agent-type2: different strategy interfaces
 
 The two agent types solve the same reputation game but expose different strategy
 interfaces to the LLM:
@@ -52,11 +82,11 @@ just a new experiment revision. The corrected `agent-type2` dynamics are not
 uniformly better across seeds. Some seeds improve sharply, while others enter a
 low-cooperation basin, producing a more bimodal evolutionary landscape.
 
-### 3) Compared against the leading-eight norms
+### 4) Compared against the leading-eight norms
 
 The canonical leading-eight strategies stay near cooperation rate 1.0 across the full horizon. The LLM trajectories are less reliable and more variable, which makes the empirical message precise: learned systems can discover effective cooperation, but they do not yet match the robustness of classical indirect-reciprocity norms.
 
-### 4) Population structure in embedding space
+### 5) Population structure in embedding space
 
 | `agent-type1` | `agent-type2` |
 | --- | --- |
@@ -70,7 +100,7 @@ dominated by one of two broad families.
 
 This is the core story of the project: the environment supports cooperation, the LLM can discover cooperative policies, the corrected implementation changes the attractor structure, and the classical norms remain the reliability benchmark.
 
-### 5) Final-survivor ancestry: agent-type1 vs. agent-type2
+### 6) Final-survivor ancestry: agent-type1 vs. agent-type2
 
 | `agent-type1` | `agent-type2` |
 | --- | --- |
@@ -81,7 +111,7 @@ the six-seed joint clusters; the agent-type2 tree remains seed 0. Both show only
 ancestry paths leading to final survivors. Squares mark roots and triangles
 mark final survivors.
 
-### 6) Lineage survival intervals
+### 7) Lineage survival intervals
 
 | `agent-type1` | `agent-type2` |
 | --- | --- |
@@ -91,7 +121,7 @@ Each horizontal interval runs from a collapsed lineage's birth to its last
 appearance. Agent-type1 uses the common six-seed analysis (`K=19`) and displays
 seed 4; agent-type2 uses its seed-0 analysis (`K=2`).
 
-### 7) Representative final survivor from each dominant lineage family
+### 8) Representative final survivor from each dominant lineage family
 
 This section documents the representatives used by the bidirectional invasion
 experiment: seed 4 for `agent-type1` and seed 0 for `agent-type2`, matching the
@@ -190,13 +220,15 @@ expresses observation and action as two stateless functions, while
 `agent-type2` combines opponent modeling with persistent state and online
 adaptation.
 
-### 8) Best evolved strategies vs. the Leading Eight: bidirectional invasion
+### 9) Best evolved strategies vs. the Leading Eight: bidirectional invasion
 
 We tested the two representative strategies selected above against all eight
 canonical norms (`IS`, `SS`, `SJ`, `SC`, `SH`, `IS+`, `SS+`, and `SJ+`). The
-experiment uses the project's existing agent executors, private-reputation game
-logic, and fixed-strategy Fermi imitation module rather than a separate game
-implementation.
+experiment uses the project's existing agent executors and private-reputation
+game logic rather than a separate game implementation. Selection is
+deterministic payoff imitation: a sampled learner always copies a sampled role
+model with strictly higher fitness and never copies one with equal or lower
+fitness; no Fermi/logistic acceptance probability is used.
 
 For each agent type and norm, the experiment starts with one invader in a
 population of 15 and tests both directions. Bar length is the number of
@@ -209,19 +241,18 @@ strategy invading the norm.
 The formal batch contains 96 runs: two agent types, eight norms, two invasion
 directions, and three seeds. Every run uses 50 generations, 1,000 interactions
 per generation, an 800-interaction burn-in, a 200-interaction fitness window,
-`b=2`, `c=1`, full observation, observer-private reputations, `beta=5`, and 15
-Fermi updates per generation. As in the population module, every slot is
+`b=2`, `c=1`, full observation, observer-private reputations, and 15 sampled
+imitation opportunities per generation. As in the population module, every slot is
 re-instantiated after selection: its stable ID and selected strategy type are
 preserved, while private reputations and strategy-internal state reset.
 
-The updated result is strongly asymmetric for `agent-type2`: it fixed in two
-of three runs against `IS`, `SS`, `SC`, `SH`, `IS+`, and `SS+`, and none of
-those six norms fixed in the reverse direction. `SJ` and `SJ+` show the opposite
-pattern, fixing in two of three runs against `agent-type2` while resisting all
-three outward invasion attempts. The seed-4 `agent-type1` representative fixed
-in one of three runs against every Leading Eight norm, and every norm likewise
-fixed in one of three reverse-direction runs; it shows no directional advantage
-in this three-seed batch.
+The updated result is asymmetric for `agent-type2`: it fixed in `1/3` runs
+against `IS`, `SS`, `SC`, `SH`, `IS+`, and `SS+`, while those six norms had
+`0/3` reverse-direction fixations. `SJ` and `SJ+` show the opposite pattern:
+each fixed in `3/3` runs against `agent-type2`, while the evolved strategy had
+`0/3` outward fixations. For the seed-4 `agent-type1` representative, every
+norm and both directions produced `0/3` fixations; all single invaders became
+extinct in this three-seed batch.
 Because each cell contains only three seeds, these fractions are descriptive
 results rather than precise estimates of fixation probability.
 
@@ -235,6 +266,52 @@ The runner also supports an initial-frequency sweep with `n=1..14`. Formal
 outputs remain available for reproducibility. Regenerate the README figure with
 `uv run plot-best-leading-eight-invasion`; the experiment runner is
 `experiments.analysis.invasion.run_best_leading_eight_invasion`.
+
+### 10) N=100 invasion ability across initial invader counts
+
+The single-invader result does not show whether a strategy needs a critical
+mass before it can spread. We therefore ran a separate bidirectional experiment
+in a population of 100, starting with `1, 5, 10, 20, 30, 40, 50, 60, 70, 80,
+90, 95, 99` invaders. The full design contains 1,248 runs: two agent types,
+eight Leading Eight norms, two directions, 13 initial counts, and three seeds.
+Each run retains the 50-generation, 1,000-interaction, `800/200` burn-in and
+fitness-window design. There are 100 deterministic payoff-imitation
+opportunities per generation, and absorbing fixation/extinction states stop
+early because mutation is disabled.
+
+The dashed diagonal in each panel is the no-frequency-change reference
+(`final share = initial share`). Curves above it indicate expansion; curves
+below it indicate contraction.
+
+![N=100 bidirectional invasion ability across initial invader counts](README.assets/n100_invasion_count_sweep.png)
+
+The seed-4 `agent-type1` curves coincide with the diagonal for every tested
+norm and both directions: after 50 generations the mean final share equals the
+initial share. Under strict higher-payoff imitation, neither side gains a
+systematic payoff advantage that changes its frequency. Increasing the initial
+number therefore does not reveal a hidden invasion threshold for this strategy.
+
+The `agent-type2` result is strongly asymmetric. Against `IS`, `SC`, and `IS+`,
+a 1% evolved-strategy minority reaches a mean final share of 50%; against `SS`,
+`SH`, and `SS+`, it reaches 56%. Starting from 5%, these six comparisons end at
+94–96% on average. `SJ` and `SJ+` are harder at very low frequency: a 1%
+minority becomes extinct, but 5%, 10%, and 20% minorities reach approximately
+60%, 88%, and 95%, respectively, and a 30% minority reaches 99%.
+
+In the reverse direction, no Leading Eight norm expands on average from any
+tested initial share. Up to a 90% initial majority, the norms generally collapse
+to 0–5% against `agent-type2`. Even from 99%, the six non-SJ norms finish at
+47–62% on average, while `SJ` and `SJ+` finish at 85%. Thus invasion count
+changes the low-frequency outcome for `SJ`/`SJ+`, but the N=100 sweep still
+shows a broad frequency-selection advantage for `agent-type2` under this
+deterministic payoff-imitation rule.
+
+Run or resume the experiment and regenerate the figure with:
+
+```powershell
+uv run run-n100-invasion-count-sweep --workers 12
+uv run plot-n100-invasion-count-sweep
+```
 
 ---
 
@@ -316,6 +393,10 @@ uv run run-agent2-invasion --help
 # Best agent-type1 and agent-type2 representatives vs. all Leading Eight norms
 uv run run-best-leading-eight-invasion --invader-counts 1 --workers 8
 uv run plot-best-leading-eight-invasion
+
+# N=100 bidirectional sweep over initial invader counts
+uv run run-n100-invasion-count-sweep --workers 12
+uv run plot-n100-invasion-count-sweep
 
 # Generate the invasion dashboard
 uv run plot-agent2-invasion
