@@ -17,7 +17,6 @@ in any slot) and the ancestry path of every final survivor back to its root.
 
 Usage:
   uv run python -m experiments.analysis.lineage.build --json results/.../evolutionary.json --out results/.../lineage.json
-  uv run python -m experiments.analysis.lineage.build --selftest   # verify logic on synthetic data
 """
 from __future__ import annotations
 
@@ -127,67 +126,14 @@ def build_lineage_tree(data: dict) -> dict:
     }
 
 
-# --------------------------------------------------------------------------
-# Self-test on synthetic data (no LLM, no file)
-# --------------------------------------------------------------------------
-def _synthetic_data() -> dict:
-    """4-agent, 4-generation Fermi run (mirrors the earlier stub test)."""
-    events = [
-        {"lineage_id": 0, "parent_lineage_id": None, "parent_id": None, "origin": "initial", "birth_gen": 0},
-        {"lineage_id": 1, "parent_lineage_id": None, "parent_id": None, "origin": "initial", "birth_gen": 0},
-        {"lineage_id": 2, "parent_lineage_id": None, "parent_id": None, "origin": "initial", "birth_gen": 0},
-        {"lineage_id": 3, "parent_lineage_id": None, "parent_id": None, "origin": "initial", "birth_gen": 0},
-        {"lineage_id": 4, "parent_lineage_id": 3, "parent_id": 3, "origin": "imitate", "birth_gen": 1},
-        {"lineage_id": 5, "parent_lineage_id": 3, "parent_id": 3, "origin": "imitate", "birth_gen": 1},
-        {"lineage_id": 6, "parent_lineage_id": None, "parent_id": None, "origin": "independent_init", "birth_gen": 2},
-        {"lineage_id": 7, "parent_lineage_id": 4, "parent_id": 0, "origin": "imitate", "birth_gen": 2},
-        {"lineage_id": 8, "parent_lineage_id": 7, "parent_id": 3, "origin": "imitate", "birth_gen": 3},
-        {"lineage_id": 9, "parent_lineage_id": None, "parent_id": None, "origin": "independent_init", "birth_gen": 3},
-    ]
-    trajectory = [
-        {"generation": 0, "population": [
-            {"agent_id": 0, "lineage_id": 0}, {"agent_id": 1, "lineage_id": 1},
-            {"agent_id": 2, "lineage_id": 2}, {"agent_id": 3, "lineage_id": 3}]},
-        {"generation": 1, "population": [
-            {"agent_id": 0, "lineage_id": 4}, {"agent_id": 1, "lineage_id": 5},
-            {"agent_id": 2, "lineage_id": 2}, {"agent_id": 3, "lineage_id": 3}]},
-        {"generation": 2, "population": [
-            {"agent_id": 0, "lineage_id": 4}, {"agent_id": 1, "lineage_id": 6},
-            {"agent_id": 2, "lineage_id": 7}, {"agent_id": 3, "lineage_id": 3}]},
-        {"generation": 3, "population": [
-            {"agent_id": 0, "lineage_id": 4}, {"agent_id": 1, "lineage_id": 9},
-            {"agent_id": 2, "lineage_id": 8}, {"agent_id": 3, "lineage_id": 7}]},
-    ]
-    final_population = [
-        {"agent_id": 0, "lineage_id": 4}, {"agent_id": 1, "lineage_id": 9},
-        {"agent_id": 2, "lineage_id": 8}, {"agent_id": 3, "lineage_id": 7},
-    ]
-    return {"lineage_events": events, "trajectory": trajectory, "final_population": final_population}
-
-
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--json", type=str, default=None, help="path to schema-v4 evolutionary.json")
     ap.add_argument("--out", type=str, default=None, help="output path for lineage.json")
-    ap.add_argument("--selftest", action="store_true", help="run on synthetic data")
     args = ap.parse_args()
 
-    if args.selftest:
-        tree = build_lineage_tree(_synthetic_data())
-        print(json.dumps(tree, indent=2, ensure_ascii=False))
-        # sanity checks
-        assert tree["n_lineages"] == 6, tree["n_lineages"]  # roots: 0,1,2,3,6,9
-        root3 = tree["lineages"]["3"]
-        assert set(root3["members"]) == {3, 4, 5, 7, 8}, root3["members"]
-        assert root3["birth_gen"] == 0 and root3["death_gen"] == 3
-        surv = {s["agent_id"]: s for s in tree["survivors"]}
-        assert surv[2]["root_lineage_id"] == 3  # lineage 8 -> root 3
-        assert surv[1]["root_lineage_id"] == 9  # independent init
-        print("\nSELFTEST PASSED")
-        return
-
     if not args.json:
-        raise SystemExit("provide --json or --selftest")
+        raise SystemExit("provide --json")
 
     json_path = Path(args.json)
     data = load_evolution_json(json_path)

@@ -1,4 +1,10 @@
-import unittest
+"""Fermi imitation-learning prompt tests (pytest).
+
+Verifies that the real parent fitness reaches every mutation prompt
+and that the "random" vs "deliberate" imitation modes produce
+qualitatively different objectives.
+"""
+import pytest
 
 from experiments.v2_quantitative.population import V2EvolutionaryPopulation
 
@@ -18,32 +24,29 @@ class LLMAgent:
 """
 
 
-class ImitationLearningPromptTests(unittest.TestCase):
-    def capture_prompt(self, agent_type: str, mode: str, fitness: float) -> str:
-        population = V2EvolutionaryPopulation.__new__(V2EvolutionaryPopulation)
-        population.agent_type = agent_type
-        population.imitation_learning_mode = mode
-        population._fallback_mutation_count = 0
-        captured = []
-        child = TYPE2_CODE if agent_type == "agent-type2" else TYPE1_CODE
-        population._call_llm = lambda system, user: captured.append(user) or child
-        population._make_agent = lambda code, preserve_id: (code, preserve_id)
-        population._llm_small_mutate(child, fitness, 7)
-        return captured[0]
-
-    def test_real_parent_fitness_reaches_every_prompt(self):
-        for agent_type in ("agent-type1", "agent-type2"):
-            for mode in ("random", "deliberate"):
-                with self.subTest(agent_type=agent_type, mode=mode):
-                    self.assertIn("17.250", self.capture_prompt(agent_type, mode, 17.25))
-
-    def test_random_and_deliberate_prompts_have_different_objectives(self):
-        random_prompt = self.capture_prompt("agent-type1", "random", 3.0)
-        deliberate_prompt = self.capture_prompt("agent-type1", "deliberate", 3.0)
-        self.assertNotIn("adjust a single number or threshold", random_prompt)
-        self.assertNotIn("higher fitness", random_prompt)
-        self.assertIn("higher fitness", deliberate_prompt)
+def _capture_prompt(agent_type: str, mode: str, fitness: float) -> str:
+    """Capture the user prompt that _llm_small_mutate would send."""
+    population = V2EvolutionaryPopulation.__new__(V2EvolutionaryPopulation)
+    population.agent_type = agent_type
+    population.imitation_learning_mode = mode
+    population._fallback_mutation_count = 0
+    captured = []
+    child = TYPE2_CODE if agent_type == "agent-type2" else TYPE1_CODE
+    population._call_llm = lambda system, user: captured.append(user) or child
+    population._make_agent = lambda code, preserve_id: (code, preserve_id)
+    population._llm_small_mutate(child, fitness, 7)
+    return captured[0]
 
 
-if __name__ == "__main__":
-    unittest.main()
+@pytest.mark.parametrize("agent_type", ["agent-type1", "agent-type2"])
+@pytest.mark.parametrize("mode", ["random", "deliberate"])
+def test_real_parent_fitness_reaches_every_prompt(agent_type, mode):
+    assert "17.250" in _capture_prompt(agent_type, mode, 17.25)
+
+
+def test_random_and_deliberate_prompts_have_different_objectives():
+    random_prompt = _capture_prompt("agent-type1", "random", 3.0)
+    deliberate_prompt = _capture_prompt("agent-type1", "deliberate", 3.0)
+    assert "adjust a single number or threshold" not in random_prompt
+    assert "higher fitness" not in random_prompt
+    assert "higher fitness" in deliberate_prompt

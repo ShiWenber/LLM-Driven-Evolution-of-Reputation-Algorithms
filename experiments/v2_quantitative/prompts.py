@@ -61,10 +61,6 @@ Important rules:
       observer is one of the two players in the joint action, the
       framework calls observe() the same way.
   3. Reputation is in [-1.0, 1.0]. Treat 0.0 as neutral.
-  4. The functions will be called many times; keep them deterministic or
-     near-deterministic (no random.random unless you really want it).
-  5. Use only Python builtins; no imports other than `math` (already
-     available) and `random` (NOT recommended).
 
 Generate ONE strategy pair. Output ONLY the Python code, no prose,
 no markdown fences. The code must define `observe` and `decide`.

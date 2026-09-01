@@ -55,7 +55,7 @@ uv run run-perturbation-robustness --seeds 100 101 102 103 104 105 106 107 108 1
 - **不做事后推断**。继承关系由演化框架在生成时显式记录，而非用代码相似度反推。
 - **先聚类再判家族**。使用本地 Code embedding 后做 K-means；
   由 DeepSeek 根据质心附近的代表代码生成语义家族名。
-- **库代码零硬编码**。所有库函数纯参数化，CLI 的默认路径/输出目录仅限 `--selftest`。
+- **库代码零硬编码**。所有库函数纯参数化；CLI 的输入/输出路径全部由参数显式指定，无隐藏默认值。
 
 ---
 
@@ -265,15 +265,13 @@ uv run python -m experiments.analysis.plot_strategy_clusters \
 uv run python -m experiments.analysis.plot_strategy_cluster_evolution \
   --json results/.../evolutionary.json --k 10
 
-# 谱系数据构建（含 selftest）
+# 谱系数据构建
 uv run python -m experiments.analysis.lineage.build \
   --json results/.../evolutionary.json --out results/.../lineage.json
-uv run python -m experiments.analysis.lineage.build --selftest
 
-# 演化树可视化（含 selftest）
+# 演化树可视化
 uv run python -m experiments.analysis.plot_lineage \
   --json results/.../evolutionary.json
-uv run python -m experiments.analysis.plot_lineage --selftest
 ```
 
 ### 7.3 库 API
@@ -293,8 +291,8 @@ from experiments.analysis.plot_lineage import lineage_survival_plot, lineage_bac
 |---|---|---|
 | 血统记录（框架） | 桩替换 LLM 的单元测试，断言 origin/parent/血统链 | ✅ |
 | Code embedding 聚类 | 本地模型批量编码、归一化与 K-means 接口测试 | ✅ |
-| 谱系折叠 + death_gen | `build --selftest` 合成数据断言 | ✅ |
-| 可视化 | `plot_lineage --selftest` 出图成功 | ✅ |
+| 谱系折叠 + death_gen | `tests/test_lineage_build.py` 合成数据断言 | ✅ |
+| 可视化 | `plot_lineage` 真实结果出图 | ✅ |
 | 端到端 | `_smoke_lineage_5gen.py`（真实 LLM，3.3 min） | ✅ |
 
 ---
