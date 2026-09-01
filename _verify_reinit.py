@@ -1,6 +1,7 @@
 """Quick verification of per-generation full re-instantiation (no LLM calls).
 
-Checks, for BOTH agent_type='v2' and 'v3' and BOTH selection paths:
+Checks, for BOTH agent_type='agent-type1' and 'agent-type2' and BOTH
+selection paths:
   1. every agent object is rebuilt (new instance, same slot)
   2. agent_id set is preserved
   3. reputations are RESET to the initial matrix {agent_id: INITIAL_REPUTATION}
@@ -16,7 +17,7 @@ from experiments.v2_quantitative.agent import INITIAL_REPUTATION
 
 def make_pop(agent_type, seed):
     pop = V2EvolutionaryPopulation(population_size=8, agent_type=agent_type, seed=seed)
-    code = FALLBACK_CLASS_V3 if agent_type == "v3" else FALLBACK_STRATEGIES[0]
+    code = FALLBACK_CLASS_V3 if agent_type == "agent-type2" else FALLBACK_STRATEGIES[0]
     pop.agents = [pop._make_agent(code, i) for i in range(8)]
     for i, a in enumerate(pop.agents):
         a.fitness = float(i)
@@ -60,7 +61,7 @@ def check(agent_type, path):
 
 
 if __name__ == "__main__":
-    for at in ("v2", "v3"):
+    for at in ("agent-type1", "agent-type2"):
         for path in ("tournament", "fermi"):
             check(at, path)
     print("ALL PASS")

@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -176,13 +177,14 @@ def plot_generation_animation(
     ffmpeg_path: str | None = None,
 ):
     Z = cluster_state["Z"]
+    reference_Z = cluster_state.get("reference_Z", Z)
     labels = cluster_state["labels"]
     cluster_names = cluster_state["cluster_names"]
     n_clusters = cluster_state["km"].n_clusters
     colors = _colors(n_clusters)
 
-    x_all = Z[:, 0]
-    y_all = Z[:, 1]
+    x_all = reference_Z[:, 0]
+    y_all = reference_Z[:, 1]
     x_min, x_max = np.min(x_all), np.max(x_all)
     y_min, y_max = np.min(y_all), np.max(y_all)
     pad_x = 0.15 * (x_max - x_min + 1e-9)
@@ -404,6 +406,15 @@ def main():
     ap.add_argument("--seed", type=int, default=42, help="random seed for K-means and projection")
     add_clustering_method_args(ap)
     ap.add_argument("--out-dir", type=str, default=None, help="directory for generated figures")
+    ap.add_argument(
+        "--render-json",
+        type=str,
+        default=None,
+        help=(
+            "with multiple --json inputs, render only this run while still "
+            "fitting the shared embedding, clustering, and PCA on every input"
+        ),
+    )
     ap.add_argument("--animation-dpi", type=int, default=140,
                     help="animation render resolution (default: 140 dpi)")
     ap.add_argument("--ffmpeg-path", type=str, default=None,
@@ -462,8 +473,25 @@ def main():
         )
         print(f"global clustering: K={global_state['km'].n_clusters}, "
               f"{len(global_state['cluster_names'])} named clusters")
+        print(f"global analysis run id: {global_state['analysis_run_id']}")
+        selected_path = Path(args.render_json).resolve() if args.render_json else None
+        resolved_paths = [path.resolve() for path in json_paths]
+        if selected_path is not None and selected_path not in resolved_paths:
+            raise ValueError("--render-json must match one of the supplied --json paths")
+        manifest = {
+            "scope": "joint-across-input-runs",
+            "sources": [str(path) for path in json_paths],
+            "render_json": str(selected_path) if selected_path else None,
+            "cluster_count": global_state["km"].n_clusters,
+            "analysis_run_id": global_state["analysis_run_id"],
+        }
+        (out_dir / "joint_clustering_manifest.json").write_text(
+            json.dumps(manifest, indent=2), encoding="utf-8"
+        )
         # Then plot each run separately with the shared model.
         for idx, (gens, json_path) in enumerate(zip(all_gens, json_paths)):
+            if selected_path is not None and json_path.resolve() != selected_path:
+                continue
             run_out = out_dir / f"seed{idx}"
             run_out.mkdir(parents=True, exist_ok=True)
             shared = dict(global_state)
@@ -474,6 +502,9 @@ def main():
                 **{**method_kwargs, "analysis_source_path": str(json_path)},
                 shared_state=shared,
             )
+            # Keep the target run in the six-run PCA frame, rather than
+            # rescaling the axes to that run alone.
+            run_state["reference_Z"] = global_state["Z"]
             _plot_one(gens, run_state, run_out, args)
             print(f"json: {json_path}")
 

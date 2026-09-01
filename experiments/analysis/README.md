@@ -3,6 +3,21 @@
 本文档总结本仓库用于**策略代码聚类**与**演化谱系（进化树）构建**的完整分析方案，
 涵盖数据来源、分析流水线、模块结构、数据格式、使用方法与已验证的关键发现。
 
+## 固定的新策略优越性评测协议
+
+以后判断演化策略是否优于 Leading Eight，统一使用
+[`STRATEGY_SUPERIORITY_STANDARD.md`](STRATEGY_SUPERIORITY_STANDARD.md)。该协议
+预先固定扰动网格、筛选与确认种子、收益保持率、置信区间、双向入侵门槛以及允许
+使用的结论措辞，禁止看完结果后更换指标。
+
+```powershell
+# 10-seed screening
+uv run run-perturbation-robustness --workers 12
+
+# Version-1.0 confirmation seeds
+uv run run-perturbation-robustness --seeds 100 101 102 103 104 105 106 107 108 109 110 111 112 113 114 115 116 117 118 119 120 121 122 123 124 125 126 127 128 129 --output results/quantitative_baseline/robustness/agent-type1_seed4_confirmation --workers 12
+```
+
 ---
 
 ## 1. 方案总览
@@ -205,7 +220,7 @@ experiments/analysis/
   "trajectory": [ ... ],        // 每代 population 含 lineage 字段（见 §2.2）
   "final_population": [ ... ],  // 同上
   "lineage_events": [ ... ],    // 完整出生事件日志
-  "config": { "schema_version": 4, "agent_type": "v2" | "v3", ... }
+  "config": { "schema_version": 4, "agent_type": "agent-type1" | "agent-type2", ... }
 }
 ```
 
@@ -213,7 +228,9 @@ experiments/analysis/
 
 - `origin` 枚举：`initial` / `imitate` / `independent_init` / `mutate`
   （对应 `ORIGIN_*` 常量）。
-- `config.agent_type` 只能是 `"v2"` 或 `"v3"`（`AGENT_TYPES`）。
+- `config.agent_type` 规范值只能是 `"agent-type1"` 或 `"agent-type2"`
+  （`AGENT_TYPES`）；读取历史数据时仍接受旧别名 `"v2"` / `"v3"`
+  （`AGENT_TYPES_LEGACY`）。
 - 增加字段不破坏 reader（reader 用 `.get`）；删除或**重命名**字段必须
   递增 `SCHEMA_VERSION` 并同步更新迁移感知的 reader。
 - `evolution_json_path()` 的目录约定也可经 `analysis.paths.run_dir()` /

@@ -29,6 +29,11 @@ rerun-experiments = "experiments.tools.rerun:main"
 
 # Agent 2 bidirectional invasion experiment and its dashboard.
 run-agent2-invasion = "experiments.analysis.invasion.run_agent2_schmid_invasion:main"
+run-best-leading-eight-invasion = "experiments.analysis.invasion.run_best_leading_eight_invasion:main"
+run-n100-invasion-count-sweep = "experiments.analysis.invasion.run_n100_invasion_count_sweep:main"
+run-perturbation-robustness = "experiments.analysis.run_perturbation_robustness:main"
+plot-best-leading-eight-invasion = "experiments.analysis.plot_best_leading_eight_invasion:main"
+plot-n100-invasion-count-sweep = "experiments.analysis.plot_n100_invasion_count_sweep:main"
 plot-agent2-invasion = "experiments.analysis.plot_agent2_schmid_invasion:main"
 plot-evolution-curves = "experiments.analysis.plot_evolution_curves:main"
 

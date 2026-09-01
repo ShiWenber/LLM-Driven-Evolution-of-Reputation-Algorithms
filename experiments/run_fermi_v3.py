@@ -46,6 +46,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Mutation probability on adoption.")
     parser.add_argument("--mutation-temperature", type=float, default=0.8,
                         help="LLM mutation temperature.")
+    parser.add_argument(
+        "--imitation-learning",
+        choices=("random", "deliberate"),
+        default="random",
+        help="How the LLM creates a child after imitation.",
+    )
     parser.add_argument("--benefit", type=float, default=2.0,
                         help="PD cooperation benefit.")
     parser.add_argument("--cost", type=float, default=1.0,
@@ -66,13 +72,18 @@ def build_parser() -> argparse.ArgumentParser:
                         help="LLM model name. Defaults to the platform default for the selected provider.")
     parser.add_argument("--llm-thinking", action="store_true",
                         help="Enable thinking mode for the LLM API call.")
-    parser.add_argument("--label", type=str, default="LLM_v3_fermi_z_v3_g100_1000inter",
-                        help="Run label used in output directory and summary metadata.")
+    parser.add_argument(
+        "--label",
+        type=str,
+        default=None,
+        help="Run label. By default it includes the imitation-learning mode.",
+    )
     parser.add_argument("--output-root", type=str, default=str(DEFAULT_OUTPUT_ROOT),
                         help="Root directory where per-seed result folders are created.")
-    parser.add_argument("--agent-type", type=str, default="v3",
-                        choices=["v2", "v3"],
-                        help="Agent family to evolve.")
+    parser.add_argument("--agent-type", type=str, default="agent-type2",
+                        choices=["agent-type1", "agent-type2", "v2", "v3"],
+                        help="Agent family to evolve: 'agent-type1' (legacy 'v2', type-1 "
+                             "functions) or 'agent-type2' (legacy 'v3', full LLMAgent class).")
     parser.add_argument("--no-self-pairing", action="store_true",
                         help="Disable self-pairing restriction in the evolutionary loop.")
     parser.add_argument("--dry-run", action="store_true",
@@ -127,6 +138,7 @@ def run_one_seed(args: argparse.Namespace, seed: int, label: str, out_root: Path
             use_fermi=True,
             fermi_beta=args.fermi_beta,
             mutation_rate_on_adoption=args.mutation_rate,
+            imitation_learning_mode=args.imitation_learning,
             updates_per_gen=args.updates_per_gen,
             forbid_self_pairing=not args.no_self_pairing,
         )
@@ -174,16 +186,25 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    # Normalize legacy agent_type aliases to canonical values.
+    if args.agent_type == "v2":
+        args.agent_type = "agent-type1"
+    elif args.agent_type == "v3":
+        args.agent_type = "agent-type2"
+
     provider = args.provider.lower()
     seeds = resolve_seeds(args)
     out_root = Path(args.output_root)
     out_root.mkdir(parents=True, exist_ok=True)
-    label = args.label
+    label = args.label or (
+        f"LLM_v3_fermi_z_v3_g100_1000inter_learn-{args.imitation_learning}"
+    )
 
     print(f"=== {label} seeds={seeds} (sequential) ===", flush=True)
     print(f"  provider: {provider}, model: {get_model(provider, args.model)}", flush=True)
     print(f"  num_gens: {args.gens}, target_interactions: {args.target_interactions}", flush=True)
     print(f"  Z-like: mu={args.mutation_rate}, beta={args.fermi_beta}, updates_per_gen={args.updates_per_gen}", flush=True)
+    print(f"  imitation_learning: {args.imitation_learning}", flush=True)
     print(f"  prompts: v3 / minimal Fermi, agent_type={args.agent_type}", flush=True)
     print(f"  output_root: {out_root}", flush=True)
     print(flush=True)

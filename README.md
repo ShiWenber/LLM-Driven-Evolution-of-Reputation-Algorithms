@@ -313,6 +313,56 @@ uv run run-n100-invasion-count-sweep --workers 12
 uv run plot-n100-invasion-count-sweep
 ```
 
+### 11) N=100 invasion with action and observation errors
+
+The diagonal `agent-type1` baseline above can arise when reputations converge to
+an all-good state and the strategies consequently produce nearly identical
+behavior. To perturb that state, we repeated the complete 1,248-run N=100 sweep
+with a 1% action-error probability and a 1% observation-error probability. An
+action error flips a strategy's intended action before payoffs are calculated.
+An observation error independently flips each executed action as seen by each
+observer before that observer updates its private reputations. Thus payoffs use
+executed actions, while reputation updates use observer-specific perceptions.
+
+All other settings are unchanged: 50 generations, 1,000 interactions per
+generation, the final 200 interactions for fitness, 100 imitation opportunities
+per generation, three seeds, no mutation, and population-aligned resetting of
+agents, private reputations, and internal state between generations. Selection
+still uses deterministic payoff imitation—when the sampled model has strictly
+higher fitness, the learner copies it; no Fermi parameter is used.
+
+![N=100 bidirectional invasion with 1% action error and 1% observation error](README.assets/n100_noisy_invasion_count_sweep.png)
+
+The perturbation breaks the previous neutrality of `agent-type1`. From a 5%
+minority it reaches about 33% against `IS`, `SC`, and `IS+`, and about 46%
+against `SS`, `SH`, and `SS+`. A single `agent-type1` invader remains vulnerable
+to stochastic loss: it becomes extinct against the first group in these three
+seeds, while its mean final share is about 25% against the second group.
+`SJ` and `SJ+` remain the clearest low-frequency barrier: `agent-type1` becomes
+extinct from 1%, 5%, and 10%, but grows to about 83% when starting from 50%.
+In the reverse direction, Leading Eight minorities generally contract, although
+`SJ`/`SJ+` can recover when they already begin near dominance. The noisy result
+therefore rejects the earlier interpretation of universal two-way neutrality:
+the all-good steady state had hidden selection differences, but
+`agent-type1`'s advantage is norm- and frequency-dependent.
+
+`agent-type2` remains substantially stronger. A single evolved invader reaches
+about 67% against the six non-`SJ` norms, and a 5% minority fixes in all three
+seeds. Against `SJ`/`SJ+`, 1% and 5% minorities become extinct, a 10% minority
+reaches about 38%, and a 50% start reaches about 56%. In the reverse direction,
+the six non-`SJ` norms normally become extinct even from very high initial
+shares; `SJ`/`SJ+` still expand when they start at 90% or more. Consequently,
+the errors reveal an even clearer broad invasion and resistance advantage for
+`agent-type2`, while preserving a frequency-dependent exception for
+`SJ`/`SJ+`.
+
+Run or resume the noisy sweep and regenerate its figure with:
+
+```powershell
+uv run run-n100-invasion-count-sweep --workers 12 --action-error 0.01 --observation-error 0.01
+uv run plot-n100-invasion-count-sweep --summary results/quantitative_baseline/invasion/n100_noisy_invasion_count_sweep/summary.json --output README.assets/n100_noisy_invasion_count_sweep.png
+```
+
 ---
 
 ## Project overview
@@ -397,6 +447,10 @@ uv run plot-best-leading-eight-invasion
 # N=100 bidirectional sweep over initial invader counts
 uv run run-n100-invasion-count-sweep --workers 12
 uv run plot-n100-invasion-count-sweep
+
+# N=100 sweep with independent 1% action and observation errors
+uv run run-n100-invasion-count-sweep --workers 12 --action-error 0.01 --observation-error 0.01
+uv run plot-n100-invasion-count-sweep --summary results/quantitative_baseline/invasion/n100_noisy_invasion_count_sweep/summary.json --output README.assets/n100_noisy_invasion_count_sweep.png
 
 # Generate the invasion dashboard
 uv run plot-agent2-invasion
@@ -516,15 +570,16 @@ Common options:
 | `--population-size N` | `15` | Population size |
 | `--updates-per-gen N` | `15` | Fermi imitation updates per generation |
 | `--fermi-beta F` | `5.0` | Fermi selection strength |
-| `--mutation-rate F` | `0.1` | Mutation probability on adoption (`mu`) |
+| `--mutation-rate F` | `0.1` | Probability of an independent LLM rewrite after accepted imitation (`mu`); the `1-mu` branch is parent-conditioned learning |
 | `--mutation-temperature F` | `0.8` | LLM mutation temperature |
+| `--imitation-learning {random,deliberate}` | `random` | Parent-conditioned child generation: an undirected related variation or an explicit attempt to improve using the parent's real fitness |
 | `--benefit F` / `--cost F` | `2.0` / `1.0` | PD payoffs |
 | `--observability S` | `full` | Observability mode |
 | `--provider S` | `deepseek` | API provider for key/base-url lookup |
 | `--model S` | provider default | LLM model name |
 | `--llm-thinking` | off | Enable LLM thinking mode |
 | `--agent-type {v2,v3}` | `v3` | Legacy CLI values: `v2` selects `agent-type1`; `v3` selects `agent-type2` |
-| `--label S` | `LLM_v3_fermi_z_v3_g100_1000inter` | Output directory / summary label |
+| `--label S` | mode-specific | Output directory / summary label; the automatic label contains `learn-random` or `learn-deliberate` |
 | `--output-root PATH` | `results/quantitative_baseline` | Root for per-seed result folders |
 | `--dry-run` | off | Validate and print the seed plan without running |
 

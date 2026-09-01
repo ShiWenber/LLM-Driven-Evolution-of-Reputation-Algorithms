@@ -31,25 +31,87 @@ OUT_BASE = ROOT / 'results' / 'quantitative_baseline'
 api_key = get_api_key('deepseek')
 base_url = get_base_url('deepseek')
 
-# Agent type override via argv. Two calling conventions:
-#   python _run_fermi_3seed_100gen_v3.py            -> agent_type=v3, seeds=[0,1,2]
-#   python _run_fermi_3seed_100gen_v3.py 0          -> agent_type=v3, seeds=[0]
-#   python _run_fermi_3seed_100gen_v3.py v2         -> agent_type=v2, seeds=[0,1,2]
-#   python _run_fermi_3seed_100gen_v3.py 0 v2      -> agent_type=v2, seeds=[0]
-AGENT_TYPE = 'v3'
-if len(sys.argv) > 1 and sys.argv[1].lower() in ('v2', 'v3'):
-    AGENT_TYPE = sys.argv[1].lower()
-elif len(sys.argv) > 2:
-    t = sys.argv[2].lower()
-    if t in ('v2', 'v3'):
-        AGENT_TYPE = t
-    else:
-        raise SystemExit(f"unknown agent_type {sys.argv[2]!r}; use 'v2' or 'v3'")
+# Agent type override via argv. Calling conventions:
+#   python _run_fermi_3seed_100gen_v3.py                             -> agent-type2, seeds=[0,1,2]
+#   python _run_fermi_3seed_100gen_v3.py 0                           -> agent-type2, seeds=[0]
+#   python _run_fermi_3seed_100gen_v3.py agent-type1                 -> agent-type1, seeds=[0,1,2]
+#   python _run_fermi_3seed_100gen_v3.py agent-type1 --seeds 0 1 2 3 4 5 -> agent-type1, seeds=[0..5]
+#   python _run_fermi_3seed_100gen_v3.py 0 agent-type1               -> agent-type1, seeds=[0]
+#   python _run_fermi_3seed_100gen_v3.py agent-type1 --seeds 0 1 2 --observability partial --observability-p 0.3
+#   (legacy 'v2'/'v3' still accepted as aliases)
+AGENT_TYPE = 'agent-type2'
+OBSERVABILITY = 'full'
+OBSERVABILITY_P = 1.0
 
+
+def _arg_value(flag: str, default):
+    """Return the value following `flag` in argv, or default if absent."""
+    if flag in sys.argv:
+        idx = sys.argv.index(flag)
+        if idx + 1 < len(sys.argv):
+            return sys.argv[idx + 1]
+    return default
+
+
+def _resolve_agent_type(t: str) -> str:
+    """Map a CLI agent-type token to the canonical value.
+
+    Accepts canonical 'agent-type1'/'agent-type2' and legacy 'v2'/'v3'
+    aliases; returns '' for unknown tokens.
+    """
+    t = t.lower()
+    if t in ('agent-type1', 'agent-type2'):
+        return t
+    if t == 'v2':
+        return 'agent-type1'
+    if t == 'v3':
+        return 'agent-type2'
+    return ''
+
+
+if len(sys.argv) > 1:
+    resolved = _resolve_agent_type(sys.argv[1])
+    if resolved:
+        AGENT_TYPE = resolved
+    elif len(sys.argv) > 2:
+        resolved = _resolve_agent_type(sys.argv[2])
+        if not resolved:
+            raise SystemExit(
+                f"unknown agent_type {sys.argv[2]!r}; use 'agent-type1' or "
+                f"'agent-type2' (legacy 'v2'/'v3' accepted)"
+            )
+        AGENT_TYPE = resolved
+
+# Observability override: --observability full|partial|private,
+# --observability-p <prob> (used only when partial).
+OBSERVABILITY = _arg_value('--observability', 'full')
+OBSERVABILITY_P = float(_arg_value('--observability-p', '1.0'))
+IMITATION_LEARNING = _arg_value('--imitation-learning', 'random')
+if IMITATION_LEARNING not in ('random', 'deliberate'):
+    raise SystemExit("--imitation-learning must be random or deliberate")
+
+# Label gets a p-suffix whenever observability is not full, so runs at
+# different observation rates never overwrite each other's directories.
 LABEL = f"LLM_{AGENT_TYPE}_fermi_z_v3_g100_1000inter_N16_genreset"
+if OBSERVABILITY != 'full':
+    LABEL += f"_{OBSERVABILITY}{OBSERVABILITY_P}".replace('.', 'p')
+LABEL += f"_learn-{IMITATION_LEARNING}"
 
-# Accept seed override via argv: pass a single int to run only that seed.
-if len(sys.argv) > 1 and sys.argv[1].lower() not in ('v2', 'v3'):
+# Accept seed override via argv: pass a single int to run only that seed,
+# or pass `--seeds N [N ...]` after the agent-type token to run an
+# arbitrary seed list. Parsing stops at the next `--` flag so option
+# order after `--seeds` does not matter.
+_seeds_arg = []
+if '--seeds' in sys.argv:
+    idx = sys.argv.index('--seeds')
+    for x in sys.argv[idx + 1:]:
+        if x.startswith('--'):
+            break
+        _seeds_arg.append(int(x))
+
+if _seeds_arg:
+    seeds = _seeds_arg
+elif len(sys.argv) > 1 and not _resolve_agent_type(sys.argv[1]):
     seeds = [int(sys.argv[1])]
 else:
     seeds = [0, 1, 2]
@@ -59,9 +121,11 @@ NUM_GENS = 100
 print(f"=== {LABEL} seeds={seeds} (sequential) ==", flush=True)
 print(f"  api_key: {api_key[:8]}...{api_key[-4:]}", flush=True)
 print(f"  num_gens: {NUM_GENS}, target_interactions: 1000, agent_type={AGENT_TYPE}", flush=True)
+print(f"  observability: {OBSERVABILITY}, p={OBSERVABILITY_P}", flush=True)
 print(f"  Z-like: mu=0.1, beta=5.0, updates_per_gen=15", flush=True)
+print(f"  imitation_learning: {IMITATION_LEARNING}", flush=True)
 print(f"  prompts: v4 (truly minimal init + mutation)", flush=True)
-print(f"  estimated: ~5-7h/seed x {len(seeds)} seed(s)", flush=True)
+print(f"  estimated: ~30-40min/seed x {len(seeds)} seed(s)", flush=True)
 print(flush=True)
 
 summary = []
@@ -85,8 +149,8 @@ for seed in seeds:
             target_interactions_per_gen=1000,
             benefit=2.0,
             cost=1.0,
-            observability='full',
-            observability_p=1.0,
+            observability=OBSERVABILITY,
+            observability_p=OBSERVABILITY_P,
             elite_count=2,
             num_eliminate=5,
             tournament_size=3,
@@ -102,6 +166,7 @@ for seed in seeds:
             use_fermi=True,
             fermi_beta=5.0,
             mutation_rate_on_adoption=0.1,
+            imitation_learning_mode=IMITATION_LEARNING,
             updates_per_gen=15,
             forbid_self_pairing=True,
         )

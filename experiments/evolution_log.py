@@ -6,8 +6,9 @@ quantitative evolution experiment and every analysis consumer.
 Writer side (must produce exactly this shape)
 ==============================================
   * ``experiments.v2_quantitative.population.V2EvolutionaryPopulation.run_evolution()``
-    — both ``agent_type="v2"`` (QuantitativeAgent) and ``agent_type="v3"``
-    (FullAgent) converge on the SAME record layout. ``run_evolution()``
+    — both ``agent_type="agent-type1"`` (QuantitativeAgent, legacy "v2")
+    and ``agent_type="agent-type2"`` (FullAgent, legacy "v3") converge on
+    the SAME record layout. ``run_evolution()``
     assembles its return value through ``build_evolution_results()``.
   * CLI runners persist it via ``write_evolution_json()`` at the canonical
     path ``<output_root>/<label>_seed<N>/evolutionary.json`` (see
@@ -48,7 +49,7 @@ On-disk shape
          "origin": "initial", "birth_gen": 0}, ...
       ],
       "config": {
-        "schema_version": 4, "agent_type": "v2" | "v3", ...
+        "schema_version": 4, "agent_type": "agent-type1" | "agent-type2", ...
       }
     }
 
@@ -160,6 +161,7 @@ F_CONFIG_LLM_MAX_TOKENS = "llm_max_tokens"
 F_CONFIG_USE_FERMI = "use_fermi"
 F_CONFIG_FERMI_BETA = "fermi_beta"
 F_CONFIG_MUTATION_RATE_ON_ADOPTION = "mutation_rate_on_adoption"
+F_CONFIG_IMITATION_LEARNING_MODE = "imitation_learning_mode"
 F_CONFIG_UPDATES_PER_GEN = "updates_per_gen"
 F_CONFIG_FORBID_SELF_PAIRING = "forbid_self_pairing"
 F_CONFIG_FALLBACK_INIT_COUNT = "fallback_init_count"
@@ -173,7 +175,10 @@ REQUIRED_CONFIG_FIELDS = (
 )
 
 # Agent families supported by the v2/v3 quantitative interface.
-AGENT_TYPES = ("v2", "v3")
+# Canonical values: "agent-type1" (legacy "v2") and "agent-type2" (legacy "v3").
+AGENT_TYPES = ("agent-type1", "agent-type2")
+# Legacy aliases accepted when reading historical records.
+AGENT_TYPES_LEGACY = ("v2", "v3")
 
 # ---------------------------------------------------------------------------
 # Canonical directory / file layout
@@ -358,9 +363,12 @@ def validate_evolution_results(
         _require(K_LINEAGE_EVENTS in data,
                  f"missing top-level key {K_LINEAGE_EVENTS!r} (schema v4)")
         agent_type = config.get(F_CONFIG_AGENT_TYPE)
-        if agent_type is not None and agent_type not in AGENT_TYPES:
+        if agent_type is not None and (
+            agent_type not in AGENT_TYPES and agent_type not in AGENT_TYPES_LEGACY
+        ):
             errors.append(
-                f"config agent_type={agent_type!r} not in {AGENT_TYPES}"
+                f"config agent_type={agent_type!r} not in "
+                f"{AGENT_TYPES} (legacy {AGENT_TYPES_LEGACY})"
             )
         for i, ev in enumerate(data.get(K_LINEAGE_EVENTS, [])):
             if not isinstance(ev, dict):
