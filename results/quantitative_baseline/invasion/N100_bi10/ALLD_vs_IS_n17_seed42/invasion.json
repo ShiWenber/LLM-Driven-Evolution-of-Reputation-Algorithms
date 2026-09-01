@@ -1,0 +1,471 @@
+{
+  "target": "IS",
+  "invader": "ALLD",
+  "invader_count": 17,
+  "population_size": 100,
+  "num_gens": 50,
+  "burn_in_gens": 10,
+  "seed": 42,
+  "trajectory": [
+    {
+      "generation": 0,
+      "invader_freq": 0.17,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9977833487267458,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 1,
+      "invader_freq": 0.19,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9966300157075546,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 2,
+      "invader_freq": 0.19,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9957588357588371,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 3,
+      "invader_freq": 0.18,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9954522030404552,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 4,
+      "invader_freq": 0.18,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9937232130512934,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 5,
+      "invader_freq": 0.12,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9904619970193753,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 6,
+      "invader_freq": 0.12,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9884978671541771,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 7,
+      "invader_freq": 0.14,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9844465956760289,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 8,
+      "invader_freq": 0.14,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9803586533581481,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 9,
+      "invader_freq": 0.13,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9822348664453964,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 10,
+      "invader_freq": 0.13,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9871073926759042,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 11,
+      "invader_freq": 0.12,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9858058225379593,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 12,
+      "invader_freq": 0.05,
+      "mean_coop": 0.0,
+      "mean_rep": 0.983978750174758,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 13,
+      "invader_freq": 0.07,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9838754907459393,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 14,
+      "invader_freq": 0.09,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9823579184882282,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 15,
+      "invader_freq": 0.14,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9807930785868827,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 16,
+      "invader_freq": 0.16,
+      "mean_coop": 0.0,
+      "mean_rep": 0.982603862720584,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 17,
+      "invader_freq": 0.2,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9800759814267676,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 18,
+      "invader_freq": 0.22,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9800580832526671,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 19,
+      "invader_freq": 0.3,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9825852310122466,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 20,
+      "invader_freq": 0.22,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9850857953812463,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 21,
+      "invader_freq": 0.27,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9871852970795624,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 22,
+      "invader_freq": 0.21,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9871810827629157,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 23,
+      "invader_freq": 0.2,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9840639959687628,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 24,
+      "invader_freq": 0.22,
+      "mean_coop": 0.0,
+      "mean_rep": 0.979440596000528,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 25,
+      "invader_freq": 0.23,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9781578947368481,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 26,
+      "invader_freq": 0.24,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9716477194904904,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 27,
+      "invader_freq": 0.17,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9729850141757865,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 28,
+      "invader_freq": 0.22,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9712260905463098,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 29,
+      "invader_freq": 0.27,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9775178429817629,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 30,
+      "invader_freq": 0.28,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9793654921336665,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 31,
+      "invader_freq": 0.3,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9805462076106701,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 32,
+      "invader_freq": 0.26,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9757579787234105,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 33,
+      "invader_freq": 0.22,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9729623612239431,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 34,
+      "invader_freq": 0.14,
+      "mean_coop": 0.0,
+      "mean_rep": 0.974438985526495,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 35,
+      "invader_freq": 0.08,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9754771241830117,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 36,
+      "invader_freq": 0.05,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9740951875911487,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 37,
+      "invader_freq": 0.05,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9745685618729135,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 38,
+      "invader_freq": 0.03,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9746557203389857,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 39,
+      "invader_freq": 0.03,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9753704918032826,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 40,
+      "invader_freq": 0.02,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9747528015820791,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 41,
+      "invader_freq": 0.02,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9736758684453896,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 42,
+      "invader_freq": 0.03,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9769000520562251,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 43,
+      "invader_freq": 0.05,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9748360010496006,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 44,
+      "invader_freq": 0.04,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9749018067557005,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 45,
+      "invader_freq": 0.02,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9639652077868379,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 46,
+      "invader_freq": 0.03,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9675350971922355,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 47,
+      "invader_freq": 0.01,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9612434228745591,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 48,
+      "invader_freq": 0.02,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9584189056126117,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 49,
+      "invader_freq": 0.02,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9569086322870074,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    },
+    {
+      "generation": 50,
+      "invader_freq": 0.01,
+      "mean_coop": 0.0,
+      "mean_rep": 0.9557801017524069,
+      "n_residents": 83,
+      "n_invaders": 17,
+      "burn_in_gens": 10
+    }
+  ],
+  "elapsed_sec": 2.768714427947998
+}

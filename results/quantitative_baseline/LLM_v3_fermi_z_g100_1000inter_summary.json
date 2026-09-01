@@ -1,0 +1,21 @@
+{
+  "label": "LLM_v3_fermi_z_g100_1000inter",
+  "num_gens": 100,
+  "target_interactions_per_gen": 1000,
+  "scheme": "fermi_z_like (mu=0.1, beta=5.0, updates_per_gen=15)",
+  "seeds": [
+    {
+      "seed": 1,
+      "completed": true,
+      "error": null,
+      "elapsed_sec": 7025.508873224258,
+      "elapsed_min": 117.09181455373763,
+      "final_coop": 0.9410589410589411,
+      "final_fitness": 24.8,
+      "fallback_init": 0,
+      "fallback_mutation": 0,
+      "gen0_coop": 0.973026973026973
+    }
+  ],
+  "overall_elapsed_sec": 7025.592470884323
+}

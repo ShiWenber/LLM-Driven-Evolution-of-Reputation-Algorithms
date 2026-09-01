@@ -1,0 +1,36 @@
+{
+  "label": "LLM_v3_fermi_z_g100_1000inter",
+  "scheme": "fermi_z_like (mu=0.1, beta=5.0, updates_per_gen=15)",
+  "num_gens": 100,
+  "target_interactions_per_gen": 1000,
+  "n_seeds": 3,
+  "seeds": [
+    {
+      "seed": 0,
+      "gen0_coop": 0.973026973026973,
+      "final_coop": 0.981018981018981,
+      "final_fitness": 26.666666666666668
+    },
+    {
+      "seed": 1,
+      "gen0_coop": 0.973026973026973,
+      "final_coop": 0.9410589410589411,
+      "final_fitness": 24.8
+    },
+    {
+      "seed": 2,
+      "gen0_coop": 0.8261738261738262,
+      "final_coop": 0.7552447552447552,
+      "final_fitness": 20.4
+    }
+  ],
+  "aggregate": {
+    "gen0_coop_mean": 0.9240759240759241,
+    "final_coop_mean": 0.8924408924408924,
+    "final_coop_std": 0.09837440806957189,
+    "final_coop_min": 0.7552447552447552,
+    "final_coop_max": 0.981018981018981,
+    "final_fitness_mean": 23.955555555555556,
+    "final_fitness_std": 2.627114081090072
+  }
+}
