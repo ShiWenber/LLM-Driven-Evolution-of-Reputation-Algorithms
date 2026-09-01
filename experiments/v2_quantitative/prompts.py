@@ -15,13 +15,14 @@ extended to symmetric interactions.
 
 
 INIT_PROMPT_V2 = """You are a Python programmer designing a strategy for a 2-player
-Prisoner's Dilemma game with reputation. The game has 15 agents that play
-30 rounds per generation, 30 generations total. Each round, the 15
-agents are randomly paired (7 pairs + 1 unpaired per round). In each
-pair, BOTH agents simultaneously choose to 'cooperate' (give benefit=2
-to the partner at cost=1 to self) or 'defect' (no exchange). Payoffs:
-  (C, C) -> each gets 2 - 1 = 1
-  (C, D) -> C gets -1 (sucker's payoff), D gets +2
+Prisoner's Dilemma game with reputation. The game has {population_size}
+agents that play {num_rounds_per_gen} rounds per generation,
+{num_generations} generations total. Each round, the {population_size}
+agents are randomly paired into {num_pairs} pairs. In each
+pair, BOTH agents simultaneously choose to 'cooperate' (give benefit={benefit:g}
+to the partner at cost={cost:g} to self) or 'defect' (no exchange). Payoffs:
+  (C, C) -> each gets {benefit:g} - {cost:g} = {cc_payoff:g}
+  (C, D) -> C gets -{cost:g} (sucker's payoff), D gets +{benefit:g}
   (D, C) -> symmetric
   (D, D) -> each gets 0
 
@@ -31,8 +32,7 @@ observer's private rating of BOTH players in that joint action.
 
 Your strategy consists of TWO functions. Define BOTH.
 
-The interface is the leading-eight / quantitative-assessment style
-extended to symmetric 2-player PD:
+The interface for your strategy is:
 
 ```python
 def observe(
@@ -72,11 +72,11 @@ no markdown fences. The code must define `observe` and `decide`.
 
 
 MUTATION_PROMPT_V2 = """You are mutating an existing strategy for a 2-player
-Prisoner's Dilemma game with reputation. The game has 15 agents, 30
-rounds per generation, 30 generations.
+Prisoner's Dilemma game with reputation. The game has {population_size}
+agents, {num_rounds_per_gen} rounds per generation, {num_generations}
+generations.
 
-The interface is leading-eight / quantitative-assessment style
-extended to symmetric 2-player PD:
+The interface for your strategy is:
 
 ```python
 def observe(
@@ -100,7 +100,7 @@ recipient together. Use one joint judging rule for both sides.
 
 The parent strategy to mutate is below.
 
-PARENT (fitness {fitness}):
+PARENT FITNESS: {fitness:.3f}
 
 ```python
 {parent_code}
@@ -128,9 +128,10 @@ participates in a multi-agent social-dynamics simulation. The class
 decides what one agent does each round.
 
 The simulation:
-  - 15 agents play 30 rounds per generation, for 30 generations.
-  - Each round, the 15 agents are randomly partitioned into pairs (7
-    pairs; one agent sits out if 15 is odd).
+  - {population_size} agents play {num_rounds_per_gen} rounds per
+    generation, for {num_generations} generations.
+  - Each round, the {population_size} agents are randomly partitioned
+    into {num_pairs} pairs.
   - In each pair, BOTH agents SIMULTANEOUSLY choose to either
     "cooperate" or "defect". The joint action is observed by the
     players themselves and by every other agent in the population.
@@ -179,9 +180,9 @@ multi-agent social-dynamics simulation. The parent is a Python class
 named `LLMAgent`. Produce a child class also named `LLMAgent` that
 behaves similarly but with at least one change.
 
-The simulation summary (do not propose structural changes to the
-simulation itself):
-  - 15 agents, 30 rounds per generation, 30 generations total.
+The simulation summary:
+  - {population_size} agents, {num_rounds_per_gen} rounds per
+    generation, {num_generations} generations total.
   - Random pairing, simultaneous cooperation/defection choice.
   - Every joint action is observed by both players and by every
     third-party agent. The framework calls `observe(...)` on every
@@ -228,10 +229,10 @@ markdown fences. The child must define exactly one class named
 # recognizably the parent's strategy with a small perturbation).
 # Contrast with the μ path, which uses INIT_PROMPT_V3 with NO
 # reference to j.
-SMALL_MUTATION_PROMPT_V3 = """You are rewriting a Python class named `LLMAgent`
+SMALL_MUTATION_PROMPT_V3 = """Create a variation of a Python class named `LLMAgent`
 that participates in a multi-agent social-dynamics simulation. A
-parent implementation is shown below. Produce a new implementation of
-the same class.
+parent implementation and its realized fitness are shown below. Produce a
+related child implementation while preserving the required interface.
 
 The class interface (REQUIRED):
 
@@ -255,6 +256,8 @@ class LLMAgent:
         ...
 ```
 
+PARENT FITNESS: {fitness:.3f}
+
 PARENT:
 
 ```python
@@ -266,14 +269,43 @@ markdown fences. The child must define exactly one class named
 `LLMAgent` and use the same interface.
 """
 
+DELIBERATE_MUTATION_PROMPT_V3 = """Improve a Python class named `LLMAgent`
+for a multi-agent social-dynamics simulation. The parent implementation and
+its realized fitness are shown below. Infer a plausible weakness, then produce
+a child intended to achieve higher fitness in the same environment. Preserve
+useful behavior and the required interface. Do not claim success; selection
+will evaluate the child in the next generation.
+
+The class interface (REQUIRED):
+
+```python
+class LLMAgent:
+    def __init__(self, agent_id: int) -> None: ...
+    def decide(self) -> bool: ...
+    def observe(self, donor_id: int, donor_action: str,
+                recipient_id: int, recipient_action: str) -> None: ...
+```
+
+PARENT FITNESS: {fitness:.3f}
+
+PARENT:
+
+```python
+{parent_code}
+```
+
+Output ONLY the Python code for the child class, no prose or markdown fences.
+The child must define exactly one class named `LLMAgent`.
+"""
+
 
 # v2 (legacy) small-mutate: same interface as INIT_PROMPT_V2. The
 # v2 quantitative interface is two free functions, not a class.
-SMUTATION_PROMPT_V2 = """You are mutating an existing strategy for a 2-player
+SMUTATION_PROMPT_V2 = """Create a variation of an existing strategy for a 2-player
 Prisoner's Dilemma game with reputation. The parent is two functions,
-`observe` and `decide`. Produce a child that is a SMALL variant of
-the parent — adjust a single number or threshold, do NOT rewrite the
-logic. Output ONLY the Python code, no prose, no fences.
+`observe` and `decide`. The parent and its realized fitness are shown below.
+Produce a related child using the same interface. Output ONLY the Python code,
+no prose or fences.
 
 Interface:
 
@@ -291,9 +323,36 @@ def decide(my_reputation: float, opponent_reputation: float) -> bool:
     pass
 ```
 
-PARENT (fitness {fitness}):
+PARENT FITNESS: {fitness:.3f}
 
 ```python
 {parent_code}
 ```
+"""
+
+DELIBERATE_MUTATION_PROMPT_V2 = """Improve an existing strategy for a 2-player
+Prisoner's Dilemma game with reputation. The parent consists of `observe` and
+`decide`, and its realized fitness is shown below. Infer a plausible weakness,
+then produce a child intended to achieve higher fitness in the same environment.
+Preserve useful behavior and the required interface. Do not claim success;
+selection will evaluate the child in the next generation.
+
+Interface:
+
+```python
+def observe(donor_reputation: float, donor_action: str,
+            recipient_reputation: float, recipient_action: str,
+            my_reputation: float) -> tuple[float, float]: ...
+def decide(my_reputation: float, opponent_reputation: float) -> bool: ...
+```
+
+PARENT FITNESS: {fitness:.3f}
+
+PARENT:
+
+```python
+{parent_code}
+```
+
+Output ONLY the Python code, no prose or markdown fences.
 """

@@ -4,15 +4,15 @@ Mirrors the v1 EvolutionaryPopulation but uses the v2 QuantitativeAgent
 and V2DonorGame.
 
 Supports two agent types:
-  - `agent_type="v2"`: type-1 agents. The LLM emits two top-level
-    Python functions (`observe` + `decide`); the framework maintains a
-    scalar reputation matrix for them.
-  - `agent_type="v3"`: type-2 agents. The LLM emits a full Python class
-    named `LLMAgent` with `__init__(agent_id)`, `decide()`, and
-    `observe(...)` methods. The LLM owns its own internal state
-    structure (dicts, lists, counters — anything). The framework still
-    maintains a scalar `reputations` matrix for bookkeeping, but the
-    LLM is not required to read it.
+  - `agent_type="agent-type1"` (legacy "v2"): type-1 agents. The LLM
+    emits two top-level Python functions (`observe` + `decide`); the
+    framework maintains a scalar reputation matrix for them.
+  - `agent_type="agent-type2"` (legacy "v3"): type-2 agents. The LLM
+    emits a full Python class named `LLMAgent` with `__init__(agent_id)`,
+    `decide()`, and `observe(...)` methods. The LLM owns its own
+    internal state structure (dicts, lists, counters — anything). The
+    framework still maintains a scalar `reputations` matrix for
+    bookkeeping, but the LLM is not required to read it.
 
 Type 2 baseline mode currently only supports ALLCClass and ALLDClass
 (class wrappers around the trivial always-cooperate / always-defect
@@ -33,6 +33,7 @@ from ..evolution_log import (
     F_CONFIG_ELITE_COUNT, F_CONFIG_FALLBACK_INIT_COUNT,
     F_CONFIG_FALLBACK_MUTATION_COUNT, F_CONFIG_FERMI_BETA,
     F_CONFIG_FORBID_SELF_PAIRING, F_CONFIG_LLM_MAX_TOKENS,
+    F_CONFIG_IMITATION_LEARNING_MODE,
     F_CONFIG_LLM_MODEL, F_CONFIG_LLM_THINKING,
     F_CONFIG_MUTATION_RATE_ON_ADOPTION, F_CONFIG_NUM_ELIMINATE,
     F_CONFIG_NUM_GENERATIONS, F_CONFIG_NUM_ROUNDS_PER_GEN,
@@ -51,7 +52,9 @@ from .executor import V2StrategyExecutor
 from .game import V2DonorGame
 from .prompts import (
     INIT_PROMPT_V2, MUTATION_PROMPT_V2, SMUTATION_PROMPT_V2,
+    DELIBERATE_MUTATION_PROMPT_V2,
     INIT_PROMPT_V3, MUTATION_PROMPT_V3, SMALL_MUTATION_PROMPT_V3,
+    DELIBERATE_MUTATION_PROMPT_V3,
 )
 from .baselines import get_baseline
 
@@ -162,6 +165,10 @@ class V2EvolutionaryPopulation:
         fitness_window_interactions: Optional[int] = 200,
         benefit: float = 2.0,
         cost: float = 1.0,
+        # Total number of generations to evolve. Injected into the
+        # prompt templates so the LLM sees the real simulation
+        # horizon (default 30 matches the legacy hardcoded text).
+        num_generations: int = 30,
         observability: str = "full",
         observability_p: float = 1.0,
         elite_count: int = 2,
@@ -178,22 +185,15 @@ class V2EvolutionaryPopulation:
         # i != j) and apply
         #     P(i copies j) = 1 / (1 + exp(-fermi_beta * (phi_j - phi_i)))
         # with phi = per-agent windowed fitness from the just-finished
-        # generation. On copy, with probability mutation_rate_on_adoption
-        # the learner becomes an LLM-mutated version of j (counts as 1
-        # LLM call); otherwise it becomes a verbatim copy of j's code
-        # (no LLM call). Synchronous commit: all updates are decided
-        # from the old generation's fitness, then written in one shot.
-        #
-        # Coverage math (N=16, 1000 inter/gen, updates_per_gen=15):
-        #   Fermi events per gen  = 15
-        #   Mutations per gen      = 15 * 0.1 = 1.5
-        #   Fermi:mutation ratio   = 10:1 (drift-dominated)
-        #   Pair coverage per gen  = 1.5% (relative to game inter)
-        # Increase updates_per_gen to push selection strength up at
-        # the cost of squashing heterogeneous LLM initial states faster.
+        # generation. On an accepted copy, probability
+        # mutation_rate_on_adoption selects an independent LLM rewrite;
+        # otherwise the LLM creates a parent-conditioned child using
+        # imitation_learning_mode ("random" or "deliberate"). The actual
+        # role-model fitness is included in either parent-conditioned prompt.
         use_fermi: bool = False,
         fermi_beta: float = 5.0,
         mutation_rate_on_adoption: float = 0.1,
+        imitation_learning_mode: str = "random",
         updates_per_gen: int = 15,
         forbid_self_pairing: bool = True,
         llm_provider: str = "openai",
@@ -204,17 +204,17 @@ class V2EvolutionaryPopulation:
         seed: int = 42,
         results_dir: str = "results",
         use_baseline: Optional[str] = None,
-        agent_type: str = "v2",
+        agent_type: str = "agent-type1",
         # If use_baseline is set, all agents use that baseline strategy and
         # the LLM is not used. If None, LLM evolution runs.
         # agent_type:
-        #   "v2" (default) — type-1 agents. LLM emits two top-level
-        #       functions (`observe` + `decide`); framework maintains
-        #       a scalar `reputations` dict.
-        #   "v3" — type-2 agents. LLM emits a full `LLMAgent` class
-        #       with `__init__(agent_id)`, `decide()`, and
-        #       `observe(...)` methods. LLM owns its own state
-        #       structure; framework only handles bookkeeping.
+        #   "agent-type1" (default, legacy "v2") — type-1 agents. LLM
+        #       emits two top-level functions (`observe` + `decide`);
+        #       framework maintains a scalar `reputations` dict.
+        #   "agent-type2" (legacy "v3") — type-2 agents. LLM emits a
+        #       full `LLMAgent` class with `__init__(agent_id)`,
+        #       `decide()`, and `observe(...)` methods. LLM owns its own
+        #       state structure; framework only handles bookkeeping.
         # llm_thinking: when True, sends `thinking={"type": "enabled"}` to
         #   the API and bumps max_tokens to llm_max_tokens_thinking to fit
         #   both reasoning_content and the final code. When False (default),
@@ -227,8 +227,21 @@ class V2EvolutionaryPopulation:
         llm_max_tokens_base: int = 4000,
         llm_max_tokens_thinking: int = 12000,
     ):
-        if agent_type not in ("v2", "v3"):
-            raise ValueError(f"agent_type must be 'v2' or 'v3', got {agent_type!r}")
+        if agent_type not in ("agent-type1", "agent-type2", "v2", "v3"):
+            raise ValueError(
+                f"agent_type must be 'agent-type1' or 'agent-type2' "
+                f"(legacy 'v2'/'v3' accepted), got {agent_type!r}"
+            )
+        if imitation_learning_mode not in ("random", "deliberate"):
+            raise ValueError(
+                "imitation_learning_mode must be 'random' or 'deliberate', "
+                f"got {imitation_learning_mode!r}"
+            )
+        # Normalize legacy aliases to canonical values.
+        if agent_type == "v2":
+            agent_type = "agent-type1"
+        elif agent_type == "v3":
+            agent_type = "agent-type2"
         self.population_size = population_size
         # If caller asked for a target interaction count, derive the
         # round count from it. With N=16 we get 8 pairs/round; with
@@ -245,6 +258,7 @@ class V2EvolutionaryPopulation:
         self.fitness_window_interactions = fitness_window_interactions
         self.benefit = benefit
         self.cost = cost
+        self.num_generations = num_generations
         self.observability = observability
         self.observability_p = observability_p
         self.elite_count = elite_count
@@ -253,6 +267,7 @@ class V2EvolutionaryPopulation:
         self.use_fermi = use_fermi
         self.fermi_beta = fermi_beta
         self.mutation_rate_on_adoption = mutation_rate_on_adoption
+        self.imitation_learning_mode = imitation_learning_mode
         self.updates_per_gen = updates_per_gen
         self.forbid_self_pairing = forbid_self_pairing
         self.llm_provider = llm_provider
@@ -403,10 +418,10 @@ class V2EvolutionaryPopulation:
 
     def _make_agent(self, code: str, agent_id: int):
         """Validate `code` and instantiate one agent of the configured type."""
-        if self.agent_type == "v3":
+        if self.agent_type == "agent-type2":
             executor = V3StrategyExecutor(code)
             return FullAgent(agent_id, executor=executor, code=code)
-        # v2 (default)
+        # agent-type1 (default)
         executor = V2StrategyExecutor(code)
         return QuantitativeAgent(agent_id, code, executor=executor)
 
@@ -419,8 +434,8 @@ class V2EvolutionaryPopulation:
     def _agent_record(self, a) -> Dict:
         """Build one schema-compliant population record for agent `a`.
 
-        Works identically for v2 (QuantitativeAgent) and v3 (FullAgent)
-        because both expose `agent_id` / `code` / `fitness` /
+        Works identically for agent-type1 (QuantitativeAgent) and
+        agent-type2 (FullAgent) because both expose `agent_id` / `code` / `fitness` /
         `cooperation_rate` / `get_self_reputation()`. Lineage fields come
         from the population manager's slot bookkeeping, so the record is
         uniform across both agent types.
@@ -442,14 +457,40 @@ class V2EvolutionaryPopulation:
     def _validate_code(self, code: str) -> None:
         """Validate that `code` is acceptable for the current agent_type.
 
-        For v2: instantiates the V2StrategyExecutor (which loads observe
-        and decide). For v3: instantiates the V3StrategyExecutor (which
-        loads the LLMAgent class). Raises on any error.
+        For agent-type1: instantiates the V2StrategyExecutor (which loads
+        observe and decide). For agent-type2: instantiates the
+        V3StrategyExecutor (which loads the LLMAgent class). Raises on
+        any error.
         """
-        if self.agent_type == "v3":
+        if self.agent_type == "agent-type2":
             V3StrategyExecutor(code)
         else:
             V2StrategyExecutor(code)
+
+    def _sim_params(self) -> Dict[str, object]:
+        """Simulation parameters injected into prompt templates.
+
+        The LLM never sees template placeholders; these values describe
+        the actual simulation the generated strategies will run in, so
+        the prompts stay in sync with population_size / rounds / benefit
+        / cost / generations even when they differ from the defaults.
+        """
+        return {
+            "population_size": self.population_size,
+            "num_rounds_per_gen": self.num_rounds_per_gen,
+            "num_generations": self.num_generations,
+            "num_pairs": max(1, self.population_size // 2),
+            "benefit": self.benefit,
+            "cost": self.cost,
+            "cc_payoff": self.benefit - self.cost,
+        }
+
+    def _init_prompt(self) -> str:
+        """The agent-type-appropriate init prompt with real sim params."""
+        template = (
+            INIT_PROMPT_V3 if self.agent_type == "agent-type2" else INIT_PROMPT_V2
+        )
+        return template.format(**self._sim_params())
 
     def _init_population_llm(self):
         """Generate N strategies via LLM.
@@ -461,7 +502,7 @@ class V2EvolutionaryPopulation:
         """
         print(f"  Initializing population via LLM ({self.population_size} agents, agent_type={self.agent_type}, thinking={self.llm_thinking}, max_tokens={self._llm_max_tokens})...")
         client = self._get_llm_client()
-        user_msg = INIT_PROMPT_V3 if self.agent_type == "v3" else INIT_PROMPT_V2
+        user_msg = self._init_prompt()
         for i in range(self.population_size):
             for attempt in range(3):
                 try:
@@ -493,7 +534,7 @@ class V2EvolutionaryPopulation:
                 # FALLBACK (Fix C: ~50% cooperation, NOT 1.000). This
                 # is also a signal that the LLM init is unreliable,
                 # so we count it.
-                if self.agent_type == "v3":
+                if self.agent_type == "agent-type2":
                     fb = FALLBACK_CLASS_V3
                 else:
                     fb = self.rng.choice(FALLBACK_STRATEGIES)
@@ -505,12 +546,12 @@ class V2EvolutionaryPopulation:
     def _init_population_baseline(self):
         """All agents use the same baseline strategy."""
         assert self.use_baseline is not None
-        if self.agent_type == "v3":
+        if self.agent_type == "agent-type2":
             # Only ALLC / ALLD supported as type-2 baselines
             t2_baselines = {"ALLC": ALLC_CLASS_SOURCE, "ALLD": ALLD_CLASS_SOURCE}
             if self.use_baseline not in t2_baselines:
                 raise ValueError(
-                    f"agent_type='v3' only supports ALLC / ALLD as baselines; "
+                    f"agent_type='agent-type2' only supports ALLC / ALLD as baselines; "
                     f"got {self.use_baseline!r}. The 8 leading-eight are type-1 only."
                 )
             code = t2_baselines[self.use_baseline]
@@ -521,7 +562,7 @@ class V2EvolutionaryPopulation:
                 self.agents.append(self._new_agent(code))
             except Exception as e:
                 print(f"  [init baseline {i}] validation fail: {e}")
-                if self.agent_type == "v3":
+                if self.agent_type == "agent-type2":
                     fb = FALLBACK_CLASS_V3
                 else:
                     fb = self.rng.choice(FALLBACK_STRATEGIES)
@@ -530,10 +571,15 @@ class V2EvolutionaryPopulation:
 
     def _mutate(self, parent_code: str, parent_fitness: float) -> str:
         """LLM-driven mutation of parent code."""
-        if self.agent_type == "v3":
-            user_msg = MUTATION_PROMPT_V3.format(fitness=parent_fitness, parent_code=parent_code)
+        sim = self._sim_params()
+        if self.agent_type == "agent-type2":
+            user_msg = MUTATION_PROMPT_V3.format(
+                fitness=parent_fitness, parent_code=parent_code, **sim
+            )
         else:
-            user_msg = MUTATION_PROMPT_V2.format(fitness=parent_fitness, parent_code=parent_code)
+            user_msg = MUTATION_PROMPT_V2.format(
+                fitness=parent_fitness, parent_code=parent_code, **sim
+            )
         for attempt in range(3):
             content = self._call_llm("You are a Python programmer. Output only valid Python code.", user_msg)
             code = _extract_code_from_response(content) if content else None
@@ -556,14 +602,11 @@ class V2EvolutionaryPopulation:
         the synchronous commit).
 
         FALLBACK on 3x LLM failure: a deterministic-random strategy
-        (the FALLBACK_CLASS_V3 for v3; a random pick from
-        FALLBACK_STRATEGIES for v2). Bumps _fallback_mutation_count
-        so we can audit run reliability.
+        (the FALLBACK_CLASS_V3 for agent-type2; a random pick from
+        FALLBACK_STRATEGIES for agent-type1). Bumps
+        _fallback_mutation_count so we can audit run reliability.
         """
-        if self.agent_type == "v3":
-            user_msg = INIT_PROMPT_V3
-        else:
-            user_msg = INIT_PROMPT_V2
+        user_msg = self._init_prompt()
         for attempt in range(3):
             content = self._call_llm(
                 "You are a Python programmer. Output only valid Python code.",
@@ -578,27 +621,41 @@ class V2EvolutionaryPopulation:
         # 3x failed: FALLBACK (same shape as _init_population_llm).
         self._fallback_mutation_count += 1
         print(f"  [fermi μ-init] FALLBACK for slot id={preserve_id}")
-        if self.agent_type == "v3":
+        if self.agent_type == "agent-type2":
             fb = FALLBACK_CLASS_V3
         else:
             fb = self.rng.choice(FALLBACK_STRATEGIES)
         return self._make_agent(fb, preserve_id)
 
-    def _llm_small_mutate(self, parent_code: str, preserve_id: int) -> object:
-        """Fermi 1-μ path: small variant of parent.
+    def _llm_small_mutate(
+        self, parent_code: str, parent_fitness: float, preserve_id: int
+    ) -> object:
+        """Fermi 1-μ path: configurable parent-conditioned child generation.
 
         The parent code IS shown to the LLM (this is the whole point
         of "imitate with tiny mutation" — the offspring is
-        recognizably the parent's strategy with a small perturbation).
+        related to the parent's strategy).
         Contrast with the μ path which uses no parent reference.
 
         FALLBACK on 3x LLM failure: the parent code verbatim (the
         smallest possible mutation). Bumps _fallback_mutation_count.
         """
-        if self.agent_type == "v3":
-            user_msg = SMALL_MUTATION_PROMPT_V3.format(parent_code=parent_code)
+        if self.agent_type == "agent-type2":
+            template = (
+                DELIBERATE_MUTATION_PROMPT_V3
+                if self.imitation_learning_mode == "deliberate"
+                else SMALL_MUTATION_PROMPT_V3
+            )
         else:
-            user_msg = SMUTATION_PROMPT_V2.format(fitness=0.0, parent_code=parent_code)
+            template = (
+                DELIBERATE_MUTATION_PROMPT_V2
+                if self.imitation_learning_mode == "deliberate"
+                else SMUTATION_PROMPT_V2
+            )
+        user_msg = template.format(
+            fitness=parent_fitness,
+            parent_code=parent_code,
+        )
         for attempt in range(3):
             content = self._call_llm(
                 "You are a Python programmer. Output only valid Python code.",
@@ -667,6 +724,9 @@ class V2EvolutionaryPopulation:
 
     def run_evolution(self, num_generations: int) -> Dict:
         """Run num_generations and return aggregate results."""
+        # Keep the prompt templates in sync with the actual run length
+        # (the constructor default may differ from the run-time value).
+        self.num_generations = num_generations
         # Initialize
         if self.use_baseline:
             self._init_population_baseline()
@@ -767,6 +827,8 @@ class V2EvolutionaryPopulation:
                     F_CONFIG_FERMI_BETA: self.fermi_beta,
                     F_CONFIG_MUTATION_RATE_ON_ADOPTION:
                         self.mutation_rate_on_adoption,
+                    F_CONFIG_IMITATION_LEARNING_MODE:
+                        self.imitation_learning_mode,
                     F_CONFIG_UPDATES_PER_GEN: self.updates_per_gen,
                     F_CONFIG_FORBID_SELF_PAIRING: self.forbid_self_pairing,
                     F_CONFIG_FALLBACK_INIT_COUNT: self._fallback_init_count,
@@ -943,7 +1005,9 @@ class V2EvolutionaryPopulation:
                 updates[new_agent.agent_id] = (None, None, ORIGIN_INDEPENDENT_INIT)
             else:
                 new_agent = self._llm_small_mutate(
-                    old_agents[j].code, old_agents[i].agent_id
+                    old_agents[j].code,
+                    old_agents[j].fitness,
+                    old_agents[i].agent_id,
                 )
                 # Parent lineage is j's lineage from the OLD generation
                 # (synchronous commit: j's code hasn't been overwritten yet).
