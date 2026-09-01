@@ -87,3 +87,6 @@ verify_draft_sync.py
 results/
 tmp/
 results/.analysis_cache/
+
+# DSH project state (skills, per-project harness data)
+.dsh/
