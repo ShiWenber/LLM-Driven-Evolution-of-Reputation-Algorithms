@@ -29,6 +29,7 @@ from experiments.evolution_log import (
 )
 
 from .cache import AnalysisCache, code_hash, stable_hash
+from .comments import strip_code_comments
 
 DEFAULT_CODE_EMBEDDING_MODEL = "Salesforce/SFR-Embedding-Code-400M_R"
 DEFAULT_CODE_EMBEDDING_REVISION = "cb950dc80d677c6fdc00f56c8ddd20ca2642c59e"
@@ -339,6 +340,11 @@ def embed_codes(
     """Embed complete code with the local code transformer."""
     if not codes:
         raise ValueError("Cannot embed an empty code collection")
+    # Comments and docstrings are documentation, not behavior: strip them so
+    # the embedding reflects only executable code. The operation is idempotent
+    # and comment-only variants of the same code collapse onto one cached
+    # embedding (see ``comments.strip_code_comments``).
+    codes = [strip_code_comments(code) for code in codes]
     if embedding_batch_size is not None and embedding_batch_size < 1:
         raise ValueError("embedding_batch_size must be positive")
     device = _resolve_embedding_device(embedding_device)

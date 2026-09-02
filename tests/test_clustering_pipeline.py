@@ -105,7 +105,11 @@ def test_code_embedding_reuses_sentence_transformers(codes, patched_pipeline):
     assert names == summarize.return_value
     assert len(fake_model.calls) == 1
     embedded_codes, kwargs = fake_model.calls[0]
-    assert set(embedded_codes) == set(codes)
+    # Comments are stripped before embedding: the model never sees raw code,
+    # so comment-only variants collapse onto the same embedded text.
+    assert set(embedded_codes) == {
+        pipeline.strip_code_comments(code) for code in set(codes)
+    }
     assert kwargs["normalize_embeddings"]
 
 
@@ -148,6 +152,37 @@ def test_projection_is_centered_pca():
     assert Z.shape == (4, 2)
     assert label == "PCA"
     np.testing.assert_allclose(Z.mean(axis=0), 0.0, atol=1e-7)
+
+
+def test_comments_stripped_before_embedding_but_unique_stays_raw(
+    codes, patched_pipeline
+):
+    """The embedding input is comment-free, yet the returned ``unique`` list
+    keeps the raw code so callers can map agent code -> cluster by identity.
+    """
+    fake_model = _FakeCodeModel()
+    load_model, summarize = patched_pipeline(
+        load_model_return=fake_model,
+        summarize_return={0: "Cooperative", 1: "Defective"},
+    )
+    X, labels, km, unique, names = pipeline.cluster_codes(
+        codes, k=2, seed=7, embedding_device="cpu", embedding_cache=False
+    )
+    # Dedup still happens on raw code (caller contract: unique contains raw
+    # strings, so ``{code: cluster for code, cluster in zip(unique, labels)}``
+    # remains a valid lookup for every raw agent code).
+    assert len(unique) == len(set(codes))
+    assert set(unique) == set(codes)
+    # But what the embedding model receives has every comment removed.
+    embedded_codes, _ = fake_model.calls[0]
+    assert embedded_codes
+    assert all("#" not in code for code in embedded_codes)
+    assert all("forgiving" not in code and "punitive" not in code
+               for code in embedded_codes)
+    # Comment-only variants share one cached embedding vector.
+    idx_coop = unique.index(codes[0])
+    idx_coop_comment = unique.index(codes[1])
+    np.testing.assert_allclose(X[idx_coop], X[idx_coop_comment], atol=1e-9)
 
 
 def test_llm_json_parser_accepts_fences():
