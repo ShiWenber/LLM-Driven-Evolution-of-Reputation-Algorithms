@@ -16,8 +16,9 @@ Game model:
     rules (full / partial / private). For each observed joint action,
     the framework calls observer.observe_and_judge(donor_id, donor_action,
     recipient_id, recipient_action) on the observer. The agent's
-    observe_and_judge internally calls its observe() function once
-    with both players in the joint action.
+    observe_and_judge internally calls its observe() function TWICE
+    (once judging the donor, once judging the recipient with roles
+    swapped) because the strategy's observe is one-directional.
 
 Backward-compatible with the type1 QuantitativeAgent interface
 (choose / observe_and_judge / self_judge / record_donation / etc.).

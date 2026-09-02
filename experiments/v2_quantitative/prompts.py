@@ -1,9 +1,7 @@
 """Prompts for the v2 quantitative interface LLM evolution (2-player PD).
 
 The interface is:
-    observe(donor_reputation, donor_action,
-                    recipient_reputation, recipient_action,
-                    my_reputation) -> tuple[float, float] | dict
+    observe(A_rep, A_action, B_rep, B_action, my_rep) -> float
   decide(my_reputation, opponent_reputation) -> bool
 
 The game is a 2-player simultaneous Prisoner's Dilemma. Each round,
@@ -27,8 +25,10 @@ to the partner at cost={cost:g} to self) or 'defect' (no exchange). Payoffs:
   (D, D) -> each gets 0
 
 After each joint action, the framework records both actions and the
-agents' IDs. It then calls each observer's `observe` ONCE to update the
-observer's private rating of BOTH players in that joint action.
+agents' IDs. It then calls each observer's `observe` TWICE: once to
+update the observer's private rating of player A (the donor) and once
+to update its rating of player B (the recipient), with the roles
+swapped.
 
 Your strategy consists of TWO functions. Define BOTH.
 
@@ -36,13 +36,13 @@ The interface for your strategy is:
 
 ```python
 def observe(
-    donor_reputation: float,      # observer's current rating of donor
-    donor_action: str,            # donor's last action: 'cooperate' or 'defect'
-    recipient_reputation: float,  # observer's current rating of recipient
-    recipient_action: str,        # recipient's last action: 'cooperate' or 'defect'
-    my_reputation: float          # observer's own self-rating
-) -> tuple[float, float]:
-    # Return (new_donor_reputation, new_recipient_reputation).
+    A_rep: float,       # observer's current rating of player A (target)
+    A_action: str,      # A's last action: 'cooperate' or 'defect'
+    B_rep: float,       # observer's current rating of player B (partner)
+    B_action: str,      # B's last action: 'cooperate' or 'defect'
+    my_reputation: float  # observer's own self-rating
+) -> float:
+    # Return A's NEW reputation only (a single float).
     # Values will be clamped to [-1.0, 1.0].
     pass
 
@@ -56,11 +56,15 @@ def decide(
 
 Important rules:
   1. Both functions MUST be defined.
-  2. observe() is called once per observed joint action with BOTH
-      players. There is no separate "self-evaluation" function; if the
-      observer is one of the two players in the joint action, the
-      framework calls observe() the same way.
-  3. Reputation is in [-1.0, 1.0]. Treat 0.0 as neutral.
+  2. observe() is ONE-DIRECTIONAL: it judges only player A and returns
+      A's new reputation. The framework calls it twice per joint action
+      (once with A=donor, once with A=recipient) to update both players.
+      Write ONE judging rule for a single target; do NOT repeat it for
+      both players inside the function.
+  3. There is no separate "self-evaluation" function; if the observer
+      is one of the two players in the joint action, the framework
+      calls observe() the same way.
+  4. Reputation is in [-1.0, 1.0]. Treat 0.0 as neutral.
 
 Generate ONE strategy pair. Output ONLY the Python code, no prose,
 no markdown fences. The code must define `observe` and `decide`.
@@ -76,12 +80,13 @@ The interface for your strategy is:
 
 ```python
 def observe(
-    donor_reputation: float,
-    donor_action: str,         # 'cooperate' or 'defect'
-    recipient_reputation: float,
-    recipient_action: str,     # 'cooperate' or 'defect'
+    A_rep: float,       # observer's current rating of player A (target)
+    A_action: str,      # A's last action: 'cooperate' or 'defect'
+    B_rep: float,       # observer's current rating of player B (partner)
+    B_action: str,      # B's last action: 'cooperate' or 'defect'
     my_reputation: float
-) -> tuple[float, float]:
+) -> float:
+    # Return A's NEW reputation only (a single float).
     pass
 
 def decide(
@@ -91,8 +96,10 @@ def decide(
     pass
 ```
 
-`observe` is called once per observed joint action with donor and
-recipient together. Use one joint judging rule for both sides.
+`observe` is ONE-DIRECTIONAL: it judges only player A and returns A's
+new reputation. The framework calls it twice per joint action (once
+with A=donor, once with A=recipient) to update both players, so write
+one judging rule for a single target — do NOT repeat it for both sides.
 
 The parent strategy to mutate is below.
 
@@ -307,17 +314,23 @@ Interface:
 
 ```python
 def observe(
-    donor_reputation: float,
-    donor_action: str,
-    recipient_reputation: float,
-    recipient_action: str,
+    A_rep: float,       # observer's current rating of player A (target)
+    A_action: str,      # A's last action: 'cooperate' or 'defect'
+    B_rep: float,       # observer's current rating of player B (partner)
+    B_action: str,      # B's last action: 'cooperate' or 'defect'
     my_reputation: float,
-) -> tuple[float, float]:
+) -> float:
+    # Return A's NEW reputation only (a single float).
     pass
 
 def decide(my_reputation: float, opponent_reputation: float) -> bool:
     pass
 ```
+
+`observe` is ONE-DIRECTIONAL: it judges only player A and returns A's
+new reputation. The framework calls it twice per joint action (once
+with A=donor, once with A=recipient) to update both players, so write
+one judging rule for a single target.
 
 PARENT FITNESS: {fitness:.3f}
 
@@ -336,11 +349,15 @@ selection will evaluate the child in the next generation.
 Interface:
 
 ```python
-def observe(donor_reputation: float, donor_action: str,
-            recipient_reputation: float, recipient_action: str,
-            my_reputation: float) -> tuple[float, float]: ...
+def observe(A_rep: float, A_action: str, B_rep: float, B_action: str,
+            my_reputation: float) -> float: ...
 def decide(my_reputation: float, opponent_reputation: float) -> bool: ...
 ```
+
+`observe` is ONE-DIRECTIONAL: it judges only player A and returns A's
+new reputation (a single float). The framework calls it twice per joint
+action (once with A=donor, once with A=recipient) to update both
+players, so write one judging rule for a single target.
 
 PARENT FITNESS: {fitness:.3f}
 

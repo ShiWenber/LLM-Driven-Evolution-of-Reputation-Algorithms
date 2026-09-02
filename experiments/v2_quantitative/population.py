@@ -6,7 +6,10 @@ and V2DonorGame.
 Supports two agent types:
   - `agent_type="agent-type1"` (legacy "v2"): type-1 agents. The LLM
     emits two top-level Python functions (`observe` + `decide`); the
-    framework maintains a scalar reputation matrix for them.
+    framework maintains a scalar reputation matrix for them. observe()
+    is ONE-DIRECTIONAL: it judges a single target player and returns
+    that player's new reputation; the framework calls it twice per
+    joint action (roles swapped) to update both players.
   - `agent_type="agent-type2"` (legacy "v3"): type-2 agents. The LLM
     emits a full Python class named `LLMAgent` with `__init__(agent_id)`,
     `decide()`, and `observe(...)` methods. The LLM owns its own
@@ -20,6 +23,8 @@ strategies). The 8 leading-eight rules live in type-1 land.
 """
 from __future__ import annotations
 import random
+import threading
+from concurrent.futures import ThreadPoolExecutor
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -32,7 +37,7 @@ from ..evolution_log import (
     F_CONFIG_AGENT_TYPE, F_CONFIG_BENEFIT, F_CONFIG_COST,
     F_CONFIG_ELITE_COUNT, F_CONFIG_FALLBACK_INIT_COUNT,
     F_CONFIG_FALLBACK_MUTATION_COUNT, F_CONFIG_FERMI_BETA,
-    F_CONFIG_FORBID_SELF_PAIRING, F_CONFIG_LLM_MAX_TOKENS,
+    F_CONFIG_LLM_MAX_TOKENS,
     F_CONFIG_IMITATION_LEARNING_MODE,
     F_CONFIG_LLM_MODEL, F_CONFIG_LLM_THINKING,
     F_CONFIG_MUTATION_RATE_ON_ADOPTION, F_CONFIG_NUM_ELIMINATE,
@@ -41,9 +46,11 @@ from ..evolution_log import (
     F_CONFIG_POPULATION_SIZE, F_CONFIG_SEED,
     F_CONFIG_TARGET_INTERACTIONS_PER_GEN, F_CONFIG_TOURNAMENT_SIZE,
     F_CONFIG_UPDATES_PER_GEN, F_CONFIG_USE_BASELINE, F_CONFIG_USE_FERMI,
+    F_CONFIG_INITIAL_REPUTATION, F_CONFIG_LLM_CONCURRENCY,
 )
-from .agent import QuantitativeAgent
+from .agent import INITIAL_REPUTATION, QuantitativeAgent
 from .agent_full import (
+    INITIAL_REPUTATION as FULL_INITIAL_REPUTATION,
     FullAgent, V3StrategyExecutor,
     ALLCClass, ALLDClass,
     ALLC_CLASS_SOURCE, ALLD_CLASS_SOURCE,
@@ -63,27 +70,23 @@ from .baselines import get_baseline
 FALLBACK_STRATEGIES = [
     # Always cooperate
     '''
-def observe(donor_reputation, donor_action, recipient_reputation, recipient_action, my_reputation):
-    def _upd(target_reputation, target_action):
-        if target_action == 'cooperate':
-            new = target_reputation + 0.333
-        else:
-            new = target_reputation - 0.333
-        return max(-1.0, min(1.0, new))
-    return _upd(donor_reputation, donor_action), _upd(recipient_reputation, recipient_action)
+def observe(A_rep, A_action, B_rep, B_action, my_reputation):
+    if A_action == 'cooperate':
+        new = A_rep + 0.333
+    else:
+        new = A_rep - 0.333
+    return max(-1.0, min(1.0, new))
 def decide(my_reputation, opponent_reputation):
     return True
 ''',
     # Always defect
     '''
-def observe(donor_reputation, donor_action, recipient_reputation, recipient_action, my_reputation):
-    def _upd(target_reputation, target_action):
-        if target_action == 'cooperate':
-            new = target_reputation + 0.333
-        else:
-            new = target_reputation - 0.333
-        return max(-1.0, min(1.0, new))
-    return _upd(donor_reputation, donor_action), _upd(recipient_reputation, recipient_action)
+def observe(A_rep, A_action, B_rep, B_action, my_reputation):
+    if A_action == 'cooperate':
+        new = A_rep + 0.333
+    else:
+        new = A_rep - 0.333
+    return max(-1.0, min(1.0, new))
 def decide(my_reputation, opponent_reputation):
     return False
 ''',
@@ -194,8 +197,8 @@ class V2EvolutionaryPopulation:
         fermi_beta: float = 5.0,
         mutation_rate_on_adoption: float = 0.1,
         imitation_learning_mode: str = "random",
-        updates_per_gen: int = 15,
-        forbid_self_pairing: bool = True,
+        updates_per_gen: Optional[int] = None,
+        llm_concurrency: Optional[int] = None,
         llm_provider: str = "openai",
         llm_model: str = "deepseek-v4-flash",
         api_key: str = "",
@@ -268,8 +271,18 @@ class V2EvolutionaryPopulation:
         self.fermi_beta = fermi_beta
         self.mutation_rate_on_adoption = mutation_rate_on_adoption
         self.imitation_learning_mode = imitation_learning_mode
-        self.updates_per_gen = updates_per_gen
-        self.forbid_self_pairing = forbid_self_pairing
+        effective_updates_per_gen = (
+            population_size if updates_per_gen is None else updates_per_gen
+        )
+        if effective_updates_per_gen < 0 or effective_updates_per_gen > population_size:
+            raise ValueError(
+                "updates_per_gen must be between 0 and population_size "
+                "for without-replacement learner sampling"
+            )
+        self.updates_per_gen = effective_updates_per_gen
+        if llm_concurrency is not None and llm_concurrency < 1:
+            raise ValueError("llm_concurrency must be >= 1")
+        self.llm_concurrency = llm_concurrency or population_size
         self.llm_provider = llm_provider
         self.llm_model = llm_model
         self.api_key = api_key
@@ -305,6 +318,7 @@ class V2EvolutionaryPopulation:
         self._next_agent_id: int = 0
         # LLM client (lazy)
         self._llm_client = None
+        self._llm_client_lock = threading.Lock()
         # FALLBACK diagnostics. _fallback_init_count: how many of the
         # population_size init attempts ended up using the
         # deterministic-random FALLBACK (i.e., LLM init silently
@@ -387,12 +401,30 @@ class V2EvolutionaryPopulation:
     def _get_llm_client(self):
         if self._llm_client is not None:
             return self._llm_client
-        import openai
-        self._llm_client = openai.OpenAI(
-            api_key=self.api_key,
-            base_url=self.api_base_url,
-        )
+        with self._llm_client_lock:
+            if self._llm_client is None:
+                import openai
+                self._llm_client = openai.OpenAI(
+                    api_key=self.api_key,
+                    base_url=self.api_base_url,
+                )
         return self._llm_client
+
+    def _parallel_llm_map(self, fn, jobs):
+        """Run one independent batch of LLM jobs, preserving input order."""
+        jobs = list(jobs)
+        if not jobs:
+            return []
+        if self.llm_concurrency == 1 or len(jobs) == 1:
+            return [fn(job) for job in jobs]
+        # Initialize the client before workers start so lazy initialization is
+        # not repeated or raced by the first batch.
+        self._get_llm_client()
+        with ThreadPoolExecutor(
+            max_workers=min(self.llm_concurrency, len(jobs)),
+            thread_name_prefix="llm",
+        ) as executor:
+            return list(executor.map(fn, jobs))
 
     def _call_llm(self, system_msg: str, user_msg: str, max_retries: int = 3) -> Optional[str]:
         client = self._get_llm_client()
@@ -413,7 +445,8 @@ class V2EvolutionaryPopulation:
                     return content
             except Exception as e:
                 print(f"  [LLM error attempt {attempt+1}]: {e}")
-                time.sleep(2 ** attempt)
+                if attempt + 1 < max_retries:
+                    time.sleep(2 ** attempt)
         return None
 
     def _make_agent(self, code: str, agent_id: int):
@@ -467,6 +500,22 @@ class V2EvolutionaryPopulation:
         else:
             V2StrategyExecutor(code)
 
+    def _request_valid_code(self, user_msg: str, label: str) -> Optional[str]:
+        """Make at most three API calls and return the first valid strategy."""
+        system_msg = "You are a Python programmer. Output only valid Python code."
+        for attempt in range(3):
+            content = self._call_llm(system_msg, user_msg, max_retries=1)
+            code = _extract_code_from_response(content) if content else None
+            if code:
+                try:
+                    self._validate_code(code)
+                    return code
+                except Exception as exc:
+                    print(f"  [{label} validation fail attempt {attempt+1}]: {exc}")
+            if attempt < 2:
+                time.sleep(2 ** attempt)
+        return None
+
     def _sim_params(self) -> Dict[str, object]:
         """Simulation parameters injected into prompt templates.
 
@@ -501,47 +550,19 @@ class V2EvolutionaryPopulation:
         the end.
         """
         print(f"  Initializing population via LLM ({self.population_size} agents, agent_type={self.agent_type}, thinking={self.llm_thinking}, max_tokens={self._llm_max_tokens})...")
-        client = self._get_llm_client()
         user_msg = self._init_prompt()
-        for i in range(self.population_size):
-            for attempt in range(3):
-                try:
-                    resp = client.chat.completions.create(
-                        model=self.llm_model,
-                        messages=[
-                            {"role": "system", "content": "You are a Python programmer. Output only valid Python code."},
-                            {"role": "user", "content": user_msg},
-                        ],
-                        temperature=self.mutation_temperature,
-                        max_tokens=self._llm_max_tokens,
-                        extra_body=self._llm_extra_body,
-                    )
-                    content = resp.choices[0].message.content
-                    code = _extract_code_from_response(content)
-                    if code:
-                        # Validate
-                        try:
-                            agent = self._new_agent(code)
-                            self.agents.append(agent)
-                            break
-                        except Exception as e:
-                            print(f"  [init agent {i} validation fail]: {e}")
-                except Exception as e:
-                    print(f"  [init agent {i} LLM error attempt {attempt+1}]: {e}")
-                    time.sleep(2)
-            else:
-                # All attempts failed; use the deterministic-random
-                # FALLBACK (Fix C: ~50% cooperation, NOT 1.000). This
-                # is also a signal that the LLM init is unreliable,
-                # so we count it.
-                if self.agent_type == "agent-type2":
-                    fb = FALLBACK_CLASS_V3
-                else:
-                    fb = self.rng.choice(FALLBACK_STRATEGIES)
-                agent = self._new_agent(fb)
-                self.agents.append(agent)
+
+        def generate_one(i):
+            return self._request_valid_code(user_msg, f"init agent {i}")
+
+        codes = self._parallel_llm_map(generate_one, range(self.population_size))
+        for i, code in enumerate(codes):
+            if code is None:
+                fb = FALLBACK_CLASS_V3 if self.agent_type == "agent-type2" else self.rng.choice(FALLBACK_STRATEGIES)
+                code = fb
                 self._fallback_init_count += 1
                 print(f"  [init agent {i}] using FALLBACK strategy")
+            self.agents.append(self._new_agent(code))
 
     def _init_population_baseline(self):
         """All agents use the same baseline strategy."""
@@ -580,18 +601,13 @@ class V2EvolutionaryPopulation:
             user_msg = MUTATION_PROMPT_V2.format(
                 fitness=parent_fitness, parent_code=parent_code, **sim
             )
-        for attempt in range(3):
-            content = self._call_llm("You are a Python programmer. Output only valid Python code.", user_msg)
-            code = _extract_code_from_response(content) if content else None
-            if code:
-                # Validate
-                try:
-                    self._validate_code(code)
-                    return code
-                except Exception as e:
-                    print(f"  [mutate validation fail attempt {attempt+1}]: {e}")
-        # Fallback: tiny variation of parent
-        return parent_code  # No change on failure
+        return self._request_valid_code(user_msg, "mutate") or parent_code
+
+    def _llm_init_code(self, preserve_id: int) -> Optional[str]:
+        """Generate and validate code for one independent Fermi update."""
+        return self._request_valid_code(
+            self._init_prompt(), f"fermi μ-init slot {preserve_id}"
+        )
 
     def _llm_init_one_agent(self, preserve_id: int) -> object:
         """Fermi μ-path: independent LLM agent generation.
@@ -606,40 +622,21 @@ class V2EvolutionaryPopulation:
         FALLBACK_STRATEGIES for agent-type1). Bumps
         _fallback_mutation_count so we can audit run reliability.
         """
-        user_msg = self._init_prompt()
-        for attempt in range(3):
-            content = self._call_llm(
-                "You are a Python programmer. Output only valid Python code.",
-                user_msg,
+        code = self._llm_init_code(preserve_id)
+        if code is None:
+            self._fallback_mutation_count += 1
+            print(f"  [fermi μ-init] FALLBACK for slot id={preserve_id}")
+            code = (
+                FALLBACK_CLASS_V3
+                if self.agent_type == "agent-type2"
+                else self.rng.choice(FALLBACK_STRATEGIES)
             )
-            code = _extract_code_from_response(content) if content else None
-            if code:
-                try:
-                    return self._make_agent(code, preserve_id)
-                except Exception as e:
-                    print(f"  [fermi μ-init validate fail attempt {attempt+1}]: {e}")
-        # 3x failed: FALLBACK (same shape as _init_population_llm).
-        self._fallback_mutation_count += 1
-        print(f"  [fermi μ-init] FALLBACK for slot id={preserve_id}")
-        if self.agent_type == "agent-type2":
-            fb = FALLBACK_CLASS_V3
-        else:
-            fb = self.rng.choice(FALLBACK_STRATEGIES)
-        return self._make_agent(fb, preserve_id)
+        return self._make_agent(code, preserve_id)
 
-    def _llm_small_mutate(
+    def _llm_small_mutate_code(
         self, parent_code: str, parent_fitness: float, preserve_id: int
-    ) -> object:
-        """Fermi 1-μ path: configurable parent-conditioned child generation.
-
-        The parent code IS shown to the LLM (this is the whole point
-        of "imitate with tiny mutation" — the offspring is
-        related to the parent's strategy).
-        Contrast with the μ path which uses no parent reference.
-
-        FALLBACK on 3x LLM failure: the parent code verbatim (the
-        smallest possible mutation). Bumps _fallback_mutation_count.
-        """
+    ) -> Optional[str]:
+        """Generate and validate code for one parent-conditioned update."""
         if self.agent_type == "agent-type2":
             template = (
                 DELIBERATE_MUTATION_PROMPT_V3
@@ -656,21 +653,34 @@ class V2EvolutionaryPopulation:
             fitness=parent_fitness,
             parent_code=parent_code,
         )
-        for attempt in range(3):
-            content = self._call_llm(
-                "You are a Python programmer. Output only valid Python code.",
-                user_msg,
+        return self._request_valid_code(
+            user_msg, f"fermi 1-μ small-mutate slot {preserve_id}"
+        )
+
+    def _llm_small_mutate(
+        self, parent_code: str, parent_fitness: float, preserve_id: int
+    ) -> object:
+        """Fermi 1-μ path: configurable parent-conditioned child generation.
+
+        The parent code IS shown to the LLM (this is the whole point
+        of "imitate with tiny mutation" — the offspring is
+        related to the parent's strategy).
+        Contrast with the μ path which uses no parent reference.
+
+        FALLBACK on 3x LLM failure: the parent code verbatim (the
+        smallest possible mutation). Bumps _fallback_mutation_count.
+        """
+        code = self._llm_small_mutate_code(
+            parent_code, parent_fitness, preserve_id
+        )
+        if code is None:
+            self._fallback_mutation_count += 1
+            print(
+                "  [fermi 1-μ small-mutate] FALLBACK (parent verbatim) "
+                f"for slot id={preserve_id}"
             )
-            code = _extract_code_from_response(content) if content else None
-            if code:
-                try:
-                    return self._make_agent(code, preserve_id)
-                except Exception as e:
-                    print(f"  [fermi 1-μ small-mutate validate fail attempt {attempt+1}]: {e}")
-        # 3x failed: parent code verbatim (the smallest mutation).
-        self._fallback_mutation_count += 1
-        print(f"  [fermi 1-μ small-mutate] FALLBACK (parent verbatim) for slot id={preserve_id}")
-        return self._make_agent(parent_code, preserve_id)
+            code = parent_code
+        return self._make_agent(code, preserve_id)
 
     def _run_one_generation(self) -> Dict:
         """Run a single generation. Returns per-gen stats."""
@@ -830,7 +840,12 @@ class V2EvolutionaryPopulation:
                     F_CONFIG_IMITATION_LEARNING_MODE:
                         self.imitation_learning_mode,
                     F_CONFIG_UPDATES_PER_GEN: self.updates_per_gen,
-                    F_CONFIG_FORBID_SELF_PAIRING: self.forbid_self_pairing,
+                    F_CONFIG_LLM_CONCURRENCY: self.llm_concurrency,
+                    F_CONFIG_INITIAL_REPUTATION: (
+                        FULL_INITIAL_REPUTATION
+                        if self.agent_type == "agent-type2"
+                        else INITIAL_REPUTATION
+                    ),
                     F_CONFIG_FALLBACK_INIT_COUNT: self._fallback_init_count,
                     F_CONFIG_FALLBACK_MUTATION_COUNT:
                         self._fallback_mutation_count,
@@ -931,9 +946,9 @@ class V2EvolutionaryPopulation:
     def _select_and_reproduce_fermi(self, next_gen: Optional[int] = None):
         """Synchronous Fermi imitation + LLM mutation (Moran-process style, Z-like).
 
-        Per generation we run `updates_per_gen` independent update
-        events. For each event we sample (i, j) with i != j (when
-        forbid_self_pairing=True) and apply
+        Per generation we sample `updates_per_gen` distinct learners without
+        replacement. For each learner i we sample a role model j with i != j
+        (role models may repeat; self-pairing is always forbidden) and apply
 
             P(i copies j) = 1 / (1 + exp(-fermi_beta * (phi_j - phi_i)))
 
@@ -976,11 +991,11 @@ class V2EvolutionaryPopulation:
         old_agents = list(self.agents)
         # slot agent_id -> (parent agent_id or None, parent_lineage or None, origin)
         updates = {}
-        for _ in range(self.updates_per_gen):
-            # Sample learner i
-            i = self.rng.randrange(N)
-            # Sample role model j != i (unless population has 1)
-            if self.forbid_self_pairing and N > 1:
+        llm_jobs = []
+        learner_indices = self.rng.sample(range(N), self.updates_per_gen)
+        for i in learner_indices:
+            # Sample role model j != i (self-pairing always forbidden).
+            if N > 1:
                 j = self.rng.randrange(N - 1)
                 if j >= i:
                     j += 1
@@ -1001,22 +1016,46 @@ class V2EvolutionaryPopulation:
             #   with prob 1-mu -> SMALL LLM mutation of j.code
             # In both cases exactly one LLM call per copy event.
             if self.rng.random() < mu:
-                new_agent = self._llm_init_one_agent(old_agents[i].agent_id)
-                updates[new_agent.agent_id] = (None, None, ORIGIN_INDEPENDENT_INIT)
+                llm_jobs.append((i, "init", old_agents[i].agent_id, None, None, ORIGIN_INDEPENDENT_INIT, None, None))
             else:
-                new_agent = self._llm_small_mutate(
-                    old_agents[j].code,
-                    old_agents[j].fitness,
-                    old_agents[i].agent_id,
+                llm_jobs.append((i, "mutate", old_agents[i].agent_id, old_agents[j].code, old_agents[j].fitness, ORIGIN_IMITATE, old_agents[j].agent_id, self._slot_lineage.get(old_agents[j].agent_id)))
+
+        def run_job(job):
+            (
+                i, kind, preserve_id, parent_code, parent_fitness,
+                origin, parent_id, parent_lineage,
+            ) = job
+            if kind == "init":
+                code = self._llm_init_code(preserve_id)
+            else:
+                code = self._llm_small_mutate_code(
+                    parent_code, parent_fitness, preserve_id
                 )
-                # Parent lineage is j's lineage from the OLD generation
-                # (synchronous commit: j's code hasn't been overwritten yet).
-                updates[new_agent.agent_id] = (
-                    old_agents[j].agent_id,
-                    self._slot_lineage.get(old_agents[j].agent_id),
-                    ORIGIN_IMITATE,
-                )
+            return job, code
+
+        for job, code in self._parallel_llm_map(run_job, llm_jobs):
+            (
+                i, kind, preserve_id, parent_code, _parent_fitness,
+                origin, parent_id, parent_lineage,
+            ) = job
+            if code is None:
+                self._fallback_mutation_count += 1
+                if kind == "init":
+                    code = (
+                        FALLBACK_CLASS_V3
+                        if self.agent_type == "agent-type2"
+                        else self.rng.choice(FALLBACK_STRATEGIES)
+                    )
+                    print(f"  [fermi μ-init] FALLBACK for slot id={preserve_id}")
+                else:
+                    code = parent_code
+                    print(
+                        "  [fermi 1-μ small-mutate] FALLBACK "
+                        f"(parent verbatim) for slot id={preserve_id}"
+                    )
+            new_agent = self._make_agent(code, preserve_id)
             next_agents[i] = new_agent
+            updates[new_agent.agent_id] = (parent_id, parent_lineage, origin)
         # Synchronous commit. The set of agent_ids is preserved
         # (every slot retains its old id). Reputations are NOT
         # inherited: each generation is a fresh lifecycle, so every

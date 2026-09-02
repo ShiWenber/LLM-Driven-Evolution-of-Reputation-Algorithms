@@ -8,6 +8,7 @@ Usage examples:
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import json
 import sys
 import time
@@ -32,14 +33,25 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Run a single seed. Overrides --seeds when set.")
     parser.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2],
                         help="Seed list to run. Defaults to [0, 1, 2].")
+    parser.add_argument(
+        "--seed-workers",
+        type=int,
+        default=None,
+        help=(
+            "Independent seed processes. Defaults to the number of seeds; "
+            "use 1 to disable cross-seed parallelism."
+        ),
+    )
     parser.add_argument("--gens", "--num-generations", type=int, default=100,
                         help="Number of generations to run.")
     parser.add_argument("--target-interactions", type=int, default=1000,
                         help="Target PD interactions per generation.")
     parser.add_argument("--population-size", type=int, default=15,
                         help="Population size.")
-    parser.add_argument("--updates-per-gen", type=int, default=15,
-                        help="Fermi imitation updates per generation.")
+    parser.add_argument("--updates-per-gen", type=int, default=None,
+                        help="Distinct Fermi learners per generation; defaults to population size.")
+    parser.add_argument("--llm-concurrency", type=int, default=None,
+                        help="Concurrent LLM requests; defaults to population size.")
     parser.add_argument("--fermi-beta", type=float, default=5.0,
                         help="Fermi beta parameter.")
     parser.add_argument("--mutation-rate", type=float, default=0.1,
@@ -84,8 +96,6 @@ def build_parser() -> argparse.ArgumentParser:
                         choices=["agent-type1", "agent-type2", "v2", "v3"],
                         help="Agent family to evolve: 'agent-type1' (legacy 'v2', type-1 "
                              "functions) or 'agent-type2' (legacy 'v3', full LLMAgent class).")
-    parser.add_argument("--no-self-pairing", action="store_true",
-                        help="Disable self-pairing restriction in the evolutionary loop.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Validate arguments and print the seed plan without running.")
     return parser
@@ -140,7 +150,7 @@ def run_one_seed(args: argparse.Namespace, seed: int, label: str, out_root: Path
             mutation_rate_on_adoption=args.mutation_rate,
             imitation_learning_mode=args.imitation_learning,
             updates_per_gen=args.updates_per_gen,
-            forbid_self_pairing=not args.no_self_pairing,
+            llm_concurrency=args.llm_concurrency,
         )
         result = pop.run_evolution(num_generations=args.gens)
         elapsed = time.time() - t0
@@ -163,7 +173,7 @@ def run_one_seed(args: argparse.Namespace, seed: int, label: str, out_root: Path
         print(f"  final coop: {summary['final_coop']:.3f}", flush=True)
         print(f"  final fitness: {summary['final_fitness']:.1f}", flush=True)
         print(
-            f"  FALLBACK: init={summary['fallback_init']}/15, "
+            f"  FALLBACK: init={summary['fallback_init']}/{args.population_size}, "
             f"mutation={summary['fallback_mutation']}/{max(1, (args.gens - 1) * args.updates_per_gen)}",
             flush=True,
         )
@@ -182,6 +192,55 @@ def run_one_seed(args: argparse.Namespace, seed: int, label: str, out_root: Path
     return summary
 
 
+def run_seed_batch(
+    args: argparse.Namespace,
+    seeds: list[int],
+    label: str,
+    out_root: Path,
+    *,
+    on_result=None,
+    executor_cls=ProcessPoolExecutor,
+) -> list[dict]:
+    """Run independent seeds in separate processes and return seed-list order.
+
+    The callback, when provided, runs in the parent process after each seed
+    finishes.  Keeping aggregation in the parent prevents concurrent writes to
+    the combined summary file.
+    """
+    if not seeds:
+        return []
+
+    worker_limit = args.seed_workers or len(seeds)
+    max_workers = min(worker_limit, len(seeds))
+    if len(seeds) == 1:
+        result = run_one_seed(args, seeds[0], label, out_root)
+        if on_result is not None:
+            on_result([result])
+        return [result]
+
+    completed: dict[int, dict] = {}
+    with executor_cls(max_workers=max_workers) as pool:
+        future_to_seed = {
+            pool.submit(run_one_seed, args, seed, label, out_root): seed
+            for seed in seeds
+        }
+        for future in as_completed(future_to_seed):
+            seed = future_to_seed[future]
+            try:
+                completed[seed] = future.result()
+            except Exception as exc:  # a worker may exit before run_one_seed catches it
+                completed[seed] = {
+                    "seed": seed,
+                    "completed": False,
+                    "error": f"worker {type(exc).__name__}: {exc}",
+                }
+            ordered_partial = [completed[s] for s in seeds if s in completed]
+            if on_result is not None:
+                on_result(ordered_partial)
+
+    return [completed[seed] for seed in seeds]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -193,17 +252,42 @@ def main(argv: list[str] | None = None) -> int:
         args.agent_type = "agent-type2"
 
     provider = args.provider.lower()
+    if args.llm_concurrency is not None and args.llm_concurrency < 1:
+        parser.error("--llm-concurrency must be >= 1")
+    if args.seed_workers is not None and args.seed_workers < 1:
+        parser.error("--seed-workers must be >= 1")
+    if args.updates_per_gen is None:
+        args.updates_per_gen = args.population_size
+    if args.updates_per_gen < 0 or args.updates_per_gen > args.population_size:
+        parser.error(
+            "--updates-per-gen must be between 0 and --population-size "
+            "for without-replacement learner sampling"
+        )
     seeds = resolve_seeds(args)
+    if len(set(seeds)) != len(seeds):
+        parser.error("--seeds must not contain duplicates")
     out_root = Path(args.output_root)
     out_root.mkdir(parents=True, exist_ok=True)
     label = args.label or (
         f"LLM_v3_fermi_z_v3_g100_1000inter_learn-{args.imitation_learning}"
     )
 
-    print(f"=== {label} seeds={seeds} (sequential) ===", flush=True)
+    effective_seed_workers = min(args.seed_workers or len(seeds), len(seeds))
+    print(
+        f"=== {label} seeds={seeds} "
+        f"(processes={effective_seed_workers}) ===",
+        flush=True,
+    )
     print(f"  provider: {provider}, model: {get_model(provider, args.model)}", flush=True)
     print(f"  num_gens: {args.gens}, target_interactions: {args.target_interactions}", flush=True)
     print(f"  Z-like: mu={args.mutation_rate}, beta={args.fermi_beta}, updates_per_gen={args.updates_per_gen}", flush=True)
+    print(f"  llm_concurrency: {args.llm_concurrency or args.population_size}", flush=True)
+    print(f"  seed_workers: {effective_seed_workers}", flush=True)
+    print(
+        "  max aggregate LLM concurrency: "
+        f"{effective_seed_workers * (args.llm_concurrency or args.population_size)}",
+        flush=True,
+    )
     print(f"  imitation_learning: {args.imitation_learning}", flush=True)
     print(f"  prompts: v3 / minimal Fermi, agent_type={args.agent_type}", flush=True)
     print(f"  output_root: {out_root}", flush=True)
@@ -228,9 +312,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  api_key: {api_key[:8]}...{api_key[-4:]}", flush=True)
 
     overall_t0 = time.time()
-    summary = []
-    for seed in seeds:
-        summary.append(run_one_seed(args, seed, label, out_root))
+    def write_summary(partial_summary: list[dict]) -> None:
         summary_path = out_root / f"{label}_summary.json"
         with open(summary_path, "w", encoding="utf-8") as f:
             json.dump({
@@ -240,9 +322,20 @@ def main(argv: list[str] | None = None) -> int:
                 "scheme": "fermi_z_like",
                 "provider": provider,
                 "model": get_model(provider, args.model),
-                "seeds": summary,
+                "execution": "multiprocess_by_seed",
+                "seed_workers": effective_seed_workers,
+                "llm_concurrency_per_seed": args.llm_concurrency or args.population_size,
+                "seeds": partial_summary,
                 "overall_elapsed_sec": time.time() - overall_t0,
             }, f, indent=2)
+
+    summary = run_seed_batch(
+        args,
+        seeds,
+        label,
+        out_root,
+        on_result=write_summary,
+    )
 
     total_elapsed = time.time() - overall_t0
     n_done = sum(1 for s in summary if s["completed"])

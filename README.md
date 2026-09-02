@@ -73,7 +73,7 @@ interfaces to the LLM:
 
 | Agent type | Generated strategy | State and memory | Search space |
 | --- | --- | --- | --- |
-| `agent-type1` | Two functions: `observe(...)` and `decide(...)` | Updates donor and recipient reputations through a fixed functional interface | Narrower and more explicitly guided |
+| `agent-type1` | Two functions: `observe(...)` and `decide(...)` | `observe` is ONE-DIRECTIONAL: it judges a single target player and returns that player's new reputation; the framework calls it twice per joint action (roles swapped) to update both players | Narrower and more explicitly guided |
 | `agent-type2` | A complete `LLMAgent` class with `__init__`, `decide()`, and `observe(...)` | May maintain internal state and update it after interactions | Richer and less constrained |
 
 This distinction matters when reading the results: differences between the two
@@ -433,10 +433,6 @@ The configured project scripts can be run with `uv run`:
 # Main legacy donor-game CLI
 uv run llm-reputation --help
 
-# Audit or re-run the documented experiment batches
-uv run rerun-experiments --audit
-uv run rerun-experiments --experiments 2 --seeds 0 1 2
-
 # Agent 2 invasion experiment (336 fixed-strategy runs by default)
 uv run run-agent2-invasion --help
 
@@ -542,13 +538,17 @@ selection scheme. It is a thin CLI wrapper over
 `experiments.v2_quantitative.population.V2EvolutionaryPopulation` and mirrors
 the production-run script `_run_fermi_3seed_100gen_v3.py` at the repo root.
 
+At the start of every generation, framework-managed reputations are reset to
+the neutral value `0.0`; reputations do not carry across generations.
+
 Run a single seed:
 
 ```powershell
 uv run python -m experiments.run_fermi_v3 --seed 0 --gens 100 --target-interactions 1000
 ```
 
-Run multiple seeds sequentially (default is seeds `0 1 2`):
+Run independent seeds in parallel processes (default is seeds `0 1 2`, with
+one process per seed):
 
 ```powershell
 uv run python -m experiments.run_fermi_v3 --seeds 0 1 2
@@ -565,10 +565,12 @@ Common options:
 | Option | Default | Description |
 | --- | --- | --- |
 | `--seed N` / `--seeds N...` | `[0, 1, 2]` | Seed(s) to run; `--seed` overrides `--seeds` |
+| `--seed-workers N` | number of seeds | Maximum seed processes; use `1` for sequential execution |
 | `--gens N` | `100` | Number of generations |
 | `--target-interactions N` | `1000` | Target PD interactions per generation |
 | `--population-size N` | `15` | Population size |
-| `--updates-per-gen N` | `15` | Fermi imitation updates per generation |
+| `--updates-per-gen N` | population size | Distinct learners sampled without replacement per generation; must not exceed population size |
+| `--llm-concurrency N` | population size | Maximum concurrent LLM requests per seed process; aggregate maximum is `seed workers × LLM concurrency` |
 | `--fermi-beta F` | `5.0` | Fermi selection strength |
 | `--mutation-rate F` | `0.1` | Probability of an independent LLM rewrite after accepted imitation (`mu`); the `1-mu` branch is parent-conditioned learning |
 | `--mutation-temperature F` | `0.8` | LLM mutation temperature |
@@ -585,26 +587,72 @@ Common options:
 
 Per seed, results are written to
 `<output-root>/<label>_seed<s>/evolutionary.json`, and a combined
-`<label>_summary.json` is written after each seed completes. The launcher reads
+`<label>_summary.json` is updated by the parent process after each seed completes. The launcher reads
 API keys from `.env` via `experiments.config.load_env` and exits non-zero if a
 seed fails.
 
-## Re-running the original experiment batches
+## Parallelism model
 
-The orchestration tool documents the earlier donor-game and IPD comparison
-experiments:
+The launcher uses a two-level concurrency design: **independent seeds run in
+separate processes** (`ProcessPoolExecutor`), and **within each seed the LLM
+calls run on a thread pool** (`ThreadPoolExecutor`, `llm_concurrency`).
 
-```powershell
-uv run rerun-experiments --audit
-uv run rerun-experiments --experiments 1 --seeds 0 1 2
-uv run rerun-experiments --experiments 2 --seeds 0 1 2
-uv run rerun-experiments --experiments 3 --seeds 0 1 2
-uv run rerun-experiments --experiments 4 --seeds 0 1 2
-uv run rerun-experiments --experiments 5 --seeds 0 1 2
+```
+main()  (parent process)
+  run_seed_batch(ProcessPoolExecutor, max_workers=seed_workers)
+  ├── worker process 0 ── run_one_seed(seed=0)
+  │     └── V2EvolutionaryPopulation
+  │           └── ThreadPoolExecutor(llm_concurrency)   # parallel LLM calls
+  ├── worker process 1 ── run_one_seed(seed=1)
+  │     └── ...
+  └── parent-only aggregation: on_result() → writes {label}_summary.json
 ```
 
-See [`experiments/tools/README.md`](experiments/tools/README.md) for the
-full batch plan and trial-specific options.
+**Why processes, not threads, for seeds:** each seed owns its own
+`random.Random(seed)` stream, its own OpenAI client, and its own in-memory
+population state. A separate process gives hard isolation — no shared-state
+races, no GIL contention on the game loop, and a crash in one seed cannot
+corrupt another. Within a seed, the LLM requests are I/O-bound (network
+latency), so a thread pool is the right tool: threads wait on sockets in
+parallel and share the process without the cost of spawning a process per
+request.
+
+**How `run_seed_batch` works** (`experiments/run_fermi_v3.py`):
+
+- `max_workers = min(seed_workers or len(seeds), len(seeds))` — at most one
+  worker per seed; `--seed-workers 1` forces fully sequential execution.
+- A single seed is special-cased: it runs directly in the parent process
+  (`run_one_seed(...)`), skipping the pool entirely and avoiding
+  `ProcessPoolExecutor` spawn overhead on Windows.
+- All seeds are submitted up front; `as_completed` collects results in
+  **completion order**, but the final `return` re-orders them back to the
+  original seed list order.
+- `args` (an `argparse.Namespace`) is pickled and shipped to every worker,
+  so each worker sees identical configuration.
+- Failures are double-guarded: `run_one_seed` already converts any exception
+  into a `{"completed": False, "error": ...}` summary, and `run_seed_batch`
+  wraps `future.result()` in another `try/except` to catch workers that die
+  before `run_one_seed` can handle the error.
+
+**Incremental summary writes (parent-only):** the `on_result` callback
+(`write_summary`) runs exclusively in the parent process. After every seed
+finishes, it rewrites `<label>_summary.json` with the results of the seeds
+completed so far (in seed order). This means (a) the summary file is never
+written by two processes at once, and (b) a partially completed batch still
+leaves a usable, up-to-date summary on disk if the run is interrupted.
+
+**Aggregate concurrency budget:** the total number of concurrent LLM
+requests is bounded by `seed_workers × llm_concurrency` (printed at startup
+as `max aggregate LLM concurrency`). `llm_concurrency` defaults to the
+population size; within a generation, init and mutation calls are batched
+through `V2EvolutionaryPopulation._parallel_llm_map`, which caps active
+threads at `llm_concurrency` while preserving input order (tested in
+`tests/test_llm_concurrency.py`).
+
+**Exit semantics:** the CLI returns exit code `0` only if every seed
+completed successfully; otherwise `1`, with per-seed status printed
+(`final_coop`, `final_fitness`, or `FAILED (error)`). Cross-seed scheduling
+itself is covered by `tests/test_seed_multiprocessing.py`.
 
 ## Key references
 

@@ -4,21 +4,22 @@ the 8 leading-eight norms from Ohtsuki & Iwasa 2006, rewritten for the
 
 Each norm has two components:
     - an assignment rule (observe how to update the OBSERVER's view of
-        both players after a joint action)
+        one target player after a joint action)
   - an action rule (decide when to cooperate)
 
-The 5-arg observe signature is:
-    def observe(donor_reputation, donor_action,
-                            recipient_reputation, recipient_action,
-                            my_reputation) -> tuple[float, float]:
-            # returns (new_donor_reputation, new_recipient_reputation)
+The 5-arg observe signature is ONE-DIRECTIONAL:
+    def observe(A_rep, A_action, B_rep, B_action,
+                            my_reputation) -> float:
+            # returns A's NEW reputation only
 
-The framework calls observe() once per observed joint action. In PD,
-both players are active so BOTH are judged by each observer.
+The framework calls observe() twice per observed joint action — once
+judging the donor (A=donor, B=recipient) and once judging the
+recipient (A=recipient, B=donor) — so each baseline defines a single
+judging rule for one target player.
 
 Conventions:
-  - target_rep > 0  =>  "Good" reputation
-  - target_rep <= 0  =>  "Bad" reputation
+  - A_rep > 0  =>  "Good" reputation
+  - A_rep <= 0  =>  "Bad" reputation
   - Step size 0.333 (1/R with R=3) for IS-style updates
   - Step size 0.5 for SJ/IS+ stricter updates
   - Return value clamped to [-1, 1]
@@ -36,7 +37,8 @@ Ohtsuki & Iwasa 2006, Table 1):
   8. SJ+  - Stern Judging plus
 
 In PD, each leading-eight's assignment rule is applied to BOTH the
-donor and the recipient (independently, using each player's own action).
+donor and the recipient (independently, via two observe() calls with
+swapped roles).
 """
 
 STEP = 0.333    # IS-style step
@@ -50,14 +52,12 @@ def _is_B(x): return x <= 0.0
 # --- 1. IS (Image Scoring) -------------------------------------------------
 # In PD: reward cooperation, punish defection, regardless of recipient.
 IS = f'''
-def observe(donor_reputation, donor_action, recipient_reputation, recipient_action, my_reputation):
-    def _upd(target_reputation, target_action):
-        if target_action == 'cooperate':
-            new = target_reputation + {STEP}
-        else:
-            new = target_reputation - {STEP}
-        return max(-1.0, min(1.0, new))
-    return _upd(donor_reputation, donor_action), _upd(recipient_reputation, recipient_action)
+def observe(A_rep, A_action, B_rep, B_action, my_reputation):
+    if A_action == 'cooperate':
+        new = A_rep + {STEP}
+    else:
+        new = A_rep - {STEP}
+    return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
     return my_reputation > 0.0
@@ -69,14 +69,12 @@ def decide(my_reputation, opponent_reputation):
 # AND the target cooperated. Otherwise punish. (No-op self-judgment case:
 # if my_rep is B, can't recover; symmetric for target.)
 SS = f'''
-def observe(donor_reputation, donor_action, recipient_reputation, recipient_action, my_reputation):
-    def _upd(target_reputation, target_action):
-        if my_reputation > 0.0 and target_reputation > 0.0 and target_action == 'cooperate':
-            new = target_reputation + {STEP}
-        else:
-            new = target_reputation - {STEP}
-        return max(-1.0, min(1.0, new))
-    return _upd(donor_reputation, donor_action), _upd(recipient_reputation, recipient_action)
+def observe(A_rep, A_action, B_rep, B_action, my_reputation):
+    if my_reputation > 0.0 and A_rep > 0.0 and A_action == 'cooperate':
+        new = A_rep + {STEP}
+    else:
+        new = A_rep - {STEP}
+    return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
     return my_reputation > 0.0 and opponent_reputation > 0.0
@@ -86,14 +84,12 @@ def decide(my_reputation, opponent_reputation):
 # --- 3. SJ (Stern Judging) ------------------------------------------------
 # Like SS, but stronger punishment when the condition fails.
 SJ = f'''
-def observe(donor_reputation, donor_action, recipient_reputation, recipient_action, my_reputation):
-    def _upd(target_reputation, target_action):
-        if my_reputation > 0.0 and target_reputation > 0.0 and target_action == 'cooperate':
-            new = target_reputation + {STEP}
-        else:
-            new = target_reputation - {BIG_STEP}
-        return max(-1.0, min(1.0, new))
-    return _upd(donor_reputation, donor_action), _upd(recipient_reputation, recipient_action)
+def observe(A_rep, A_action, B_rep, B_action, my_reputation):
+    if my_reputation > 0.0 and A_rep > 0.0 and A_action == 'cooperate':
+        new = A_rep + {STEP}
+    else:
+        new = A_rep - {BIG_STEP}
+    return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
     return my_reputation > 0.0 and opponent_reputation > 0.0
@@ -105,14 +101,12 @@ def decide(my_reputation, opponent_reputation):
 # if observer or target is B). In PD this means target is always
 # rewarded for cooperation regardless of context.
 SC = f'''
-def observe(donor_reputation, donor_action, recipient_reputation, recipient_action, my_reputation):
-    def _upd(target_reputation, target_action):
-        if target_action == 'cooperate':
-            new = target_reputation + {STEP}
-        else:
-            new = target_reputation - {STEP}
-        return max(-1.0, min(1.0, new))
-    return _upd(donor_reputation, donor_action), _upd(recipient_reputation, recipient_action)
+def observe(A_rep, A_action, B_rep, B_action, my_reputation):
+    if A_action == 'cooperate':
+        new = A_rep + {STEP}
+    else:
+        new = A_rep - {STEP}
+    return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
     return my_reputation > 0.0
@@ -123,16 +117,14 @@ def decide(my_reputation, opponent_reputation):
 # A B-target is shamed (always judged as B) regardless of action. A
 # G-target that cooperates is rewarded. Otherwise punish.
 SH = f'''
-def observe(donor_reputation, donor_action, recipient_reputation, recipient_action, my_reputation):
-    def _upd(target_reputation, target_action):
-        if target_reputation <= 0.0:
-            new = target_reputation - {BIG_STEP}
-        elif target_action == 'cooperate':
-            new = target_reputation + {STEP}
-        else:
-            new = target_reputation - {STEP}
-        return max(-1.0, min(1.0, new))
-    return _upd(donor_reputation, donor_action), _upd(recipient_reputation, recipient_action)
+def observe(A_rep, A_action, B_rep, B_action, my_reputation):
+    if A_rep <= 0.0:
+        new = A_rep - {BIG_STEP}
+    elif A_action == 'cooperate':
+        new = A_rep + {STEP}
+    else:
+        new = A_rep - {STEP}
+    return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
     return my_reputation > 0.0 and opponent_reputation > 0.0
@@ -142,16 +134,14 @@ def decide(my_reputation, opponent_reputation):
 # --- 6. IS+ (Image Scoring plus) ------------------------------------------
 # Like IS but B-targets are punished even harder and never recover.
 IS_PLUS = f'''
-def observe(donor_reputation, donor_action, recipient_reputation, recipient_action, my_reputation):
-    def _upd(target_reputation, target_action):
-        if target_reputation <= 0.0:
-            new = target_reputation - {BIG_STEP}
-        elif target_action == 'cooperate':
-            new = target_reputation + {STEP}
-        else:
-            new = target_reputation - {STEP}
-        return max(-1.0, min(1.0, new))
-    return _upd(donor_reputation, donor_action), _upd(recipient_reputation, recipient_action)
+def observe(A_rep, A_action, B_rep, B_action, my_reputation):
+    if A_rep <= 0.0:
+        new = A_rep - {BIG_STEP}
+    elif A_action == 'cooperate':
+        new = A_rep + {STEP}
+    else:
+        new = A_rep - {STEP}
+    return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
     return my_reputation > 0.0
@@ -161,16 +151,14 @@ def decide(my_reputation, opponent_reputation):
 # --- 7. SS+ (Simple Standing plus) -----------------------------------------
 # Like SS but B-targets never recover (BIG_STEP punishment).
 SS_PLUS = f'''
-def observe(donor_reputation, donor_action, recipient_reputation, recipient_action, my_reputation):
-    def _upd(target_reputation, target_action):
-        if target_reputation <= 0.0:
-            new = target_reputation - {BIG_STEP}
-        elif my_reputation > 0.0 and target_action == 'cooperate':
-            new = target_reputation + {STEP}
-        else:
-            new = target_reputation - {STEP}
-        return max(-1.0, min(1.0, new))
-    return _upd(donor_reputation, donor_action), _upd(recipient_reputation, recipient_action)
+def observe(A_rep, A_action, B_rep, B_action, my_reputation):
+    if A_rep <= 0.0:
+        new = A_rep - {BIG_STEP}
+    elif my_reputation > 0.0 and A_action == 'cooperate':
+        new = A_rep + {STEP}
+    else:
+        new = A_rep - {STEP}
+    return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
     return my_reputation > 0.0 and opponent_reputation > 0.0
@@ -181,16 +169,14 @@ def decide(my_reputation, opponent_reputation):
 # Like SJ but EVERY failure case (not just the G-cooperate condition)
 # is punished with BIG_STEP. B-targets are shamed.
 SJ_PLUS = f'''
-def observe(donor_reputation, donor_action, recipient_reputation, recipient_action, my_reputation):
-    def _upd(target_reputation, target_action):
-        if target_reputation <= 0.0:
-            new = target_reputation - {BIG_STEP}
-        elif my_reputation > 0.0 and target_reputation > 0.0 and target_action == 'cooperate':
-            new = target_reputation + {STEP}
-        else:
-            new = target_reputation - {BIG_STEP}
-        return max(-1.0, min(1.0, new))
-    return _upd(donor_reputation, donor_action), _upd(recipient_reputation, recipient_action)
+def observe(A_rep, A_action, B_rep, B_action, my_reputation):
+    if A_rep <= 0.0:
+        new = A_rep - {BIG_STEP}
+    elif my_reputation > 0.0 and A_rep > 0.0 and A_action == 'cooperate':
+        new = A_rep + {STEP}
+    else:
+        new = A_rep - {BIG_STEP}
+    return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
     return my_reputation > 0.0 and opponent_reputation > 0.0
@@ -199,28 +185,24 @@ def decide(my_reputation, opponent_reputation):
 
 # --- 0. ALLC / ALLD (sanity baselines, not in the 8 leading-eight) ----------
 ALLC = f'''
-def observe(donor_reputation, donor_action, recipient_reputation, recipient_action, my_reputation):
-    def _upd(target_reputation, target_action):
-        if target_action == 'cooperate':
-            new = target_reputation + {STEP}
-        else:
-            new = target_reputation - {STEP}
-        return max(-1.0, min(1.0, new))
-    return _upd(donor_reputation, donor_action), _upd(recipient_reputation, recipient_action)
+def observe(A_rep, A_action, B_rep, B_action, my_reputation):
+    if A_action == 'cooperate':
+        new = A_rep + {STEP}
+    else:
+        new = A_rep - {STEP}
+    return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
     return True
 '''
 
 ALLD = f'''
-def observe(donor_reputation, donor_action, recipient_reputation, recipient_action, my_reputation):
-    def _upd(target_reputation, target_action):
-        if target_action == 'cooperate':
-            new = target_reputation + {STEP}
-        else:
-            new = target_reputation - {STEP}
-        return max(-1.0, min(1.0, new))
-    return _upd(donor_reputation, donor_action), _upd(recipient_reputation, recipient_action)
+def observe(A_rep, A_action, B_rep, B_action, my_reputation):
+    if A_action == 'cooperate':
+        new = A_rep + {STEP}
+    else:
+        new = A_rep - {STEP}
+    return max(-1.0, min(1.0, new))
 
 def decide(my_reputation, opponent_reputation):
     return False

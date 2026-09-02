@@ -12,6 +12,9 @@ selection paths (tournament / fermi):
 import pytest
 
 from experiments.v2_quantitative.agent import INITIAL_REPUTATION
+from experiments.v2_quantitative.agent_full import (
+    INITIAL_REPUTATION as FULL_INITIAL_REPUTATION,
+)
 from experiments.v2_quantitative.population import (
     FALLBACK_CLASS_V3,
     FALLBACK_STRATEGIES,
@@ -27,6 +30,17 @@ def _make_pop(agent_type: str, seed: int) -> V2EvolutionaryPopulation:
         a.fitness = float(i)
         a.reputations = {j: 0.25 * (j % 4) for j in range(8)}
     return pop
+
+
+def test_initial_reputation_is_neutral_for_both_agent_types():
+    assert INITIAL_REPUTATION == 0.0
+    assert FULL_INITIAL_REPUTATION == 0.0
+
+    for agent_type in ("agent-type1", "agent-type2"):
+        pop = _make_pop(agent_type, seed=0)
+        fresh = pop._make_agent(pop.agents[0].code, agent_id=99)
+        assert fresh.reputations == {99: 0.0}
+        assert fresh.get_reputation(12345) == 0.0
 
 
 def _reproduce(pop: V2EvolutionaryPopulation, path: str) -> None:

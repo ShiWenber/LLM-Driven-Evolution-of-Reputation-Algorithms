@@ -30,6 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--target-interactions", type=int, default=200)
     parser.add_argument("--population-size", type=int, default=15)
     parser.add_argument("--updates-per-gen", type=int, default=15)
+    parser.add_argument("--llm-concurrency", type=int, default=None)
     parser.add_argument("--agent-type", default="agent-type1")
     parser.add_argument("--provider", default="deepseek")
     parser.add_argument("--model", default=None)
@@ -97,6 +98,8 @@ def main(argv: list[str] | None = None) -> int:
     ]
     if args.model:
         cli_args += ["--model", args.model]
+    if args.llm_concurrency is not None:
+        cli_args += ["--llm-concurrency", str(args.llm_concurrency)]
 
     profiler = cProfile.Profile()
     tracemalloc.start()

@@ -55,7 +55,7 @@ import math
 from typing import Optional
 
 
-INITIAL_REPUTATION = 0.1  # default for unseen (incl. self at start)
+INITIAL_REPUTATION = 0.0  # every generation starts neutral (incl. unseen/self)
 
 
 # -----------------------------------------------------------------------

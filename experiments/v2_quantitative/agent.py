@@ -3,15 +3,16 @@
 Each agent runs the SAME code for two functions:
 
   def observe(
-      donor_reputation: float,       # observer's current rating of donor
-      donor_action: str,             # donor's action: 'cooperate' or 'defect'
-      recipient_reputation: float,   # observer's current rating of recipient
-      recipient_action: str,         # recipient's action: 'cooperate' or 'defect'
-      my_reputation: float           # observer's own self-rating
-  ) -> tuple[float, float] | dict:
-      # Returns (new_donor_reputation, new_recipient_reputation)
-      # or {'donor_reputation': ..., 'recipient_reputation': ...}
-      # each clamped to [-1, 1] by the framework
+      A_rep: float,        # observer's current rating of player A (target)
+      A_action: str,       # A's action: 'cooperate' or 'defect'
+      B_rep: float,        # observer's current rating of player B (partner)
+      B_action: str,       # B's action: 'cooperate' or 'defect'
+      my_rep: float        # observer's own self-rating
+  ) -> float:
+      # Returns A's NEW reputation only, clamped to [-1, 1] by the
+      # framework. The interface is ONE-DIRECTIONAL: it judges a single
+      # target player, so the strategy code does not have to repeat a
+      # symmetric update for both players.
 
   def decide(
       my_reputation: float,
@@ -20,19 +21,22 @@ Each agent runs the SAME code for two functions:
       # Returns True to cooperate, False to defect
 
 Note: the game is a 2-player simultaneous Prisoner's Dilemma (not a
- donor game). For each joint action (donor_action, recipient_action),
- the framework calls observe_and_judge on each observer, which
- internally calls observe() once with both players' reputations/actions.
+ donor game). For each joint action (A_action, B_action), the framework
+ calls observe_and_judge on each observer, which internally calls
+ observe() TWICE — once judging A, once judging B with the roles
+ swapped:
+     new_A_rep = observe(A_rep, A_action, B_rep, B_action, my_rep)
+     new_B_rep = observe(B_rep, B_action, A_rep, A_action, my_rep)
 
 Architecture:
   - Single private reputation matrix `reputations: dict[int, float]`.
     The agent's own self-rating is `reputations[agent_id]`. This way
     `reputations` is a uniform dict; no special field needed.
-  - The framework's observe_and_judge calls observe() once per
+  - The framework's observe_and_judge calls observe() twice per
     joint action with both sides of the interaction.
   - Population turnover drops entries of removed IDs.
 """
-INITIAL_REPUTATION = 0.1  # default for unseen (incl. self at start)
+INITIAL_REPUTATION = 0.0  # every generation starts neutral (incl. unseen/self)
 
 
 class QuantitativeAgent:
@@ -70,35 +74,30 @@ class QuantitativeAgent:
     # --- Framework-driven actions -----------------------------------------
     def _call_observe(
         self,
-        donor_rep: float,
-        donor_action: str,
-        recipient_rep: float,
-        recipient_action: str,
+        A_rep: float,
+        A_action: str,
+        B_rep: float,
+        B_action: str,
         my_rep: float,
-    ) -> tuple[float, float]:
-        """Call strategy observe and return new (donor, recipient) reputations.
+    ) -> float:
+        """Call strategy observe for ONE target player A; returns A's new reputation.
 
-        The executor exposes the 5-arg observe(); returns clamped values.
+        The executor exposes the 5-arg one-directional observe(); returns
+        a single clamped float.
         """
         if self._executor is None:
-            return donor_rep, recipient_rep
+            return A_rep
         try:
             out = self._executor.observe(
-                donor_reputation=donor_rep,
-                donor_action=donor_action,
-                recipient_reputation=recipient_rep,
-                recipient_action=recipient_action,
-                my_reputation=my_rep,
+                A_rep=A_rep,
+                A_action=A_action,
+                B_rep=B_rep,
+                B_action=B_action,
+                my_rep=my_rep,
             )
-            if isinstance(out, dict):
-                new_donor = float(out.get("donor_reputation", donor_rep))
-                new_recipient = float(out.get("recipient_reputation", recipient_rep))
-                return new_donor, new_recipient
-            if isinstance(out, (tuple, list)) and len(out) >= 2:
-                return float(out[0]), float(out[1])
-            return donor_rep, recipient_rep
+            return float(out)
         except Exception:  # noqa: BLE001 - strategy code may raise arbitrary exceptions
-            return donor_rep, recipient_rep
+            return A_rep
 
     def observe_and_judge(
         self,
@@ -107,21 +106,33 @@ class QuantitativeAgent:
         recipient_id: int,
         recipient_action: str,
     ):
-        """Update my view of both players from one symmetric PD interaction."""
+        """Update my view of both players from one symmetric PD interaction.
+
+        The strategy's observe() is one-directional (it judges a single
+        target player), so the framework calls it twice — once for the
+        donor and once for the recipient with the roles swapped.
+        """
         my_rep = self.get_self_reputation()
-        donor_rep = self.get_reputation(donor_id)
-        recipient_rep = self.get_reputation(recipient_id)
-        new_donor_rep, new_recipient_rep = self._call_observe(
-            donor_rep=donor_rep,
-            donor_action=donor_action,
-            recipient_rep=recipient_rep,
-            recipient_action=recipient_action,
+        A_rep = self.get_reputation(donor_id)
+        B_rep = self.get_reputation(recipient_id)
+        new_A_rep = self._call_observe(
+            A_rep=A_rep,
+            A_action=donor_action,
+            B_rep=B_rep,
+            B_action=recipient_action,
             my_rep=my_rep,
         )
-        self.update_reputation(donor_id, new_donor_rep)
-        self.update_reputation(recipient_id, new_recipient_rep)
+        new_B_rep = self._call_observe(
+            A_rep=B_rep,
+            A_action=recipient_action,
+            B_rep=A_rep,
+            B_action=donor_action,
+            my_rep=my_rep,
+        )
+        self.update_reputation(donor_id, new_A_rep)
+        self.update_reputation(recipient_id, new_B_rep)
 
-    # Self-judgment is just observe_and_judge with donor_id == self.agent_id.
+    # Self-judgment is just observe_and_judge with A_id = self.agent_id and B_id = other_id.
     def self_judge(
         self,
         donor_action: str,

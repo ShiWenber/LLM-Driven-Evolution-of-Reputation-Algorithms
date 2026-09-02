@@ -10,8 +10,8 @@ from experiments.v2_quantitative.population import V2EvolutionaryPopulation
 
 
 TYPE1_CODE = """
-def observe(donor_reputation, donor_action, recipient_reputation, recipient_action, my_reputation):
-    return donor_reputation, recipient_reputation
+def observe(A_rep, A_action, B_rep, B_action, my_reputation):
+    return A_rep
 def decide(my_reputation, opponent_reputation):
     return True
 """
@@ -20,7 +20,7 @@ TYPE2_CODE = """
 class LLMAgent:
     def __init__(self, agent_id): self.agent_id = agent_id
     def decide(self): return True
-    def observe(self, donor_id, donor_action, recipient_id, recipient_action): pass
+    def observe(self, A_id, A_action, B_id, B_action): pass
 """
 
 
@@ -32,7 +32,10 @@ def _capture_prompt(agent_type: str, mode: str, fitness: float) -> str:
     population._fallback_mutation_count = 0
     captured = []
     child = TYPE2_CODE if agent_type == "agent-type2" else TYPE1_CODE
-    population._call_llm = lambda system, user: captured.append(user) or child
+    population._call_llm = (
+        lambda system, user, **_kwargs: captured.append(user) or child
+    )
+    population._validate_code = lambda code: None
     population._make_agent = lambda code, preserve_id: (code, preserve_id)
     population._llm_small_mutate(child, fitness, 7)
     return captured[0]
