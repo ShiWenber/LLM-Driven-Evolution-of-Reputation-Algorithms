@@ -24,6 +24,14 @@ to the partner at cost={cost:g} to self) or 'defect' (no exchange). Payoffs:
   (D, C) -> symmetric
   (D, D) -> each gets 0
 
+Generation lifecycle and cold start:
+  - At the start of EVERY generation, every agent's private reputation
+    of itself and every other agent is exactly {initial_reputation:g}.
+  - Reputation state does not carry across generations.
+  - Your strategy must explicitly handle the cold-start state where
+    my_reputation == {initial_reputation:g} and
+    opponent_reputation == {initial_reputation:g}.
+
 After each joint action, the framework records both actions and the
 agents' IDs. It then calls each observer's `observe` TWICE: once to
 update the observer's private rating of player A (the donor) and once
@@ -75,6 +83,12 @@ MUTATION_PROMPT_V2 = """You are mutating an existing strategy for a 2-player
 Prisoner's Dilemma game with reputation. The game has {population_size}
 agents, {num_rounds_per_gen} rounds per generation, {num_generations}
 generations.
+
+At the start of EVERY generation, every agent's private reputation of
+itself and every other agent is exactly {initial_reputation:g}.
+Reputation state does not carry across generations. The child must
+explicitly handle the cold-start state where my_reputation == {initial_reputation:g}
+and opponent_reputation == {initial_reputation:g}.
 
 The interface for your strategy is:
 
@@ -310,6 +324,12 @@ Prisoner's Dilemma game with reputation. The parent is two functions,
 Produce a related child using the same interface. Output ONLY the Python code,
 no prose or fences.
 
+At the start of EVERY generation, every agent's private reputation of
+itself and every other agent is exactly {initial_reputation:g}.
+Reputation state does not carry across generations. The child must
+explicitly handle the cold-start state where my_reputation == {initial_reputation:g}
+and opponent_reputation == {initial_reputation:g}.
+
 Interface:
 
 ```python
@@ -345,6 +365,12 @@ Prisoner's Dilemma game with reputation. The parent consists of `observe` and
 then produce a child intended to achieve higher fitness in the same environment.
 Preserve useful behavior and the required interface. Do not claim success;
 selection will evaluate the child in the next generation.
+
+At the start of EVERY generation, every agent's private reputation of
+itself and every other agent is exactly {initial_reputation:g}.
+Reputation state does not carry across generations. The child must
+explicitly handle the cold-start state where my_reputation == {initial_reputation:g}
+and opponent_reputation == {initial_reputation:g}.
 
 Interface:
 

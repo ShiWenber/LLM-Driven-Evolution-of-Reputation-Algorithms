@@ -532,6 +532,7 @@ class V2EvolutionaryPopulation:
             "benefit": self.benefit,
             "cost": self.cost,
             "cc_payoff": self.benefit - self.cost,
+            "initial_reputation": INITIAL_REPUTATION,
         }
 
     def _init_prompt(self) -> str:
@@ -652,6 +653,7 @@ class V2EvolutionaryPopulation:
         user_msg = template.format(
             fitness=parent_fitness,
             parent_code=parent_code,
+            **self._sim_params(),
         )
         return self._request_valid_code(
             user_msg, f"fermi 1-μ small-mutate slot {preserve_id}"

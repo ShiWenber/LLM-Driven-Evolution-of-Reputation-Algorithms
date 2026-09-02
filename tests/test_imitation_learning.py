@@ -29,6 +29,11 @@ def _capture_prompt(agent_type: str, mode: str, fitness: float) -> str:
     population = V2EvolutionaryPopulation.__new__(V2EvolutionaryPopulation)
     population.agent_type = agent_type
     population.imitation_learning_mode = mode
+    population.population_size = 16
+    population.num_rounds_per_gen = 125
+    population.num_generations = 30
+    population.benefit = 2.0
+    population.cost = 1.0
     population._fallback_mutation_count = 0
     captured = []
     child = TYPE2_CODE if agent_type == "agent-type2" else TYPE1_CODE
@@ -53,3 +58,35 @@ def test_random_and_deliberate_prompts_have_different_objectives():
     assert "adjust a single number or threshold" not in random_prompt
     assert "higher fitness" not in random_prompt
     assert "higher fitness" in deliberate_prompt
+
+
+@pytest.mark.parametrize("mode", ["random", "deliberate"])
+def test_type1_fermi_prompts_state_generation_reset_and_zero_cold_start(mode):
+    prompt = _capture_prompt("agent-type1", mode, 3.0)
+    assert "start of EVERY generation" in prompt
+    assert "exactly 0" in prompt
+    assert "does not carry across generations" in prompt
+    assert "my_reputation == 0" in prompt
+    assert "opponent_reputation == 0" in prompt
+
+
+def test_type1_init_and_ordinary_mutation_prompts_share_cold_start_context():
+    population = V2EvolutionaryPopulation(
+        population_size=4,
+        num_rounds_per_gen=8,
+        num_generations=2,
+        agent_type="agent-type1",
+    )
+    init_prompt = population._init_prompt()
+    captured = []
+    population._request_valid_code = (
+        lambda prompt, _label: captured.append(prompt) or TYPE1_CODE
+    )
+    population._mutate(TYPE1_CODE, 1.0)
+
+    for prompt in (init_prompt, captured[0]):
+        assert "start of EVERY generation" in prompt
+        assert "exactly 0" in prompt
+        assert "does not carry across generations" in prompt
+        assert "my_reputation == 0" in prompt
+        assert "opponent_reputation == 0" in prompt
