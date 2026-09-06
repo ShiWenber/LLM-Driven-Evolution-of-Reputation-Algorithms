@@ -256,16 +256,12 @@ extinct in this three-seed batch.
 Because each cell contains only three seeds, these fractions are descriptive
 results rather than precise estimates of fixation probability.
 
-Run or resume this single-invader batch with:
-
-```powershell
-uv run run-best-leading-eight-invasion --invader-counts 1 --workers 8
-```
-
-The runner also supports an initial-frequency sweep with `n=1..14`. Formal
-outputs remain available for reproducibility. Regenerate the README figure with
-`uv run plot-best-leading-eight-invasion`; the experiment runner is
-`experiments.analysis.invasion.run_best_leading_eight_invasion`.
+The 96 formal runs are cached and remain available for reproducibility.
+Regenerate the README figure with `uv run plot-best-leading-eight-invasion`.
+The legacy single-invader runner has been retired: shared fixed-strategy
+primitives (representative selection, competitor construction, and generation
+play) now live in `experiments/analysis/invasion/core.py`, and the N=100 sweep
+in the next section takes explicit `LABEL=AGENT_TYPE=PATH` sources.
 
 ### 10) N=100 invasion ability across initial invader counts
 
@@ -306,10 +302,14 @@ changes the low-frequency outcome for `SJ`/`SJ+`, but the N=100 sweep still
 shows a broad frequency-selection advantage for `agent-type2` under this
 deterministic payoff-imitation rule.
 
-Run or resume the experiment and regenerate the figure with:
+Run or resume the experiment and regenerate the figure by passing explicit
+strategy sources (`LABEL=AGENT_TYPE=PATH` pointing at a run's
+`evolutionary.json`):
 
 ```powershell
-uv run run-n100-invasion-count-sweep --workers 12
+uv run run-n100-invasion-count-sweep --workers 12 `
+  --source agent-type1=agent-type1=results/quantitative_baseline/LLM_agent-type1_fermi_z_v3_g100_1000inter_N16_genreset_seed4/evolutionary.json `
+  --source agent-type2=agent-type2=results/quantitative_baseline/LLM_v3_fermi_z_v3_g100_1000inter_N16_genreset_seed0/evolutionary.json
 uv run plot-n100-invasion-count-sweep
 ```
 
@@ -359,8 +359,11 @@ the errors reveal an even clearer broad invasion and resistance advantage for
 Run or resume the noisy sweep and regenerate its figure with:
 
 ```powershell
-uv run run-n100-invasion-count-sweep --workers 12 --action-error 0.01 --observation-error 0.01
-uv run plot-n100-invasion-count-sweep --summary results/quantitative_baseline/invasion/n100_noisy_invasion_count_sweep/summary.json --output README.assets/n100_noisy_invasion_count_sweep.png
+uv run run-n100-invasion-count-sweep --workers 12 `
+  --action-error 0.01 --observation-error 0.01 `
+  --source agent-type1=agent-type1=results/quantitative_baseline/LLM_agent-type1_fermi_z_v3_g100_1000inter_N16_genreset_seed4/evolutionary.json `
+  --source agent-type2=agent-type2=results/quantitative_baseline/LLM_v3_fermi_z_v3_g100_1000inter_N16_genreset_seed0/evolutionary.json
+uv run plot-n100-invasion-count-sweep --summary results/quantitative_baseline/invasion/n100_noisy_invasion_count_sweep_ae0p01_oe0p01/summary.json --output README.assets/n100_noisy_invasion_count_sweep.png
 ```
 
 ---
@@ -433,22 +436,22 @@ The configured project scripts can be run with `uv run`:
 # Main legacy donor-game CLI
 uv run llm-reputation --help
 
-# Agent 2 invasion experiment (336 fixed-strategy runs by default)
-uv run run-agent2-invasion --help
-
 # Best agent-type1 and agent-type2 representatives vs. all Leading Eight norms
-uv run run-best-leading-eight-invasion --invader-counts 1 --workers 8
 uv run plot-best-leading-eight-invasion
 
 # N=100 bidirectional sweep over initial invader counts
-uv run run-n100-invasion-count-sweep --workers 12
+uv run run-n100-invasion-count-sweep --workers 12 `
+  --source agent-type1=agent-type1=results/quantitative_baseline/LLM_agent-type1_fermi_z_v3_g100_1000inter_N16_genreset_seed4/evolutionary.json `
+  --source agent-type2=agent-type2=results/quantitative_baseline/LLM_v3_fermi_z_v3_g100_1000inter_N16_genreset_seed0/evolutionary.json
 uv run plot-n100-invasion-count-sweep
 
 # N=100 sweep with independent 1% action and observation errors
-uv run run-n100-invasion-count-sweep --workers 12 --action-error 0.01 --observation-error 0.01
-uv run plot-n100-invasion-count-sweep --summary results/quantitative_baseline/invasion/n100_noisy_invasion_count_sweep/summary.json --output README.assets/n100_noisy_invasion_count_sweep.png
+uv run run-n100-invasion-count-sweep --workers 12 --action-error 0.01 --observation-error 0.01 `
+  --source agent-type1=agent-type1=results/quantitative_baseline/LLM_agent-type1_fermi_z_v3_g100_1000inter_N16_genreset_seed4/evolutionary.json `
+  --source agent-type2=agent-type2=results/quantitative_baseline/LLM_v3_fermi_z_v3_g100_1000inter_N16_genreset_seed0/evolutionary.json
+uv run plot-n100-invasion-count-sweep --summary results/quantitative_baseline/invasion/n100_noisy_invasion_count_sweep_ae0p01_oe0p01/summary.json --output README.assets/n100_noisy_invasion_count_sweep.png
 
-# Generate the invasion dashboard
+# Regenerate invasion dashboards from cached results
 uv run plot-agent2-invasion
 
 # Plot cooperation evolution curves
@@ -495,15 +498,9 @@ The runner uses:
 - both directions: Agent 2 invading a norm and a norm invading Agent 2;
 - initial invader counts `n=1..14`.
 
-Run or resume the experiment with:
-
-```powershell
-uv run run-agent2-invasion
-```
-
-Completed JSON files are cached, so re-running resumes without repeating
-finished cells. Use `--smoke` for a small validation run, or `--help` for
-selection of norms, directions, seeds, and output paths.
+The 336 formal runs of this historical batch are cached and remain available
+for reproducibility. No runner is shipped for it; fixed-strategy invasion
+primitives now live in `experiments/analysis/invasion/core.py`.
 
 Results are written under:
 
@@ -520,9 +517,6 @@ Generate the dashboard again with:
 
 ```powershell
 uv run plot-agent2-invasion
-
-# Equivalent module form:
-uv run python -m experiments.analysis.invasion.run_agent2_schmid_invasion --help
 ```
 
 The plotting module validates that all 336 formal result files exist, that
@@ -533,8 +527,9 @@ figure.
 ## agent-type2 Fermi-style LLM evolution experiment
 
 The entry point `experiments/run_fermi_v3.py` uses a legacy filename and is a
-command-line launcher for the `agent-type2` (full `LLMAgent` class) population evolution with the Fermi imitation
-selection scheme. It is a thin CLI wrapper over
+command-line launcher for the `agent-type2` (full `LLMAgent` class) population
+evolution. Fermi imitation is the default, and tournament selection can be
+selected through configuration. It is a thin CLI wrapper over
 `experiments.v2_quantitative.population.V2EvolutionaryPopulation` and mirrors
 the production-run script `_run_fermi_3seed_100gen_v3.py` at the repo root.
 
@@ -569,6 +564,7 @@ Common options:
 | `--gens N` | `100` | Number of generations |
 | `--target-interactions N` | `1000` | Target PD interactions per generation |
 | `--population-size N` | `15` | Population size |
+| `--learning-method {fermi,tournament}` | `fermi` | Learning/selection rule; tournament uses elite retention and tournament-selected survivors |
 | `--updates-per-gen N` | population size | Distinct learners sampled without replacement per generation; must not exceed population size |
 | `--llm-concurrency N` | population size | Maximum concurrent LLM requests per seed process; aggregate maximum is `seed workers × LLM concurrency` |
 | `--fermi-beta F` | `5.0` | Fermi selection strength |
@@ -584,6 +580,125 @@ Common options:
 | `--label S` | mode-specific | Output directory / summary label; the automatic label contains `learn-random` or `learn-deliberate` |
 | `--output-root PATH` | `results/quantitative_baseline` | Root for per-seed result folders |
 | `--dry-run` | off | Validate and print the seed plan without running |
+| `--resume-json PATH...` | off | Continue one or more saved `evolutionary.json` trajectories |
+| `--additional-gens N` | required in resume mode | Number of new evaluated generations appended to each source trajectory |
+
+## Continuing evolution from trajectory logs
+
+Resume mode continues a completed Fermi trajectory without initializing a new
+population or replaying its earlier generations. It supports one trajectory or
+several independent seed trajectories in the same command.
+
+Continue one trajectory:
+
+```powershell
+uv run python -m experiments.run_fermi_v3 `
+  --resume-json results/my_run_seed0/evolutionary.json `
+  --additional-gens 25 `
+  --llm-concurrency 25 `
+  --label my_run_continued
+```
+
+Continue several seeds in parallel processes:
+
+```powershell
+uv run python -m experiments.run_fermi_v3 `
+  --resume-json `
+    results/run_seed0/evolutionary.json `
+    results/run_seed1/evolutionary.json `
+    results/run_seed2/evolutionary.json `
+  --additional-gens 75 `
+  --seed-workers 3 `
+  --llm-concurrency 25 `
+  --label continued_to_g100
+```
+
+`--additional-gens` means additional evaluated generations, not a new total.
+For example, a 25-generation source plus `--additional-gens 75` produces a
+100-generation merged trajectory.
+
+Preview and validate the plan without calling the LLM API:
+
+```powershell
+uv run python -m experiments.run_fermi_v3 `
+  --resume-json results/run_seed0/evolutionary.json `
+  --additional-gens 75 `
+  --dry-run
+```
+
+### Generation-boundary semantics
+
+The final population in a source log has already played and has a saved
+fitness, but the original run intentionally did not perform a reproduction
+step after its final generation. Resume therefore proceeds in this order:
+
+1. Restore final strategy code, fitness, stable agent IDs, current lineage IDs,
+   birth records, and the complete lineage-event history.
+2. Perform the missing Fermi transition from the old final generation to the
+   first new generation, using the saved fitness.
+3. Re-instantiate the new population. Reputation and all other within-generation
+   state start from their normal generation-boundary values (`0.0` reputation
+   for agent-type1).
+4. Evaluate the first new generation and append it to the trajectory.
+5. Repeat the transition/evaluation cycle for the remaining additional
+   generations.
+
+This avoids evaluating the old final population twice and preserves the
+existing lineage tree instead of constructing a new set of roots.
+
+### Configuration and output
+
+Scientific settings are inherited independently from every source log,
+including population size, interactions, payoff parameters, observability,
+Fermi beta, mutation rate, imitation mode, learners per generation, seed, and
+agent type. Historical logs that predate a saved mutation temperature use the
+historical default `0.8`.
+
+The resume command controls operational settings:
+
+- `--provider` selects the API credential and base URL.
+- `--model` optionally overrides the model recorded in the source log.
+- `--llm-concurrency` optionally overrides per-seed request concurrency;
+  otherwise the saved value is reused.
+- `--seed-workers` controls the number of independent trajectory processes.
+- `--label` and `--output-root` select the new output location.
+
+Input logs in one command must have distinct seeds because output directories
+are keyed by seed. Source logs are never overwritten. Resume refuses to replace
+an existing destination, so choose a new label if that output already exists.
+Each successful output contains the old and new trajectory records, the final
+population, and the complete old and new lineage events:
+
+```text
+<output-root>/<label>_seed<seed>/evolutionary.json
+<output-root>/<label>_summary.json
+```
+
+### RNG and prompt compatibility
+
+New logs store the Python RNG checkpoint and can restore that local random
+stream exactly. Historical logs without this field use a stable derived seed
+and are marked `config.resume.rng_mode="derived_branch"`. New LLM births use
+the prompt templates in the current code version; this is also recorded in
+the resume metadata. Restoring the Python RNG does not make external LLM output
+deterministic: provider sampling, service changes, request retries, and parallel
+completion timing remain external sources of variation.
+
+Relevant metadata is stored under `config.resume`:
+
+```json
+{
+  "source_path": ".../evolutionary.json",
+  "source_generations": 25,
+  "additional_generations": 75,
+  "rng_mode": "derived_branch",
+  "derived_rng_seed": 1595074935,
+  "uses_current_prompt": true
+}
+```
+
+For logs created after RNG checkpoint support was added, `rng_mode` is
+`"checkpoint"` and `derived_rng_seed` is `null`.
 
 Per seed, results are written to
 `<output-root>/<label>_seed<s>/evolutionary.json`, and a combined

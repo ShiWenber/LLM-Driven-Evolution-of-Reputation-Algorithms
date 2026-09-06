@@ -5,33 +5,36 @@ learner/model pair, the learner copies the model iff the model has strictly
 higher realized fitness. No Fermi/logistic acceptance probability is used.
 Optional action error flips the executed action after a strategy chooses it;
 optional observation error independently flips each action seen by each observer.
+Strategy inputs are explicit ``LABEL=AGENT_TYPE=EVOLUTIONARY_JSON`` values so
+multiple representatives of the same agent type cannot overwrite each other.
 """
 
 from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import hashlib
 import json
 import random
 import time
 from pathlib import Path
 from typing import Any
 
+from experiments.evolution_log import load_evolution_json
+
 from ..paths import quantitative_results_dir
-from .run_best_leading_eight_invasion import (
+from .core import (
     AGENT_TYPES,
     DIRECTIONS,
     FITNESS_INTERACTIONS,
     INTERACTIONS_PER_GENERATION,
     NORMS,
     NUM_GENERATIONS,
-    UPDATES_PER_GENERATION,
-    Competitor,
     EvolvedSource,
-    _payoff_imitation_update,
-    _play_generation,
-    _write_json_atomic,
-    load_representative,
+    Competitor,
+    payoff_imitation_update,
+    root_lineage,
+    write_json_atomic,
 )
 
 
@@ -44,8 +47,66 @@ def default_output() -> Path:
     return quantitative_results_dir() / "invasion" / "n100_invasion_count_sweep"
 
 
-def noisy_output() -> Path:
-    return quantitative_results_dir() / "invasion" / "n100_noisy_invasion_count_sweep"
+def noisy_output(action_error: float, observation_error: float) -> Path:
+    suffix = f"ae{action_error:g}_oe{observation_error:g}".replace(".", "p")
+    return quantitative_results_dir() / "invasion" / f"n100_noisy_invasion_count_sweep_{suffix}"
+
+
+def load_representative_from_path(
+    label: str, agent_type: str, path: Path,
+) -> EvolvedSource:
+    """Load a representative without relying on legacy hard-coded labels."""
+    if agent_type not in AGENT_TYPES:
+        raise ValueError(f"Unknown agent type for {label}: {agent_type}")
+    data = load_evolution_json(path)
+    parents = {
+        int(event["lineage_id"]): (
+            None if event.get("parent_lineage_id") is None
+            else int(event["parent_lineage_id"])
+        )
+        for event in data["lineage_events"]
+    }
+    members = []
+    family_counts: dict[int, int] = {}
+    for member in data["final_population"]:
+        root = root_lineage(int(member["lineage_id"]), parents)
+        members.append((member, root))
+        family_counts[root] = family_counts.get(root, 0) + 1
+    dominant_root = min(family_counts, key=lambda root: (-family_counts[root], root))
+    winner = min(
+        (member for member, root in members if root == dominant_root),
+        key=lambda member: (-float(member["fitness"]), int(member["agent_id"])),
+    )
+    code = str(winner["code"])
+    return EvolvedSource(
+        agent_type=agent_type,
+        path=path,
+        agent_id=int(winner["agent_id"]),
+        lineage_id=int(winner["lineage_id"]),
+        root_lineage_id=dominant_root,
+        root_family_size=family_counts[dominant_root],
+        fitness=float(winner["fitness"]),
+        code=code,
+        code_sha256=hashlib.sha256(code.encode("utf-8")).hexdigest(),
+    )
+
+
+def parse_sources(values: list[str]) -> dict[str, EvolvedSource]:
+    """Parse repeatable LABEL=AGENT_TYPE=EVOLUTIONARY_JSON specifications."""
+    sources: dict[str, EvolvedSource] = {}
+    for value in values:
+        try:
+            label, agent_type, raw_path = value.split("=", 2)
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid --source {value!r}; expected LABEL=AGENT_TYPE=PATH"
+            ) from exc
+        if not label or label in sources:
+            raise ValueError(f"Source labels must be non-empty and unique: {label!r}")
+        sources[label] = load_representative_from_path(
+            label, agent_type, Path(raw_path).resolve()
+        )
+    return sources
 
 
 def experiment_name(action_error: float, observation_error: float) -> str:
@@ -164,9 +225,8 @@ def run_one(
                 action_error, observation_error,
             )
         else:
-            stats = _play_generation(
-                population, rng, interactions=interactions,
-                fitness_interactions=fitness_interactions,
+            stats = _play_generation_noisy(
+                population, rng, interactions, fitness_interactions, 0.0, 0.0,
             )
         invaders = [member for member in population if member.kind == invader_kind]
         residents = [member for member in population if member.kind == resident_kind]
@@ -190,7 +250,7 @@ def run_one(
             }
         )
         if generation < generations - 1:
-            population = _payoff_imitation_update(
+            population = payoff_imitation_update(
                 population, rng, updates=POPULATION_SIZE
             )
             post_update_count = sum(
@@ -288,7 +348,7 @@ def cache_matches(
 
 
 def execute(payload: tuple[Any, ...]) -> tuple[tuple[Any, ...], dict[str, Any]]:
-    source, norm, direction, count, seed, generations, interactions, fitness, action_error, observation_error = payload
+    label, source, norm, direction, count, seed, generations, interactions, fitness, action_error, observation_error = payload
     result = run_one(
         source, norm, direction, count, seed,
         generations=generations,
@@ -297,7 +357,8 @@ def execute(payload: tuple[Any, ...]) -> tuple[tuple[Any, ...], dict[str, Any]]:
         action_error=action_error,
         observation_error=observation_error,
     )
-    return (source.agent_type, norm, direction, count, seed), result
+    result["strategy_label"] = label
+    return (label, norm, direction, count, seed), result
 
 
 def write_summary(
@@ -326,7 +387,7 @@ def write_summary(
                 for group in norm_group.values():
                     values = group.pop("final_frequencies")
                     group["mean_final_invader_frequency"] = sum(values) / len(values)
-    _write_json_atomic(
+    write_json_atomic(
         output / "summary.json",
         {
             "experiment": experiment_name(action_error, observation_error),
@@ -337,10 +398,19 @@ def write_summary(
             "action_error_probability": action_error,
             "observation_error_probability": observation_error,
             "selection": "synchronous_deterministic_payoff_imitation",
-        "generation_lifecycle": "fresh_agent_and_reputation_reset",
-        "absorbing_state_early_stop": True,
+            "generation_lifecycle": "fresh_agent_and_reputation_reset",
+            "absorbing_state_early_stop": True,
             "sources": {
-                key: {"agent_id": value.agent_id, "code_sha256": value.code_sha256}
+                key: {
+                    "agent_type": value.agent_type,
+                    "path": str(value.path),
+                    "agent_id": value.agent_id,
+                    "lineage_id": value.lineage_id,
+                    "root_lineage_id": value.root_lineage_id,
+                    "root_family_size": value.root_family_size,
+                    "fitness": value.fitness,
+                    "code_sha256": value.code_sha256,
+                }
                 for key, value in sources.items()
             },
             "groups": groups,
@@ -352,7 +422,13 @@ def write_summary(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--agent-types", nargs="+", choices=AGENT_TYPES, default=list(AGENT_TYPES))
+    parser.add_argument(
+        "--source",
+        action="append",
+        default=[],
+        metavar="LABEL=AGENT_TYPE=PATH",
+        help="Explicit evolutionary.json source; repeat for multiple strategies.",
+    )
     parser.add_argument("--norms", nargs="+", choices=NORMS, default=list(NORMS))
     parser.add_argument("--directions", nargs="+", choices=DIRECTIONS, default=list(DIRECTIONS))
     parser.add_argument("--invader-counts", nargs="+", type=int, default=list(DEFAULT_COUNTS))
@@ -372,12 +448,11 @@ def main() -> None:
         parser.error("--observation-error must be in [0, 1]")
     if args.output is None:
         args.output = (
-            noisy_output()
+            noisy_output(args.action_error, args.observation_error)
             if args.action_error or args.observation_error
             else default_output()
         )
     if args.smoke:
-        args.agent_types = list(AGENT_TYPES)
         args.norms = ["IS"]
         args.directions = list(DIRECTIONS)
         args.invader_counts = [1, 50]
@@ -391,10 +466,17 @@ def main() -> None:
     if not 0 < args.fitness_interactions <= args.interactions:
         parser.error("--fitness-interactions must be in 1..--interactions")
 
-    sources = {kind: load_representative(kind) for kind in args.agent_types}
+    if not args.source:
+        parser.error(
+            "at least one explicit --source LABEL=AGENT_TYPE=PATH is required"
+        )
+    try:
+        sources = parse_sources(args.source)
+    except (ValueError, FileNotFoundError) as exc:
+        parser.error(str(exc))
     tasks = [
         (kind, norm, direction, count, seed)
-        for kind in args.agent_types
+        for kind in sources
         for norm in args.norms
         for direction in args.directions
         for count in args.invader_counts
@@ -410,7 +492,7 @@ def main() -> None:
         kind, norm, direction, count, seed = task
         path = result_path(args.output, kind, direction, norm, count, seed)
         if status in ("new", "normalized"):
-            _write_json_atomic(path, result)
+            write_json_atomic(path, result)
         rows.append(
             {
                 "agent_type": kind,
@@ -449,7 +531,7 @@ def main() -> None:
                 record(task, result, "normalized" if needs_normalization else "cached")
                 continue
         pending.append(
-            (sources[kind], norm, direction, count, seed, args.generations,
+            (kind, sources[kind], norm, direction, count, seed, args.generations,
              args.interactions, args.fitness_interactions,
              args.action_error, args.observation_error)
         )

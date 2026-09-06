@@ -18,6 +18,14 @@ def population():
     pop = V2EvolutionaryPopulation.__new__(V2EvolutionaryPopulation)
     pop._llm_client = object()
     pop._llm_client_lock = threading.Lock()
+    pop.population_size = 4
+    pop.num_rounds_per_gen = 8
+    pop.num_generations = 2
+    pop.benefit = 2.0
+    pop.cost = 1.0
+    pop.observability = "full"
+    pop.observability_p = 1.0
+    pop.fitness_window_interactions = 10
     return pop
 
 
@@ -70,6 +78,8 @@ def test_valid_code_request_is_limited_to_three_api_calls(population, monkeypatc
     assert population._request_valid_code("prompt", "test") is None
     assert len(calls) == 3
     assert all(call[2]["max_retries"] == 1 for call in calls)
+    assert all("OVERALL GAME RULES" in call[1] for call in calls)
+    assert all("STRATEGY-GENERATION TASK:\nprompt" in call[1] for call in calls)
 
 
 def test_call_llm_does_not_sleep_after_final_failure(population, monkeypatch):

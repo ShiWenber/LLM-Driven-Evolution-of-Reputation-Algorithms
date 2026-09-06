@@ -27,9 +27,7 @@ dependencies = [
 # Core experiment entry points.
 llm-reputation = "experiments.main:main"
 
-# Agent 2 bidirectional invasion experiment and its dashboard.
-run-agent2-invasion = "experiments.analysis.invasion.run_agent2_schmid_invasion:main"
-run-best-leading-eight-invasion = "experiments.analysis.invasion.run_best_leading_eight_invasion:main"
+# Fixed-strategy invasion experiments against the Leading Eight norms.
 run-n100-invasion-count-sweep = "experiments.analysis.invasion.run_n100_invasion_count_sweep:main"
 run-perturbation-robustness = "experiments.analysis.run_perturbation_robustness:main"
 plot-best-leading-eight-invasion = "experiments.analysis.plot_best_leading_eight_invasion:main"

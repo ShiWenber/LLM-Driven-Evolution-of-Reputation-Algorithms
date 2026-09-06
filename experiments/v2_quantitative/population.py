@@ -22,6 +22,7 @@ Type 2 baseline mode currently only supports ALLCClass and ALLDClass
 strategies). The 8 leading-eight rules live in type-1 land.
 """
 from __future__ import annotations
+import copy
 import random
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -37,6 +38,7 @@ from ..evolution_log import (
     F_CONFIG_AGENT_TYPE, F_CONFIG_BENEFIT, F_CONFIG_COST,
     F_CONFIG_ELITE_COUNT, F_CONFIG_FALLBACK_INIT_COUNT,
     F_CONFIG_FALLBACK_MUTATION_COUNT, F_CONFIG_FERMI_BETA,
+    F_CONFIG_LEARNING_METHOD,
     F_CONFIG_LLM_MAX_TOKENS,
     F_CONFIG_IMITATION_LEARNING_MODE,
     F_CONFIG_LLM_MODEL, F_CONFIG_LLM_THINKING,
@@ -56,8 +58,19 @@ from .agent_full import (
     ALLC_CLASS_SOURCE, ALLD_CLASS_SOURCE,
 )
 from .executor import V2StrategyExecutor
-from .game import V2DonorGame
+from .evolution_architecture import (
+    AgentSnapshot,
+    EvolutionRule,
+    FermiEvolutionRule,
+    GameScenario,
+    GenerationPlan,
+    OffspringJob,
+    OffspringResult,
+    ReputationPrisonersDilemmaScenario,
+    TournamentEvolutionRule,
+)
 from .prompts import (
+    OVERALL_GAME_RULES_PROMPT,
     INIT_PROMPT_V2, MUTATION_PROMPT_V2, SMUTATION_PROMPT_V2,
     DELIBERATE_MUTATION_PROMPT_V2,
     INIT_PROMPT_V3, MUTATION_PROMPT_V3, SMALL_MUTATION_PROMPT_V3,
@@ -194,6 +207,7 @@ class V2EvolutionaryPopulation:
         # imitation_learning_mode ("random" or "deliberate"). The actual
         # role-model fitness is included in either parent-conditioned prompt.
         use_fermi: bool = False,
+        learning_method: Optional[str] = None,
         fermi_beta: float = 5.0,
         mutation_rate_on_adoption: float = 0.1,
         imitation_learning_mode: str = "random",
@@ -229,6 +243,8 @@ class V2EvolutionaryPopulation:
         llm_thinking: bool = False,
         llm_max_tokens_base: int = 4000,
         llm_max_tokens_thinking: int = 12000,
+        game_scenario: Optional[GameScenario] = None,
+        evolution_rule: Optional[EvolutionRule] = None,
     ):
         if agent_type not in ("agent-type1", "agent-type2", "v2", "v3"):
             raise ValueError(
@@ -239,6 +255,16 @@ class V2EvolutionaryPopulation:
             raise ValueError(
                 "imitation_learning_mode must be 'random' or 'deliberate', "
                 f"got {imitation_learning_mode!r}"
+            )
+        if learning_method is None:
+            # Backward compatibility for callers and historical scripts that
+            # still select the rule through ``use_fermi``.
+            learning_method = "fermi" if use_fermi else "tournament"
+        learning_method = learning_method.lower()
+        if learning_method not in ("fermi", "tournament"):
+            raise ValueError(
+                "learning_method must be 'fermi' or 'tournament', "
+                f"got {learning_method!r}"
             )
         # Normalize legacy aliases to canonical values.
         if agent_type == "v2":
@@ -267,7 +293,9 @@ class V2EvolutionaryPopulation:
         self.elite_count = elite_count
         self.num_eliminate = num_eliminate
         self.tournament_size = tournament_size
-        self.use_fermi = use_fermi
+        self.learning_method = learning_method
+        # Retained in logs and as a public attribute for compatibility.
+        self.use_fermi = learning_method == "fermi"
         self.fermi_beta = fermi_beta
         self.mutation_rate_on_adoption = mutation_rate_on_adoption
         self.imitation_learning_mode = imitation_learning_mode
@@ -292,6 +320,18 @@ class V2EvolutionaryPopulation:
         self.results_dir = Path(results_dir)
         self.use_baseline = use_baseline
         self.agent_type = agent_type
+        self.game_scenario = game_scenario or ReputationPrisonersDilemmaScenario(
+            population_size=population_size,
+            benefit=benefit,
+            cost=cost,
+            observability=observability,
+            observability_p=observability_p,
+            fitness_window_interactions=fitness_window_interactions,
+            num_rounds_per_gen=num_rounds_per_gen,
+        )
+        # A supplied rule bypasses the legacy string dispatcher.  The default
+        # paths retain their public methods for backward compatibility.
+        self.evolution_rule = evolution_rule
         self.llm_thinking = llm_thinking
         self.llm_max_tokens_base = llm_max_tokens_base
         self.llm_max_tokens_thinking = llm_max_tokens_thinking
@@ -417,9 +457,9 @@ class V2EvolutionaryPopulation:
             return []
         if self.llm_concurrency == 1 or len(jobs) == 1:
             return [fn(job) for job in jobs]
-        # Initialize the client before workers start so lazy initialization is
-        # not repeated or raced by the first batch.
-        self._get_llm_client()
+        # The worker owns any provider initialization it needs.  `_get_llm_client`
+        # is lock-protected, while keeping this generic map provider-agnostic
+        # allows injected/local offspring operators to run without credentials.
         with ThreadPoolExecutor(
             max_workers=min(self.llm_concurrency, len(jobs)),
             thread_name_prefix="llm",
@@ -503,6 +543,14 @@ class V2EvolutionaryPopulation:
     def _request_valid_code(self, user_msg: str, label: str) -> Optional[str]:
         """Make at most three API calls and return the first valid strategy."""
         system_msg = "You are a Python programmer. Output only valid Python code."
+        # Inject the authoritative game mechanics at the final common gateway,
+        # so init, tournament mutation, and both Fermi mutation modes (for both
+        # agent interfaces) cannot accidentally omit them.
+        user_msg = (
+            self._overall_game_rules_prompt()
+            + "\n\nSTRATEGY-GENERATION TASK:\n"
+            + user_msg
+        )
         for attempt in range(3):
             content = self._call_llm(system_msg, user_msg, max_retries=1)
             code = _extract_code_from_response(content) if content else None
@@ -524,16 +572,40 @@ class V2EvolutionaryPopulation:
         the prompts stay in sync with population_size / rounds / benefit
         / cost / generations even when they differ from the defaults.
         """
-        return {
-            "population_size": self.population_size,
-            "num_rounds_per_gen": self.num_rounds_per_gen,
-            "num_generations": self.num_generations,
-            "num_pairs": max(1, self.population_size // 2),
-            "benefit": self.benefit,
-            "cost": self.cost,
-            "cc_payoff": self.benefit - self.cost,
-            "initial_reputation": INITIAL_REPUTATION,
-        }
+        return dict(self._get_game_scenario().simulation_parameters(
+            num_generations=self.num_generations,
+            initial_reputation=INITIAL_REPUTATION,
+        ))
+
+    def _get_game_scenario(self) -> GameScenario:
+        """Return the configured scenario, including support for legacy fixtures.
+
+        Some focused tests and downstream callers construct the population with
+        ``__new__`` and fill only the historical attributes.  Lazily creating
+        the default adapter preserves that supported testing pattern.
+        """
+        scenario = getattr(self, "game_scenario", None)
+        if scenario is None:
+            scenario = ReputationPrisonersDilemmaScenario(
+                population_size=self.population_size,
+                benefit=self.benefit,
+                cost=self.cost,
+                observability=getattr(self, "observability", "full"),
+                observability_p=getattr(self, "observability_p", 1.0),
+                fitness_window_interactions=getattr(
+                    self, "fitness_window_interactions", 200
+                ),
+                num_rounds_per_gen=self.num_rounds_per_gen,
+            )
+            self.game_scenario = scenario
+        return scenario
+
+    def _overall_game_rules_prompt(self) -> str:
+        """Return the authoritative mechanics prepended to every LLM task."""
+        return self._get_game_scenario().overall_rules_prompt(
+            num_generations=self.num_generations,
+            initial_reputation=INITIAL_REPUTATION,
+        )
 
     def _init_prompt(self) -> str:
         """The agent-type-appropriate init prompt with real sim params."""
@@ -591,8 +663,14 @@ class V2EvolutionaryPopulation:
                 self.agents.append(self._new_agent(fb))
         print(f"  Initialized {len(self.agents)} agents with baseline '{self.use_baseline}' (agent_type={self.agent_type})")
 
-    def _mutate(self, parent_code: str, parent_fitness: float) -> str:
-        """LLM-driven mutation of parent code."""
+    def _mutate_code(
+        self, parent_code: str, parent_fitness: float
+    ) -> Optional[str]:
+        """Generate validated mutation code without applying fallback.
+
+        Returning ``None`` keeps failure handling and metrics in the ordered,
+        single-threaded commit phase.
+        """
         sim = self._sim_params()
         if self.agent_type == "agent-type2":
             user_msg = MUTATION_PROMPT_V3.format(
@@ -602,7 +680,11 @@ class V2EvolutionaryPopulation:
             user_msg = MUTATION_PROMPT_V2.format(
                 fitness=parent_fitness, parent_code=parent_code, **sim
             )
-        return self._request_valid_code(user_msg, "mutate") or parent_code
+        return self._request_valid_code(user_msg, "mutate")
+
+    def _mutate(self, parent_code: str, parent_fitness: float) -> str:
+        """Backward-compatible single-mutation helper with parent fallback."""
+        return self._mutate_code(parent_code, parent_fitness) or parent_code
 
     def _llm_init_code(self, preserve_id: int) -> Optional[str]:
         """Generate and validate code for one independent Fermi update."""
@@ -686,53 +768,206 @@ class V2EvolutionaryPopulation:
 
     def _run_one_generation(self) -> Dict:
         """Run a single generation. Returns per-gen stats."""
-        game = V2DonorGame(
-            population_size=self.population_size,
-            benefit=self.benefit,
-            cost=self.cost,
-            observability=self.observability,
-            observability_p=self.observability_p,
-            seed=self.seed + self.round_num_offset,  # different seed per gen
-            fitness_window_interactions=self.fitness_window_interactions,
-        )
-        # Per-gen unique seed
         gen_seed = self.rng.randrange(10**9)
-        game.rng = random.Random(gen_seed)
-        game.setup_population(self.agents)
-        # For baseline mode, do NOT reset agent reputation (it's built up)
-        # For LLM mode, do NOT reset either.
-        # Reset only the per-gen tracking on each agent
-        for a in self.agents:
-            a.reset_for_generation()
-        # Run T rounds
-        # NOTE: V2DonorGame.run_generation() uses population_size as T.
-        # If T != population_size, we override the loop here:
-        T = self.num_rounds_per_gen
-        game.round_num = 0
-        game.payoffs = [0.0] * self.population_size
-        game._global_log = []
-        game._interaction_deltas = []
-        for _ in range(T):
-            game.play_round()
-            game.distribute_observations_and_self_judgments()
-        coop_count = sum(1 for inter in game._global_log if inter["donor_action"] == "cooperate")
-        coop_rate = coop_count / max(1, len(game._global_log))
-        # Windowed fitness: only the last
-        # `fitness_window_interactions` interactions count toward
-        # selection. Earlier interactions are played (so observe()
-        # history and reputations evolve) but their payoffs are
-        # treated as burn-in. See game.get_windowed_fitness().
-        fitness = game.get_windowed_fitness()
-        return {
-            "cooperation_rate_mean": coop_rate,
-            "n_interactions": len(game._global_log),
-            "round_num": T,
-            "payoffs": fitness,
-        }
+        result = self._get_game_scenario().evaluate(
+            self.agents,
+            generation_seed=gen_seed,
+            num_rounds=self.num_rounds_per_gen,
+        )
+        return result.as_dict()
 
     @property
     def round_num_offset(self) -> int:
         return getattr(self, "_round_offset", 0)
+
+    @staticmethod
+    def _tuple_tree(value):
+        """Convert JSON-loaded RNG-state lists back to tuples."""
+        if isinstance(value, list):
+            return tuple(V2EvolutionaryPopulation._tuple_tree(v) for v in value)
+        return value
+
+    def _result_config(self, num_generations: int, **extra) -> Dict:
+        """Build the common config block, including a resumable RNG checkpoint."""
+        fields = {
+            F_CONFIG_AGENT_TYPE: self.agent_type,
+            F_CONFIG_POPULATION_SIZE: self.population_size,
+            F_CONFIG_NUM_ROUNDS_PER_GEN: self.num_rounds_per_gen,
+            F_CONFIG_BENEFIT: self.benefit,
+            F_CONFIG_COST: self.cost,
+            F_CONFIG_OBSERVABILITY: self.observability,
+            F_CONFIG_OBSERVABILITY_P: self.observability_p,
+            F_CONFIG_ELITE_COUNT: self.elite_count,
+            F_CONFIG_NUM_ELIMINATE: self.num_eliminate,
+            F_CONFIG_TOURNAMENT_SIZE: self.tournament_size,
+            F_CONFIG_LLM_MODEL: self.llm_model,
+            F_CONFIG_SEED: self.seed,
+            F_CONFIG_USE_BASELINE: self.use_baseline,
+            F_CONFIG_NUM_GENERATIONS: num_generations,
+            F_CONFIG_TARGET_INTERACTIONS_PER_GEN:
+                self.target_interactions_per_gen,
+            "fitness_window_interactions": self.fitness_window_interactions,
+            F_CONFIG_LLM_THINKING: self.llm_thinking,
+            F_CONFIG_LLM_MAX_TOKENS: self._llm_max_tokens,
+            F_CONFIG_USE_FERMI: self.use_fermi,
+            F_CONFIG_LEARNING_METHOD: self.learning_method,
+            F_CONFIG_FERMI_BETA: self.fermi_beta,
+            F_CONFIG_MUTATION_RATE_ON_ADOPTION:
+                self.mutation_rate_on_adoption,
+            F_CONFIG_IMITATION_LEARNING_MODE:
+                self.imitation_learning_mode,
+            F_CONFIG_UPDATES_PER_GEN: self.updates_per_gen,
+            F_CONFIG_LLM_CONCURRENCY: self.llm_concurrency,
+            "mutation_temperature": self.mutation_temperature,
+            F_CONFIG_INITIAL_REPUTATION: (
+                FULL_INITIAL_REPUTATION
+                if self.agent_type == "agent-type2"
+                else INITIAL_REPUTATION
+            ),
+            F_CONFIG_FALLBACK_INIT_COUNT: self._fallback_init_count,
+            F_CONFIG_FALLBACK_MUTATION_COUNT:
+                self._fallback_mutation_count,
+            # random.Random state contains only JSON-safe numbers/tuples.
+            # json.dump writes tuples as arrays; _tuple_tree restores them.
+            "rng_state": self.rng.getstate(),
+            "rng_state_format": "python_random_v1",
+        }
+        fields.update(extra)
+        return make_config(**fields)
+
+    def _restore_from_evolution_log(self, previous: Dict) -> int:
+        """Restore the evaluated final population and lineage bookkeeping.
+
+        Returns the last recorded generation number. Reputations and other
+        within-generation state are intentionally not restored: an evolution
+        checkpoint lies at a generation boundary, where agents are rebuilt.
+        """
+        trajectory = previous.get("trajectory", [])
+        final_population = previous.get("final_population", [])
+        if not trajectory:
+            raise ValueError("resume log has an empty trajectory")
+        if len(final_population) != self.population_size:
+            raise ValueError(
+                "resume population size mismatch: "
+                f"log has {len(final_population)}, configured {self.population_size}"
+            )
+
+        restored = []
+        self._slot_lineage = {}
+        self._slot_birth = {}
+        for rec in final_population:
+            aid = int(rec["agent_id"])
+            agent = self._make_agent(rec["code"], aid)
+            agent.fitness = float(rec.get("fitness", 0.0))
+            restored.append(agent)
+            lineage_id = rec.get("lineage_id")
+            if lineage_id is not None:
+                self._slot_lineage[aid] = int(lineage_id)
+            self._slot_birth[aid] = lineage_event(
+                lineage_id=lineage_id,
+                parent_lineage_id=rec.get(F_PARENT_LINEAGE_ID),
+                parent_id=rec.get(F_PARENT_ID),
+                origin=rec.get(F_ORIGIN),
+                birth_gen=rec.get(F_BIRTH_GEN),
+            )
+
+        self.agents = restored
+        self._lineage_events = copy.deepcopy(previous.get("lineage_events", []))
+        lineage_ids = [
+            ev.get("lineage_id") for ev in self._lineage_events
+            if ev.get("lineage_id") is not None
+        ]
+        self._next_lineage_id = max(lineage_ids, default=-1) + 1
+        self._next_agent_id = max((a.agent_id for a in restored), default=-1) + 1
+        return int(trajectory[-1]["generation"])
+
+    def resume_evolution(
+        self,
+        previous: Dict,
+        additional_generations: int,
+        *,
+        derived_rng_seed: Optional[int] = None,
+        source_path: Optional[str] = None,
+    ) -> Dict:
+        """Append generations to an existing Fermi evolution log.
+
+        The prior final generation is already evaluated, but its transition
+        to the next generation was never performed. Consequently every
+        appended generation begins with selection/reproduction using the
+        previous generation's saved fitness, then evaluates the new cohort.
+        """
+        if additional_generations < 1:
+            raise ValueError("additional_generations must be >= 1")
+        if self.use_baseline or not self.use_fermi:
+            raise ValueError("resume currently supports non-baseline Fermi runs only")
+
+        old_config = previous.get("config", {})
+        last_gen = self._restore_from_evolution_log(previous)
+        old_fallback_init = int(old_config.get(F_CONFIG_FALLBACK_INIT_COUNT, 0))
+        old_fallback_mutation = int(old_config.get(F_CONFIG_FALLBACK_MUTATION_COUNT, 0))
+        self._fallback_init_count = old_fallback_init
+        self._fallback_mutation_count = old_fallback_mutation
+
+        saved_rng_state = old_config.get("rng_state")
+        if saved_rng_state is not None:
+            self.rng.setstate(self._tuple_tree(saved_rng_state))
+            rng_mode = "checkpoint"
+            effective_derived_seed = None
+        else:
+            if derived_rng_seed is None:
+                # Stable across Python processes and versions; deliberately
+                # does not use hash(), whose salt changes between processes.
+                derived_rng_seed = (
+                    int(self.seed) * 1_000_003
+                    + int(last_gen + 1) * 97_409
+                    + 0x5EED_C0DE
+                ) & ((1 << 63) - 1)
+            self.rng.seed(derived_rng_seed)
+            rng_mode = "derived_branch"
+            effective_derived_seed = int(derived_rng_seed)
+
+        trajectory = copy.deepcopy(previous["trajectory"])
+        total_generations = len(trajectory) + additional_generations
+        self.num_generations = total_generations
+
+        for gen in range(last_gen + 1, last_gen + 1 + additional_generations):
+            # Complete the transition omitted after the old run's final gen.
+            self._select_and_reproduce_fermi(next_gen=gen)
+            self._round_offset = gen
+            stats = self._run_one_generation()
+            for i, agent in enumerate(self.agents):
+                agent.fitness = stats["payoffs"][i] if i < len(stats["payoffs"]) else 0.0
+            trajectory.append(trajectory_entry(
+                generation=gen,
+                cooperation_rate_mean=stats["cooperation_rate_mean"],
+                n_interactions=stats["n_interactions"],
+                fitness_mean=sum(stats["payoffs"]) / max(1, len(stats["payoffs"])),
+                fitness_max=max(stats["payoffs"]) if stats["payoffs"] else 0.0,
+                population=[self._agent_record(a) for a in self.agents],
+            ))
+            print(
+                f"  Gen {gen}: coop={stats['cooperation_rate_mean']:.3f}, "
+                f"fitness_mean={sum(stats['payoffs'])/max(1,len(stats['payoffs'])):.1f}"
+            )
+
+        resume_meta = {
+            "source_path": source_path,
+            "source_generations": len(previous["trajectory"]),
+            "additional_generations": additional_generations,
+            "rng_mode": rng_mode,
+            "derived_rng_seed": effective_derived_seed,
+            "uses_current_prompt": True,
+        }
+        return build_evolution_results(
+            trajectory=trajectory,
+            final_population=[self._agent_record(a) for a in self.agents],
+            lineage_events=self._lineage_events,
+            config=self._result_config(
+                total_generations,
+                resumed=True,
+                resume=resume_meta,
+            ),
+        )
 
     def run_evolution(self, num_generations: int) -> Dict:
         """Run num_generations and return aggregate results."""
@@ -767,10 +1002,7 @@ class V2EvolutionaryPopulation:
                   f"fitness_mean={sum(stats['payoffs'])/max(1,len(stats['payoffs'])):.1f}")
             # Selection + mutation (only for LLM mode)
             if not self.use_baseline and gen < num_generations - 1:
-                if self.use_fermi:
-                    self._select_and_reproduce_fermi(next_gen=gen + 1)
-                else:
-                    self._select_and_reproduce(next_gen=gen + 1)
+                self._select_and_reproduce_by_method(next_gen=gen + 1)
         # Build final population
         final_population = [self._agent_record(a) for a in self.agents]
         # FALLBACK diagnostics (Fix E). Print init and mutation
@@ -815,135 +1047,185 @@ class V2EvolutionaryPopulation:
             # evolutionary tree be built directly, with no code-similarity
             # inference.
             lineage_events=self._lineage_events,
-            config=make_config(
-                **{
-                    F_CONFIG_AGENT_TYPE: self.agent_type,
-                    F_CONFIG_POPULATION_SIZE: self.population_size,
-                    F_CONFIG_NUM_ROUNDS_PER_GEN: self.num_rounds_per_gen,
-                    F_CONFIG_BENEFIT: self.benefit,
-                    F_CONFIG_COST: self.cost,
-                    F_CONFIG_OBSERVABILITY: self.observability,
-                    F_CONFIG_OBSERVABILITY_P: self.observability_p,
-                    F_CONFIG_ELITE_COUNT: self.elite_count,
-                    F_CONFIG_NUM_ELIMINATE: self.num_eliminate,
-                    F_CONFIG_TOURNAMENT_SIZE: self.tournament_size,
-                    F_CONFIG_LLM_MODEL: self.llm_model,
-                    F_CONFIG_SEED: self.seed,
-                    F_CONFIG_USE_BASELINE: self.use_baseline,
-                    F_CONFIG_NUM_GENERATIONS: num_generations,
-                    F_CONFIG_TARGET_INTERACTIONS_PER_GEN:
-                        self.target_interactions_per_gen,
-                    F_CONFIG_LLM_THINKING: self.llm_thinking,
-                    F_CONFIG_LLM_MAX_TOKENS: self._llm_max_tokens,
-                    F_CONFIG_USE_FERMI: self.use_fermi,
-                    F_CONFIG_FERMI_BETA: self.fermi_beta,
-                    F_CONFIG_MUTATION_RATE_ON_ADOPTION:
-                        self.mutation_rate_on_adoption,
-                    F_CONFIG_IMITATION_LEARNING_MODE:
-                        self.imitation_learning_mode,
-                    F_CONFIG_UPDATES_PER_GEN: self.updates_per_gen,
-                    F_CONFIG_LLM_CONCURRENCY: self.llm_concurrency,
-                    F_CONFIG_INITIAL_REPUTATION: (
-                        FULL_INITIAL_REPUTATION
-                        if self.agent_type == "agent-type2"
-                        else INITIAL_REPUTATION
-                    ),
-                    F_CONFIG_FALLBACK_INIT_COUNT: self._fallback_init_count,
-                    F_CONFIG_FALLBACK_MUTATION_COUNT:
-                        self._fallback_mutation_count,
-                }
-            ),
+            config=self._result_config(num_generations),
         )
+
+    def _population_snapshot(self) -> tuple[AgentSnapshot, ...]:
+        """Freeze the planner-visible state before any concurrent work starts."""
+        return tuple(
+            AgentSnapshot(
+                agent_id=agent.agent_id,
+                code=agent.code,
+                fitness=agent.fitness,
+                lineage_id=self._slot_lineage.get(agent.agent_id),
+            )
+            for agent in self.agents
+        )
+
+    def _run_offspring_job(self, job: OffspringJob) -> OffspringResult:
+        """Worker-side operation: generate and validate code, mutate no state."""
+        if job.operator == "llm_init":
+            assert job.preserve_agent_id is not None
+            code = self._llm_init_code(job.preserve_agent_id)
+        elif job.operator == "llm_mutate" and job.mutation_kind == "small":
+            assert job.parent_code is not None
+            assert job.parent_fitness is not None
+            assert job.preserve_agent_id is not None
+            code = self._llm_small_mutate_code(
+                job.parent_code, job.parent_fitness, job.preserve_agent_id
+            )
+        elif job.operator == "llm_mutate" and job.mutation_kind == "full":
+            assert job.parent_code is not None
+            assert job.parent_fitness is not None
+            # Preserve compatibility with callers that historically replaced
+            # the instance-level ``_mutate`` hook in tests or experiments.
+            if "_mutate" in self.__dict__:
+                code = self._mutate(job.parent_code, job.parent_fitness)
+            else:
+                code = self._mutate_code(job.parent_code, job.parent_fitness)
+        else:
+            raise ValueError(f"unsupported offspring job: {job!r}")
+        return OffspringResult(
+            job=job,
+            code=code,
+            error_kind="generation_failed" if code is None else None,
+        )
+
+    def _fallback_code_for_job(self, job: OffspringJob) -> str:
+        if job.operator == "llm_init":
+            return (
+                FALLBACK_CLASS_V3
+                if self.agent_type == "agent-type2"
+                else self.rng.choice(FALLBACK_STRATEGIES)
+            )
+        assert job.parent_code is not None
+        return job.parent_code
+
+    def _commit_generation_plan(
+        self,
+        plan: GenerationPlan,
+        results: List[OffspringResult],
+    ) -> None:
+        """Commit a complete generation plan deterministically on one thread."""
+        if plan.population_size != len(self.agents):
+            raise ValueError("generation plan population size does not match")
+        old_by_id = {agent.agent_id: agent for agent in self.agents}
+        next_agents: List[Optional[object]] = [None] * plan.population_size
+
+        for retained in plan.retained:
+            snapshot = retained.snapshot
+            try:
+                agent = self._make_agent(snapshot.code, snapshot.agent_id)
+            except Exception as exc:
+                print(
+                    "  [retained re-instantiate fallback] "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                agent = old_by_id[snapshot.agent_id]
+            next_agents[retained.output_index] = agent
+
+        result_by_ordinal = {result.job.ordinal: result for result in results}
+        if len(result_by_ordinal) != len(plan.jobs):
+            raise ValueError("offspring results are missing or have duplicate ordinals")
+
+        lineage_updates = []
+        for job in sorted(plan.jobs, key=lambda item: item.ordinal):
+            result = result_by_ordinal.get(job.ordinal)
+            if result is None:
+                raise ValueError(f"missing offspring result for ordinal {job.ordinal}")
+            code = result.code
+            used_fallback = code is None
+            if used_fallback:
+                code = self._fallback_code_for_job(job)
+                self._fallback_mutation_count += 1
+                print(
+                    f"  [{job.operator}] FALLBACK for output index="
+                    f"{job.output_index}"
+                )
+            try:
+                if job.preserve_agent_id is None:
+                    agent = self._new_agent(code)
+                else:
+                    agent = self._make_agent(code, job.preserve_agent_id)
+            except Exception as exc:
+                if not used_fallback:
+                    self._fallback_mutation_count += 1
+                fallback_code = self._fallback_code_for_job(job)
+                print(
+                    "  [offspring instantiate fallback] "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                if job.preserve_agent_id is None:
+                    agent = self._new_agent(fallback_code)
+                else:
+                    agent = self._make_agent(fallback_code, job.preserve_agent_id)
+            next_agents[job.output_index] = agent
+            lineage_updates.append((agent.agent_id, job))
+
+        if any(agent is None for agent in next_agents):
+            raise ValueError("generation plan did not fill every population slot")
+        committed_agents = [agent for agent in next_agents if agent is not None]
+
+        old_ids = set(old_by_id)
+        new_ids = {agent.agent_id for agent in committed_agents}
+        for agent in committed_agents:
+            for removed_id in old_ids - new_ids:
+                agent.reputations.pop(removed_id, None)
+
+        # This is the generation transaction boundary.  No worker can observe
+        # or partially modify the live population before this assignment.
+        self.agents = committed_agents
+        for agent_id, job in lineage_updates:
+            self._new_lineage(
+                agent_id,
+                job.parent_id,
+                job.parent_lineage_id,
+                job.origin,
+                job.birth_gen,
+            )
+
+    def _execute_generation_plan(self, plan: GenerationPlan) -> None:
+        results = self._parallel_llm_map(self._run_offspring_job, plan.jobs)
+        self._commit_generation_plan(plan, results)
 
     def _select_and_reproduce(self, next_gen: Optional[int] = None):
         """Tournament + elite selection; replace num_eliminate worst with mutated
         copies of the survivors."""
-        N = len(self.agents)
-        elite_count = self.elite_count
-        num_eliminate = self.num_eliminate
-        ts = self.tournament_size
-        # Sort by fitness descending
-        idx_sorted = sorted(range(N), key=lambda i: self.agents[i].fitness, reverse=True)
-        # Elites: top `elite_count` survive (unique by definition)
-        survivors = [self.agents[i] for i in idx_sorted[:elite_count]]
-        rest_pool = [self.agents[i] for i in idx_sorted]
-        # We need N - num_eliminate unique survivors total. Tournament can
-        # only pick a winner that's not already in the survivor set.
-        n_needed = N - num_eliminate
-        survivor_set = set(survivors)
-        while len(survivor_set) < n_needed:
-            cand = self.rng.sample(rest_pool, min(ts, len(rest_pool)))
-            winner = max(cand, key=lambda a: a.fitness)
-            survivor_set.add(winner)
-        # Convert to a stable order: by fitness desc, then by agent_id for ties
-        survivors = sorted(
-            survivor_set, key=lambda a: (a.fitness, -a.agent_id), reverse=True
-        )[:n_needed]
-        # Population turnover: keep n_needed survivors, replace the rest with
-        # mutated copies that get a fresh, never-reused agent_id.
-        # Full re-instantiation per generation (lifecycle = one
-        # generation): survivors are rebuilt from their own code with
-        # the SAME agent_id. Both internal state AND the reputation
-        # matrix reset each generation (no cross-gen memory); only
-        # lineage (bloodline) persists. Applies to both v2 and v3
-        # agents.
-        new_agents = []
-        for a in survivors[:n_needed]:
-            try:
-                new_agents.append(self._make_agent(a.code, a.agent_id))
-            except Exception as e:
-                # Defensive: survivor code already instantiated
-                # successfully before, so this should never fire;
-                # keep the old object rather than crash the run.
-                print(
-                    f"  [_select_and_reproduce re-instantiate fallback] "
-                    f"{type(e).__name__}: {e}"
-                )
-                new_agents.append(a)
         if next_gen is None:
             next_gen = 1
-        for _ in range(N - n_needed):
-            parent = self.rng.choice(survivors)
-            new_code = self._mutate(parent.code, parent.fitness)
-            try:
-                child = self._new_agent(new_code)
-            except Exception as e:
-                # Defense in depth: if a mutated class somehow slips past
-                # _validate_code but fails to instantiate for the actual
-                # agent_id, fall back to a fresh clone of the parent.
-                # Without this, the whole run crashes (e.g., the gen 7
-                # crash in M4 smoke test). Count it for the run-end
-                # FALLBACK diagnostics.
-                self._fallback_mutation_count += 1
-                print(
-                    f"  [_select_and_reproduce fallback] using parent_code "
-                    f"for agent after mutate: {type(e).__name__}: {e}"
-                )
-                child = self._new_agent(parent.code)
-            new_agents.append(child)
-            self._new_lineage(
-                child.agent_id,
-                parent.agent_id,
-                self._slot_lineage.get(parent.agent_id),
-                ORIGIN_MUTATE,
-                next_gen,
+        rule = TournamentEvolutionRule(
+            elite_count=self.elite_count,
+            num_eliminate=self.num_eliminate,
+            tournament_size=self.tournament_size,
+        )
+        plan = rule.plan(
+            self._population_snapshot(),
+            rng=self.rng,
+            next_gen=next_gen,
+            lineage_by_agent_id=self._slot_lineage,
+        )
+        self._execute_generation_plan(plan)
+
+    def _select_and_reproduce_by_method(
+        self, next_gen: Optional[int] = None
+    ) -> None:
+        """Dispatch a generation transition to the configured learning rule."""
+        if self.evolution_rule is not None:
+            if next_gen is None:
+                next_gen = 1
+            plan = self.evolution_rule.plan(
+                self._population_snapshot(),
+                rng=self.rng,
+                next_gen=next_gen,
+                lineage_by_agent_id=self._slot_lineage,
             )
-        # Reputations reset every generation: each agent is rebuilt
-        # (or newly imitated) with its own initial matrix
-        # {agent_id: INITIAL_REPUTATION}, so old ids never appear in
-        # the new agents' matrices. The pop loop below is therefore a
-        # no-op; kept as defense-in-depth in case reputation carryover
-        # is ever re-enabled.
-        old_ids = {a.agent_id for a in self.agents}
-        new_ids = {a.agent_id for a in new_agents}
-        ids_to_drop = old_ids - new_ids
-        for a in new_agents:
-            for rid in ids_to_drop:
-                a.reputations.pop(rid, None)
-        # NOTE: do NOT reassign agent_id here. Each agent's id is its stable
-        # global identity; list position in self.agents is just iteration
-        # order and may differ across generations.
-        self.agents = new_agents
+            self._execute_generation_plan(plan)
+        elif self.learning_method == "fermi":
+            self._select_and_reproduce_fermi(next_gen=next_gen)
+        elif self.learning_method == "tournament":
+            self._select_and_reproduce(next_gen=next_gen)
+        else:  # Constructor validation makes this a defensive guard.
+            raise RuntimeError(f"unsupported learning method: {self.learning_method!r}")
 
     def _select_and_reproduce_fermi(self, next_gen: Optional[int] = None):
         """Synchronous Fermi imitation + LLM mutation (Moran-process style, Z-like).
@@ -981,104 +1263,17 @@ class V2EvolutionaryPopulation:
           * Fermi + 1 IS+ + 14 ALLD, mu=0 -> 14/1 (IS+ invades)
           * Fermi + 1 ALLD + 14 ALLC, mu=0 -> 15/0 (ALLD contained)
         """
-        import math
-        N = len(self.agents)
-        if N < 2:
-            return  # nothing to update
-        beta = self.fermi_beta
-        mu = self.mutation_rate_on_adoption
-        # Build a fresh list; we'll mutate entries in-place, but
-        # always read phi and code from the OLD generation.
-        next_agents = list(self.agents)
-        old_agents = list(self.agents)
-        # slot agent_id -> (parent agent_id or None, parent_lineage or None, origin)
-        updates = {}
-        llm_jobs = []
-        learner_indices = self.rng.sample(range(N), self.updates_per_gen)
-        for i in learner_indices:
-            # Sample role model j != i (self-pairing always forbidden).
-            if N > 1:
-                j = self.rng.randrange(N - 1)
-                if j >= i:
-                    j += 1
-            else:
-                j = self.rng.randrange(N)
-            # Fermi imitation probability
-            phi_i = old_agents[i].fitness
-            phi_j = old_agents[j].fitness
-            try:
-                p_imitate = 1.0 / (1.0 + math.exp(-beta * (phi_j - phi_i)))
-            except OverflowError:
-                # exp(-beta * large_negative) underflows to 0; p -> 1
-                p_imitate = 0.0 if (phi_j - phi_i) < 0 else 1.0
-            if self.rng.random() >= p_imitate:
-                continue  # no update this event
-            # i imitates j. Construct the offspring:
-            #   with prob mu  -> INDEPENDENT LLM init (no j reference)
-            #   with prob 1-mu -> SMALL LLM mutation of j.code
-            # In both cases exactly one LLM call per copy event.
-            if self.rng.random() < mu:
-                llm_jobs.append((i, "init", old_agents[i].agent_id, None, None, ORIGIN_INDEPENDENT_INIT, None, None))
-            else:
-                llm_jobs.append((i, "mutate", old_agents[i].agent_id, old_agents[j].code, old_agents[j].fitness, ORIGIN_IMITATE, old_agents[j].agent_id, self._slot_lineage.get(old_agents[j].agent_id)))
-
-        def run_job(job):
-            (
-                i, kind, preserve_id, parent_code, parent_fitness,
-                origin, parent_id, parent_lineage,
-            ) = job
-            if kind == "init":
-                code = self._llm_init_code(preserve_id)
-            else:
-                code = self._llm_small_mutate_code(
-                    parent_code, parent_fitness, preserve_id
-                )
-            return job, code
-
-        for job, code in self._parallel_llm_map(run_job, llm_jobs):
-            (
-                i, kind, preserve_id, parent_code, _parent_fitness,
-                origin, parent_id, parent_lineage,
-            ) = job
-            if code is None:
-                self._fallback_mutation_count += 1
-                if kind == "init":
-                    code = (
-                        FALLBACK_CLASS_V3
-                        if self.agent_type == "agent-type2"
-                        else self.rng.choice(FALLBACK_STRATEGIES)
-                    )
-                    print(f"  [fermi μ-init] FALLBACK for slot id={preserve_id}")
-                else:
-                    code = parent_code
-                    print(
-                        "  [fermi 1-μ small-mutate] FALLBACK "
-                        f"(parent verbatim) for slot id={preserve_id}"
-                    )
-            new_agent = self._make_agent(code, preserve_id)
-            next_agents[i] = new_agent
-            updates[new_agent.agent_id] = (parent_id, parent_lineage, origin)
-        # Synchronous commit. The set of agent_ids is preserved
-        # (every slot retains its old id). Reputations are NOT
-        # inherited: each generation is a fresh lifecycle, so every
-        # agent (rebuilt or newly imitated) starts from its own
-        # initial matrix {agent_id: INITIAL_REPUTATION}.
-        for slot, new_a in enumerate(next_agents):
-            old_a = old_agents[slot]
-            if new_a is old_a:
-                # Full re-instantiation per generation (lifecycle =
-                # one generation): an untouched slot is rebuilt from
-                # its own code with the SAME agent_id, so agent
-                # internal state starts fresh each generation.
-                # Applies to both v2 and v3 agents. No new lineage
-                # event is recorded for a rebuild (the strategy
-                # bloodline is unchanged).
-                new_a = self._make_agent(old_a.code, old_a.agent_id)
-                next_agents[slot] = new_a
-        self.agents = next_agents
-        # Record lineage for every slot that was updated this generation.
-        # Unchanged slots keep their existing lineage (same occupant).
         if next_gen is None:
             next_gen = 1
-        for slot, (parent_slot, parent_lineage, origin) in updates.items():
-            self._new_lineage(slot, parent_slot, parent_lineage, origin, next_gen)
+        rule = FermiEvolutionRule(
+            beta=self.fermi_beta,
+            mutation_rate=self.mutation_rate_on_adoption,
+            updates_per_gen=self.updates_per_gen,
+        )
+        plan = rule.plan(
+            self._population_snapshot(),
+            rng=self.rng,
+            next_gen=next_gen,
+            lineage_by_agent_id=self._slot_lineage,
+        )
+        self._execute_generation_plan(plan)

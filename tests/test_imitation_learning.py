@@ -7,6 +7,7 @@ qualitatively different objectives.
 import pytest
 
 from experiments.v2_quantitative.population import V2EvolutionaryPopulation
+from experiments.v2_quantitative import prompts
 
 
 TYPE1_CODE = """
@@ -61,32 +62,57 @@ def test_random_and_deliberate_prompts_have_different_objectives():
 
 
 @pytest.mark.parametrize("mode", ["random", "deliberate"])
-def test_type1_fermi_prompts_state_generation_reset_and_zero_cold_start(mode):
+def test_type1_fermi_prompts_include_full_rules_without_cold_start_constraint(mode):
     prompt = _capture_prompt("agent-type1", mode, 3.0)
-    assert "start of EVERY generation" in prompt
-    assert "exactly 0" in prompt
-    assert "does not carry across generations" in prompt
-    assert "my_reputation == 0" in prompt
-    assert "opponent_reputation == 0" in prompt
+    assert "OVERALL GAME RULES" in prompt
+    assert "randomly partitioned" in prompt
+    assert "(C, C): 1 each" in prompt
+    assert "Every third-party agent observes" in prompt
+    assert "cold-start" not in prompt.lower()
+    assert "initial reputation" not in prompt.lower()
 
 
-def test_type1_init_and_ordinary_mutation_prompts_share_cold_start_context():
+def test_type1_init_and_ordinary_mutation_requests_share_overall_rules():
     population = V2EvolutionaryPopulation(
         population_size=4,
         num_rounds_per_gen=8,
         num_generations=2,
         agent_type="agent-type1",
     )
-    init_prompt = population._init_prompt()
     captured = []
-    population._request_valid_code = (
-        lambda prompt, _label: captured.append(prompt) or TYPE1_CODE
+    population._call_llm = (
+        lambda _system, prompt, **_kwargs: captured.append(prompt) or TYPE1_CODE
     )
+    population._validate_code = lambda _code: None
+    population._request_valid_code(population._init_prompt(), "init test")
     population._mutate(TYPE1_CODE, 1.0)
 
-    for prompt in (init_prompt, captured[0]):
-        assert "start of EVERY generation" in prompt
-        assert "exactly 0" in prompt
-        assert "does not carry across generations" in prompt
-        assert "my_reputation == 0" in prompt
-        assert "opponent_reputation == 0" in prompt
+    assert len(captured) == 2
+    for prompt in captured:
+        assert "OVERALL GAME RULES" in prompt
+        assert "randomly partitioned" in prompt
+        assert "(C, C): 1 each" in prompt
+        assert "cold-start" not in prompt.lower()
+        assert "initial reputation" not in prompt.lower()
+
+
+def test_task_templates_do_not_repeat_authoritative_game_rules():
+    task_templates = (
+        prompts.INIT_PROMPT_V2,
+        prompts.MUTATION_PROMPT_V2,
+        prompts.SMUTATION_PROMPT_V2,
+        prompts.DELIBERATE_MUTATION_PROMPT_V2,
+        prompts.INIT_PROMPT_V3,
+        prompts.MUTATION_PROMPT_V3,
+        prompts.SMALL_MUTATION_PROMPT_V3,
+        prompts.DELIBERATE_MUTATION_PROMPT_V3,
+    )
+    repeated_rule_phrases = (
+        "randomly partitioned",
+        "rounds per generation",
+        "pair payoffs",
+        "third-party agent observes",
+    )
+
+    for template in task_templates:
+        assert all(phrase not in template for phrase in repeated_rule_phrases)

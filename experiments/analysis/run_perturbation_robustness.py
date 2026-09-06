@@ -12,15 +12,17 @@ from typing import Any
 
 import numpy as np
 
-from .invasion.run_best_leading_eight_invasion import (
+from .invasion.core import (
     BASELINES,
     Competitor,
     EvolvedSource,
     NORMS,
-    _write_json_atomic,
-    load_representative,
+    write_json_atomic,
 )
-from .invasion.run_n100_invasion_count_sweep import _play_generation_noisy
+from .invasion.run_n100_invasion_count_sweep import (
+    _play_generation_noisy,
+    load_representative_from_path,
+)
 from .paths import quantitative_results_dir
 
 
@@ -37,6 +39,25 @@ CONDITIONS = (
     (0.05, 0.05),
     (0.10, 0.10),
 )
+
+#: Historical single-seed runs whose final survivors are the documented
+#: representatives for each agent type (agent-type1 = seed 4, agent-type2 = seed 0).
+REPRESENTATIVE_LABELS = {
+    "agent-type1": "LLM_agent-type1_fermi_z_v3_g100_1000inter_N16_genreset_seed4",
+    "agent-type2": "LLM_v3_fermi_z_v3_g100_1000inter_N16_genreset_seed0",
+}
+
+
+def load_representative(agent_type: str) -> EvolvedSource:
+    """Select the representative final survivor using the documented rule."""
+    if agent_type not in REPRESENTATIVE_LABELS:
+        raise ValueError(f"Unknown agent type: {agent_type}")
+    path = (
+        quantitative_results_dir()
+        / REPRESENTATIVE_LABELS[agent_type]
+        / "evolutionary.json"
+    )
+    return load_representative_from_path(agent_type, agent_type, path)
 
 
 def _condition_name(action_error: float, observation_error: float) -> str:
@@ -206,7 +227,7 @@ def main() -> None:
         rows = list(pool.map(run_one, tasks))
     summary = summarize(rows, candidate, list(args.seeds))
     args.output.mkdir(parents=True, exist_ok=True)
-    _write_json_atomic(args.output / "summary.json", summary)
+    write_json_atomic(args.output / "summary.json", summary)
     print(f"Wrote {args.output / 'summary.json'}", flush=True)
 
 
