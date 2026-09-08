@@ -164,8 +164,7 @@ class QuantitativeAgent:
         self.total_donations = 0
         self.total_decisions = 0
         self.cooperations = 0
-        # NOTE: do NOT reset reputations; they accumulate across generations
-        # within a trial.
+        self.reputations = {self.agent_id: INITIAL_REPUTATION}
 
     def record_donation(self, partner_id: int, donated: bool, round_num: int):
         self.total_decisions += 1

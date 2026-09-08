@@ -15,6 +15,8 @@ from experiments.v2_quantitative.evolution_architecture import (
     AgentSnapshot,
     EvaluationResult,
     GenerationPlan,
+    OffspringJob,
+    OffspringResult,
     RetainedAgent,
 )
 from experiments.v2_quantitative.population import V2EvolutionaryPopulation
@@ -189,3 +191,53 @@ def test_custom_evolution_rule_is_injected_without_dispatch_changes():
         AgentSnapshot(8, "a", 2.0, 80),
         AgentSnapshot(9, "b", 1.0, 90),
     )
+    config = pop._result_config(num_generations=1)
+    assert config["game_scenario"] == "reputation_prisoners_dilemma"
+    assert config["evolution_rule"] == "keep"
+
+
+def test_offspring_generator_is_an_injectable_execution_boundary():
+    job = OffspringJob(
+        ordinal=0,
+        output_index=0,
+        operator="llm_mutate",
+        mutation_kind="full",
+        preserve_agent_id=4,
+        parent_id=4,
+        parent_lineage_id=40,
+        parent_code="parent",
+        parent_fitness=1.0,
+        origin="mutate",
+        birth_gen=2,
+    )
+
+    class Rule:
+        name = "replace-one"
+
+        def plan(self, population, **_kwargs):
+            return GenerationPlan(len(population), (), (job,))
+
+    class Generator:
+        def __init__(self):
+            self.batches = []
+
+        def execute_batch(self, jobs):
+            self.batches.append(tuple(jobs))
+            return [OffspringResult(job=job, code="generated")]
+
+    generator = Generator()
+    pop = V2EvolutionaryPopulation(
+        population_size=1,
+        evolution_rule=Rule(),
+        offspring_generator=generator,
+    )
+    pop.agents = [SimpleNamespace(agent_id=4, code="parent", fitness=1.0)]
+    pop._slot_lineage = {4: 40}
+    pop._make_agent = lambda code, agent_id: SimpleNamespace(
+        agent_id=agent_id, code=code, fitness=0.0, reputations={}
+    )
+
+    pop._select_and_reproduce_by_method(next_gen=2)
+
+    assert generator.batches == [(job,)]
+    assert pop.agents[0].code == "generated"

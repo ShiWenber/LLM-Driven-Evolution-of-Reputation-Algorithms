@@ -10,6 +10,17 @@
 预先固定扰动网格、筛选与确认种子、收益保持率、置信区间、双向入侵门槛以及允许
 使用的结论措辞，禁止看完结果后更换指标。
 
+## 操作流程（SOP）
+
+两个关注点分离的**可执行标准流程**：
+
+- **演化运行本身的可视化 / 聚类 / 谱系** → 仓库根 [`ANALYSIS_SOP.md`](../../ANALYSIS_SOP.md)
+- **主导策略 vs Leading Eight 的双向入侵扫描** → 仓库根 [`INVASION_SOP.md`](../../INVASION_SOP.md)
+
+> 二者的公共前置是 `V2EvolutionaryPopulation` 的 schema-v4 演化结果；
+> 入侵扫描（`INVASION_SOP.md`）额外依赖 `invasion/run_n100_invasion_count_sweep.py`，
+> 宿主种群恒为 100，与演化时的种群规模无关。
+
 ```powershell
 # 10-seed screening
 uv run run-perturbation-robustness --workers 12

@@ -398,6 +398,8 @@ The project dependencies and executable entry points are defined in
 
 ```text
 .
+├── docs/                   # Design notes and mode explanations
+│   └── evolution_modes.md  # Tournament vs Fermi evolution modes
 ├── experiments/
 │   ├── agents/              # Agent interfaces and LLM prompts
 │   ├── analysis/            # Analysis and visualization modules

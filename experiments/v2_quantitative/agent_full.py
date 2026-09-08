@@ -337,6 +337,7 @@ class FullAgent:
         self.total_donations = 0
         self.total_decisions = 0
         self.cooperations = 0
+        self.reputations = {self.agent_id: INITIAL_REPUTATION}
 
     def record_donation(self, partner_id: int, donated: bool, round_num: int):
         self.total_decisions += 1

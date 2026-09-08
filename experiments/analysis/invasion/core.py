@@ -65,6 +65,7 @@ class LegacyEvaluateAgent:
     def reset_for_generation(self) -> None:
         self.total_decisions = 0
         self.cooperations = 0
+        self.reputations = {self.agent_id: 0.0}
 
     def _reputation(self, agent_id: int) -> float:
         return self.reputations.get(agent_id, 0.0)

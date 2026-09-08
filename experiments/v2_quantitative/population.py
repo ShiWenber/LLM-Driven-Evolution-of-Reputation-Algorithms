@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from ..evolution_log import (
-    ORIGIN_INITIAL, ORIGIN_IMITATE, ORIGIN_INDEPENDENT_INIT, ORIGIN_MUTATE,
+    ORIGIN_INITIAL,
     build_evolution_results, lineage_event, make_config, population_entry,
     trajectory_entry,
     F_BIRTH_GEN, F_ORIGIN, F_PARENT_ID, F_PARENT_LINEAGE_ID,
@@ -65,12 +65,12 @@ from .evolution_architecture import (
     GameScenario,
     GenerationPlan,
     OffspringJob,
+    OffspringGenerator,
     OffspringResult,
     ReputationPrisonersDilemmaScenario,
     TournamentEvolutionRule,
 )
 from .prompts import (
-    OVERALL_GAME_RULES_PROMPT,
     INIT_PROMPT_V2, MUTATION_PROMPT_V2, SMUTATION_PROMPT_V2,
     DELIBERATE_MUTATION_PROMPT_V2,
     INIT_PROMPT_V3, MUTATION_PROMPT_V3, SMALL_MUTATION_PROMPT_V3,
@@ -245,6 +245,7 @@ class V2EvolutionaryPopulation:
         llm_max_tokens_thinking: int = 12000,
         game_scenario: Optional[GameScenario] = None,
         evolution_rule: Optional[EvolutionRule] = None,
+        offspring_generator: Optional[OffspringGenerator] = None,
     ):
         if agent_type not in ("agent-type1", "agent-type2", "v2", "v3"):
             raise ValueError(
@@ -332,6 +333,7 @@ class V2EvolutionaryPopulation:
         # A supplied rule bypasses the legacy string dispatcher.  The default
         # paths retain their public methods for backward compatibility.
         self.evolution_rule = evolution_rule
+        self.offspring_generator = offspring_generator
         self.llm_thinking = llm_thinking
         self.llm_max_tokens_base = llm_max_tokens_base
         self.llm_max_tokens_thinking = llm_max_tokens_thinking
@@ -789,6 +791,8 @@ class V2EvolutionaryPopulation:
 
     def _result_config(self, num_generations: int, **extra) -> Dict:
         """Build the common config block, including a resumable RNG checkpoint."""
+        scenario = self._get_game_scenario()
+        custom_rule = getattr(self, "evolution_rule", None)
         fields = {
             F_CONFIG_AGENT_TYPE: self.agent_type,
             F_CONFIG_POPULATION_SIZE: self.population_size,
@@ -827,6 +831,12 @@ class V2EvolutionaryPopulation:
             F_CONFIG_FALLBACK_INIT_COUNT: self._fallback_init_count,
             F_CONFIG_FALLBACK_MUTATION_COUNT:
                 self._fallback_mutation_count,
+            "game_scenario": getattr(scenario, "name", type(scenario).__name__),
+            "evolution_rule": (
+                getattr(custom_rule, "name", type(custom_rule).__name__)
+                if custom_rule is not None
+                else self.learning_method
+            ),
             # random.Random state contains only JSON-safe numbers/tuples.
             # json.dump writes tuples as arrays; _tuple_tree restores them.
             "rng_state": self.rng.getstate(),
@@ -1185,7 +1195,11 @@ class V2EvolutionaryPopulation:
             )
 
     def _execute_generation_plan(self, plan: GenerationPlan) -> None:
-        results = self._parallel_llm_map(self._run_offspring_job, plan.jobs)
+        offspring_generator = getattr(self, "offspring_generator", None)
+        if offspring_generator is None:
+            results = self._parallel_llm_map(self._run_offspring_job, plan.jobs)
+        else:
+            results = list(offspring_generator.execute_batch(plan.jobs))
         self._commit_generation_plan(plan, results)
 
     def _select_and_reproduce(self, next_gen: Optional[int] = None):
