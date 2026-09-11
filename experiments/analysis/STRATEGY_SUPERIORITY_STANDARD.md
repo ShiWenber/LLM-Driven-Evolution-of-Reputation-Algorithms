@@ -61,6 +61,15 @@ retention across the complete suite must pass.
 
 ### 2. Bidirectional evolutionary selection
 
+> **Data source (2026-09-11).** The invasion experiment has a single frequency
+> axis; it no longer carries a direction parameter. The outward gain below is
+> read at candidate counts 5 and 10; the resistance gain is read from the
+> **complementary compositions of the same sweep** (counts 95 and 90, i.e. the
+> L8 norm holding 5% and 10%). Both are therefore two readings of one sweep,
+> not two independent experiments. "Bidirectional" here names the **claim
+> structure** — the candidate enters, and the norm cannot enter in reverse —
+> not an experimental setting.
+
 Use initial invader counts 5 and 10, 50 generations, and the complete
 perturbation suite. For each candidate/L8 pair define:
 

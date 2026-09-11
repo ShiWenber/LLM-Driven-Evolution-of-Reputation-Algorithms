@@ -1,4 +1,4 @@
-"""N=100 bidirectional invasion sweep over initial invader counts.
+"""N=100 invasion sweep over initial invader counts.
 
 The experiment uses deterministic payoff imitation: for each sampled
 learner/model pair, the learner copies the model iff the model has strictly
@@ -21,17 +21,20 @@ from pathlib import Path
 from typing import Any
 
 from experiments.evolution_log import load_evolution_json
+from experiments.v2_quantitative.baselines import BASELINES, BASELINE_VERSION
 
 from ..paths import quantitative_results_dir
 from .core import (
     AGENT_TYPES,
-    DIRECTIONS,
+    ARCHIVED_DIRECTION_LABEL,
     FITNESS_INTERACTIONS,
     INTERACTIONS_PER_GENERATION,
+    KIND_CANDIDATE,
+    KIND_NORM,
     NORMS,
     NUM_GENERATIONS,
-    EvolvedSource,
     Competitor,
+    EvolvedSource,
     payoff_imitation_update,
     root_lineage,
     write_json_atomic,
@@ -52,6 +55,52 @@ def noisy_output(action_error: float, observation_error: float) -> Path:
     return quantitative_results_dir() / "invasion" / f"n100_noisy_invasion_count_sweep_{suffix}"
 
 
+def _representative_without_lineage(
+    agent_type: str, path: Path, data: dict[str, Any],
+) -> EvolvedSource:
+    """Pick a representative from a legacy run that has no lineage records.
+
+    Schema-v3 runs predate lineage tracking, so the dominant-lineage rule is
+    unavailable. We instead group the final population by identical source and
+    take the largest group as the dominant family, breaking ties by the family's
+    best fitness. Within that family we keep the highest-fitness member. Runs
+    whose members all differ degenerate to the single highest-fitness agent.
+    """
+    members = list(data["final_population"])
+    if not members:
+        raise ValueError(f"No final_population members in {path}")
+
+    def best_of(family: list[dict[str, Any]]) -> dict[str, Any]:
+        return min(
+            family,
+            key=lambda member: (-float(member["fitness"]), int(member["agent_id"])),
+        )
+
+    families: dict[str, list[dict[str, Any]]] = {}
+    for member in members:
+        key = hashlib.sha256(str(member["code"]).encode("utf-8")).hexdigest()
+        families.setdefault(key, []).append(member)
+
+    family_size, winner = min(
+        ((len(family), best_of(family)) for family in families.values()),
+        key=lambda item: (
+            -item[0], -float(item[1]["fitness"]), int(item[1]["agent_id"]),
+        ),
+    )
+    code = str(winner["code"])
+    return EvolvedSource(
+        agent_type=agent_type,
+        path=path,
+        agent_id=int(winner["agent_id"]),
+        lineage_id=-1,
+        root_lineage_id=-1,
+        root_family_size=family_size,
+        fitness=float(winner["fitness"]),
+        code=code,
+        code_sha256=hashlib.sha256(code.encode("utf-8")).hexdigest(),
+    )
+
+
 def load_representative_from_path(
     label: str, agent_type: str, path: Path,
 ) -> EvolvedSource:
@@ -59,6 +108,8 @@ def load_representative_from_path(
     if agent_type not in AGENT_TYPES:
         raise ValueError(f"Unknown agent type for {label}: {agent_type}")
     data = load_evolution_json(path)
+    if not data.get("lineage_events"):
+        return _representative_without_lineage(agent_type, path, data)
     parents = {
         int(event["lineage_id"]): (
             None if event.get("parent_lineage_id") is None
@@ -110,11 +161,9 @@ def parse_sources(values: list[str]) -> dict[str, EvolvedSource]:
 
 
 def experiment_name(action_error: float, observation_error: float) -> str:
-    return (
-        "n100_noisy_bidirectional_invasion_count_sweep"
-        if action_error or observation_error
-        else "n100_bidirectional_invasion_count_sweep"
-    )
+    """Descriptive experiment tag, matching the output-directory naming."""
+    noise = "noisy_" if action_error or observation_error else ""
+    return f"n100_{noise}invasion_count_sweep"
 
 
 def _flip_action(action: str, rng: random.Random, probability: float) -> str:
@@ -187,7 +236,6 @@ def _play_generation_noisy(
 def run_one(
     source: EvolvedSource,
     norm: str,
-    direction: str,
     invader_count: int,
     seed: int,
     generations: int = NUM_GENERATIONS,
@@ -196,15 +244,15 @@ def run_one(
     action_error: float = 0.0,
     observation_error: float = 0.0,
 ) -> dict[str, Any]:
-    if norm not in NORMS or direction not in DIRECTIONS:
-        raise ValueError(f"Invalid norm/direction: {norm}/{direction}")
+    if norm not in NORMS:
+        raise ValueError(f"Invalid norm: {norm}")
     if not 1 <= invader_count < POPULATION_SIZE:
         raise ValueError("invader_count must be in 1..99")
 
     rng = random.Random(seed)
     random.seed(1_000_003 + seed)
-    invader_kind = "evolved" if direction == "evolved_invades_norm" else "norm"
-    resident_kind = "norm" if invader_kind == "evolved" else "evolved"
+    invader_kind = KIND_CANDIDATE
+    resident_kind = KIND_NORM
     invader_slots = set(rng.sample(range(POPULATION_SIZE), invader_count))
     population = [
         Competitor.create(
@@ -276,12 +324,13 @@ def run_one(
         "experiment": experiment_name(action_error, observation_error),
         "agent_type": source.agent_type,
         "norm": norm,
-        "direction": direction,
         "invader_kind": invader_kind,
         "resident_kind": resident_kind,
         "initial_invader_count": invader_count,
         "seed": seed,
         "config": {
+            "baseline_version": BASELINE_VERSION,
+            "baseline_code_sha256": hashlib.sha256(BASELINES[norm].encode("utf-8")).hexdigest(),
             "population_size": POPULATION_SIZE,
             "num_generations": generations,
             "interactions_per_generation": interactions,
@@ -315,12 +364,44 @@ def run_one(
 def result_path(
     output: Path,
     agent_type: str,
-    direction: str,
     norm: str,
     count: int,
     seed: int,
 ) -> Path:
-    return output / agent_type / direction / norm / f"n{count}_seed{seed}" / "invasion.json"
+    return output / agent_type / norm / f"n{count}_seed{seed}" / "invasion.json"
+
+
+def archived_result_path(
+    output: Path,
+    agent_type: str,
+    norm: str,
+    count: int,
+    seed: int,
+) -> Path:
+    """Location used by archived sweeps that still nested a direction level."""
+    return (
+        output / agent_type / ARCHIVED_DIRECTION_LABEL / norm
+        / f"n{count}_seed{seed}" / "invasion.json"
+    )
+
+
+def existing_result_path(
+    output: Path,
+    agent_type: str,
+    norm: str,
+    count: int,
+    seed: int,
+) -> Path:
+    """Current path if present, else the archived path, else the current path.
+
+    Lets a re-run reuse archived results instead of recomputing them, now that
+    the direction level is gone from the written layout.
+    """
+    path = result_path(output, agent_type, norm, count, seed)
+    if path.exists():
+        return path
+    archived = archived_result_path(output, agent_type, norm, count, seed)
+    return archived if archived.exists() else path
 
 
 def cache_matches(
@@ -329,7 +410,12 @@ def cache_matches(
     action_error: float, observation_error: float,
 ) -> bool:
     config = result.get("config", {})
+    norm = result.get("norm")
+    if norm not in NORMS:
+        return False
     expected = {
+        "baseline_version": BASELINE_VERSION,
+        "baseline_code_sha256": hashlib.sha256(BASELINES[norm].encode("utf-8")).hexdigest(),
         "population_size": POPULATION_SIZE,
         "num_generations": generations,
         "interactions_per_generation": interactions,
@@ -348,9 +434,9 @@ def cache_matches(
 
 
 def execute(payload: tuple[Any, ...]) -> tuple[tuple[Any, ...], dict[str, Any]]:
-    label, source, norm, direction, count, seed, generations, interactions, fitness, action_error, observation_error = payload
+    label, source, norm, count, seed, generations, interactions, fitness, action_error, observation_error = payload
     result = run_one(
-        source, norm, direction, count, seed,
+        source, norm, count, seed,
         generations=generations,
         interactions=interactions,
         fitness_interactions=fitness,
@@ -358,7 +444,7 @@ def execute(payload: tuple[Any, ...]) -> tuple[tuple[Any, ...], dict[str, Any]]:
         observation_error=observation_error,
     )
     result["strategy_label"] = label
-    return (label, norm, direction, count, seed), result
+    return (label, norm, count, seed), result
 
 
 def write_summary(
@@ -370,7 +456,6 @@ def write_summary(
     for row in rows:
         group = (
             groups.setdefault(row["agent_type"], {})
-            .setdefault(row["direction"], {})
             .setdefault(row["norm"], {})
             .setdefault(
                 str(row["initial_invader_count"]),
@@ -382,11 +467,10 @@ def write_summary(
         group["extinctions"] += int(row["invader_extinct"])
         group["final_frequencies"].append(row["final_invader_frequency"])
     for type_group in groups.values():
-        for direction_group in type_group.values():
-            for norm_group in direction_group.values():
-                for group in norm_group.values():
-                    values = group.pop("final_frequencies")
-                    group["mean_final_invader_frequency"] = sum(values) / len(values)
+        for norm_group in type_group.values():
+            for group in norm_group.values():
+                values = group.pop("final_frequencies")
+                group["mean_final_invader_frequency"] = sum(values) / len(values)
     write_json_atomic(
         output / "summary.json",
         {
@@ -430,7 +514,6 @@ def main() -> None:
         help="Explicit evolutionary.json source; repeat for multiple strategies.",
     )
     parser.add_argument("--norms", nargs="+", choices=NORMS, default=list(NORMS))
-    parser.add_argument("--directions", nargs="+", choices=DIRECTIONS, default=list(DIRECTIONS))
     parser.add_argument("--invader-counts", nargs="+", type=int, default=list(DEFAULT_COUNTS))
     parser.add_argument("--seeds", nargs="+", type=int, default=list(DEFAULT_SEEDS))
     parser.add_argument("--generations", type=int, default=NUM_GENERATIONS)
@@ -453,8 +536,11 @@ def main() -> None:
             else default_output()
         )
     if args.smoke:
-        args.norms = ["IS"]
-        args.directions = list(DIRECTIONS)
+        # L1 is Image Scoring in the Leading Eight taxonomy. This used to be
+        # the bare name "IS", which stopped existing once NORMS became
+        # (*LEADING_EIGHT, "ALLC", "ALLD"); "IS" is no longer a valid choice
+        # and made --smoke fail with "Invalid norm: IS".
+        args.norms = ["L1"]
         args.invader_counts = [1, 50]
         args.seeds = [0]
         args.generations = 2
@@ -475,10 +561,9 @@ def main() -> None:
     except (ValueError, FileNotFoundError) as exc:
         parser.error(str(exc))
     tasks = [
-        (kind, norm, direction, count, seed)
+        (kind, norm, count, seed)
         for kind in sources
         for norm in args.norms
-        for direction in args.directions
         for count in args.invader_counts
         for seed in args.seeds
     ]
@@ -489,15 +574,14 @@ def main() -> None:
     print(f"=== N=100 invasion-count sweep: {len(tasks)} runs ===", flush=True)
 
     def record(task: tuple[Any, ...], result: dict[str, Any], status: str) -> None:
-        kind, norm, direction, count, seed = task
-        path = result_path(args.output, kind, direction, norm, count, seed)
+        kind, norm, count, seed = task
+        path = result_path(args.output, kind, norm, count, seed)
         if status in ("new", "normalized"):
             write_json_atomic(path, result)
         rows.append(
             {
                 "agent_type": kind,
                 "norm": norm,
-                "direction": direction,
                 "initial_invader_count": count,
                 "seed": seed,
                 "final_invader_frequency": result["final_invader_frequency"],
@@ -511,8 +595,8 @@ def main() -> None:
             print(f"[{len(rows):04d}/{len(tasks):04d}] {status}", flush=True)
 
     for task in tasks:
-        kind, norm, direction, count, seed = task
-        path = result_path(args.output, kind, direction, norm, count, seed)
+        kind, norm, count, seed = task
+        path = existing_result_path(args.output, kind, norm, count, seed)
         if path.exists() and not args.force:
             result = json.loads(path.read_text(encoding="utf-8"))
             if cache_matches(
@@ -531,7 +615,7 @@ def main() -> None:
                 record(task, result, "normalized" if needs_normalization else "cached")
                 continue
         pending.append(
-            (kind, sources[kind], norm, direction, count, seed, args.generations,
+            (kind, sources[kind], norm, count, seed, args.generations,
              args.interactions, args.fitness_interactions,
              args.action_error, args.observation_error)
         )

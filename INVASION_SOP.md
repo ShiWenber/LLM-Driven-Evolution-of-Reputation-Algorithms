@@ -1,11 +1,13 @@
-# 入侵分析 SOP：主导策略 vs Leading Eight 的双向入侵扫描
+# 入侵分析 SOP：主导策略 vs Leading Eight 的入侵扫描
 
 > 状态：✅ 已验证（2026-09-08，agent-type1 N=12/3seed 主导策略注入 N=100 宿主）
 > 更新：🔒 **噪声强制**（2026-09-08）——入侵实验**必须带噪声**，`--action-error` /
 > `--observation-error` 不再是可选项，须 ≥ `0.01`（推荐 1%）。
+> 更新：🔓 **移除方向维度**（2026-09-11）——实验只有一条频率轴，不再区分单/双向；
+> 结果目录与 summary schema 均已扁平化（旧结果仍可读取，见 §3）。
 > 适用范围：对已完成的 `V2EvolutionaryPopulation` 演化运行（schema v4）中提取出的
 > **主导策略**（Evolution 出的 norm），做其对 8 个 Leading Eight 基准 norm 的
-> **双向入侵百分比扫描**，并生成可视化。
+> **入侵百分比扫描**，并生成可视化。
 > 与 `ANALYSIS_SOP.md` 相互独立——那份只覆盖演化运行本身的聚类/谱系/曲线,
 > 本文只规定**入侵对抗**部分。底层原语见 `experiments/analysis/invasion/core.py`、
 > `experiments/analysis/invasion/run_n100_invasion_count_sweep.py`。
@@ -28,7 +30,7 @@
 - 在 **0 噪声**下，连续声誉会收敛到"全好声誉稳态"（reputations clamp 到 +1.0），各 norm 与演化策略
   的 `observe`/`decide` 分支几乎一致 → 行为趋同 → 入侵曲线全部贴合"无频率变化"
   对角线（README §10 中 `agent-type1` 的中性结果即源于此）。
-- 加上 1% 噪声后，声誉**不再稳定锁死在全好值**，隐藏的选择差异才显现出来；此时
+- 加上噪声后，声誉**不再稳定锁死在全好值**，隐藏的选择差异才显现出来；此时
   演化策略对 norm 的**真实优势/劣势**才可观测（README §11 证明同策略在加噪后从对角线破出）。
 - 因此：**不带噪声的入侵结果会被全好稳态污染，结论不可信**。这是本 SOP 的硬性前置条件，
   任何不带噪声的入侵扫描都应视为无效产出。
@@ -52,9 +54,12 @@
 |---|---|
 | 演化结果 | `results/quantitative_baseline/$LABEL_seed<N>/evolutionary.json`（schema v4，必须含 `final_population` + `lineage_events`）|
 | 宿主规模 | 恒为 `POPULATION_SIZE = 100`（`run_n100` 内硬编码，勿改）|
-| norm 集合 | `NORMS = (IS, SS, SJ, SC, SH, IS+, SS+, SJ+)`（8 个 Leading Eight，`v2_quantitative/baselines.py`）|
-| 方向 | `evolved_invades_norm`（演化策略入侵 norm）/ `norm_invades_evolved`（norm 入侵演化策略）|
-| CLI 入口 | `run-n100-invasion-count-sweep`（run）+ `plot-n100-invasion-count-sweep`（plot）|
+| norm 集合 | `NORMS = (*LEADING_EIGHT, "ALLC", "ALLD")`（8 个 Leading Eight + 两个无条件基准，`core.py`）|
+| CLI 入口 | `run-n100-invasion-count-sweep`（run）+ `plot-n100-invasion-count-sweep`（plot） |
+
+> legacy schema v3（无 `lineage_events`，如 `LLM_v3_*` agent-type2 run）：`load_representative_from_path`
+> 会自动回退到"按相同 code 分组、取最大组、组内最高 fitness"的代表选取（`_representative_without_lineage`）。
+> 此时 `lineage_id` / `root_lineage_id` 记为 `-1`，报告中不应引用谱系字段。
 
 前置检查：
 
@@ -79,7 +84,7 @@
 
 ---
 
-## 3. 运行双向入侵扫描（宿主 N=100）
+## 3. 运行入侵扫描（宿主 N=100）
 
 `run_n100` 的关键参数（`--source` 必填，噪声**必填**，其余可选）：
 
@@ -88,30 +93,43 @@ uv run python -m experiments.analysis.invasion.run_n100_invasion_count_sweep `
   --output "results/quantitative_baseline/invasion/$RUN_DIR" `
   --source "<SRC_LABEL>=agent-type1=$OUT/<LABEL>`_seed$S/evolutionary.json" `
   --action-error 0.01 --observation-error 0.01 `
-  --workers 8
+  --workers 48
 ```
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
 | `--output` | `.../n100_invasion_count_sweep` | 结果目录；多策略时需指定独立目录，避免覆盖现有全 norm 扫描 |
 | `--source LABEL=AGENT_TYPE=PATH` | （必填）| 每个主导策略一份；`LABEL` 唯一，如 `seed0_coop` |
-| `--norms` | 全部 8 个 | 参与对比的 norm 子集 |
-| `--directions` | 两个方向 | 是否只跑单向 |
+| `--norms` | 全部 10 个（L1–L8 + ALLC + ALLD） | 参与对比的 norm 子集 |
 | `--invader-counts` | `(1,5,10,…,99)` | 初始入侵者数量（宿主=100 时即百分比）|
-| `--seeds` | `(0,1,2)` | 每个 (source,norm,direction,count) 重复的随机种子数 |
+| `--seeds` | `(0,1,2)` | 每个 (source,norm,count) 重复的随机种子数 |
 | `--generations` | `50` | 每轮博弈代数 |
 | `--interactions` | `1000` | 每代随机配对局数 |
 | `--fitness-interactions` | `200` | 计入适应度的最后局数（其余为 burn-in）|
 | `--action-error` / `--observation-error` | **必填**，须 ≥ `0.01` | 动作/观测噪声；推荐 `0.01`（1%）。<br>**不可为 0**——0 噪声会落入全好稳态掩盖差异（见 §0）|
 | `--smoke` | 否 | 快速冒烟：1 norm、2 count、1 seed、2 代 × 20 局 |
 
-运行规模 = `len(source) × len(norms) × len(directions) × len(counts) × len(seeds)`。
-例：3 主导策略 × 8 norm × 2 方向 × 13 百分比 × 3 种子 = **1872 次运行**，8 worker 约 5–8 min。
+运行规模 = `len(source) × len(norms) × len(counts) × len(seeds)`。
+例：3 主导策略 × 10 norm × 13 百分比 × 3 种子 = **1170 次运行**。
+
+> ⚠️ **单条频率轴（2026-09-10 定稿，2026-09-11 移除方向维度）**
+> 扫描的是一条频率轴：在 count=k 时种群里是 k 个候选策略 + (100−k) 个 norm，
+> 所以 count=1..99 已覆盖整条频率轴。
+> **不再保留"方向"这一维度**——早期实现曾额外跑一条反向曲线，但实测 1050 个 cell
+> 的 |dirA−dirB| 均值 0.089 ≈ 同方向内 seed-sd 0.093，即反向曲线与正向曲线的差异
+> 与"同方向换 seed"的噪声同量级，不构成独立实验，故该维度已整体删除。
+> 候选策略**自身是否可被入侵**由固定概率 benchmark 直接测量，见
+> `docs/fixation_benchmark.md`。
 
 > ⚠️ 输出目录命名建议**带上噪声标记**（如 `..._ae0p01_oe0p01`），避免与干净版混淆；
-> 图同样加后缀（如 `n100_invasion_count_sweep_n12_evolved_ae0p01_oe0p01`）。
+> 图同样加后缀（如 `n100_noisy_invasion_count_sweep_ae0p01_oe0p01`）。
 > `run_n100` 有结果缓存（`--force` 强制重跑）；重复跑同参数会命中缓存秒回。
-> 输出目录按 `$output/$LABEL/$direction/$norm/n$count_seed$seed/invasion.json` 组织。
+> 输出目录按 `$output/$LABEL/$norm/n$count_seed$seed/invasion.json` 组织。
+>
+> **旧结果兼容**：2026-09-11 之前的结果含一层方向层级
+> （`$output/$LABEL/evolved_invades_norm/$norm/...`）。新代码写入扁平路径，但**读取时会
+> 自动回退到旧路径**，因此旧缓存仍然命中、无需重跑（`existing_result_path`）；
+> 绘图脚本同样能读旧的嵌套 summary（`_norm_groups`）。
 
 ---
 
@@ -120,7 +138,7 @@ uv run python -m experiments.analysis.invasion.run_n100_invasion_count_sweep `
 ### 4a. 汇总 JSON
 
 `run_n100` 结束自动写 `$output/summary.json`，含：
-- `groups[$label][$direction][$norm][$count]` → `{runs, fixations, extinctions, mean_final_invader_frequency}`
+- `groups[$label][$norm][$count]` → `{runs, fixations, extinctions, mean_final_invader_frequency}`
 - `sources`（每个主导策略的 agent_type/path/agent_id/root_lineage_id/fitness/code_sha256）
 - `completed_or_cached_runs`（应 = 期望运行数）
 
@@ -133,10 +151,9 @@ uv run python -m experiments.analysis.plot_n100_invasion_count_sweep `
   --output "README.assets/${RUN_DIR}.png"
 ```
 
-产物：`${RUN_DIR}.png` + `.pdf`。图为 2 行（方向） × N 列（主导策略）：
-- 上行 `evolved_invades_norm`，下行 `norm_invades_evolved`
+产物：`${RUN_DIR}.png` + `.pdf`。图为 N 列（每列一个主导策略）：
 - x 轴 = 初始入侵份额，y 轴 = 均值最终入侵份额（>对角线 = 入侵成功/固定，<对角线 = 被淘汰）
-- 8 条曲线对应 8 个 norm
+- 每个 norm 一条曲线（L1–L8 + ALLC + ALLD）
 
 > **噪声自动标注**：`plot_n100` 会读取 `summary.json` 的 `action_error_probability` /
 > `observation_error_probability`，非 0 时在标题写明（如 "N=100 invasion ability with
@@ -146,24 +163,24 @@ uv run python -m experiments.analysis.plot_n100_invasion_count_sweep `
 
 ---
 
-## 5. 关联：同质鲁棒性（不同于双向入侵，谨慎引用）
+## 5. 关联：同质鲁棒性（不同于入侵扫描，谨慎引用）
 
-与双向入侵相邻但**目的不同**的评估是
+与入侵扫描相邻但**目的不同**的评估是
 `run_perturbation_robustness.py`（CLI：`run-perturbation-robustness`）：
 - 它测的是**同质群体**（100 个相同策略）在 8 组 (action,observation) 扰动下的**收益保持率**，
   看候选是否鲁棒、是否优于 L8。
 - 它**不是**入侵对抗（不混合两种策略），结论措辞遵循
   `STRATEGY_SUPERIORITY_STANDARD.md`。
-- 双向入侵扫描（本文）测的是**混合群体**中谁吃谁，二者互补、勿混用。
+- 入侵扫描（本文）测的是**混合群体**中谁吃谁，二者互补、勿混用。
 
 ---
 
 ## 6. 验收标准
 
 1. **噪声强制**：`summary.json` 的 `config.action_error_probability` **与** `observation_error_probability` **均须 ≥ `0.01`**；任一为 `0` 即判定无效（全好稳态污染，见 §0）。
-2. `summary.json` 的 `completed_or_cached_runs` 等于期望运行数（`sources × norms × directions × counts × seeds`）。
+2. `summary.json` 的 `completed_or_cached_runs` 等于期望运行数（`sources × norms × counts × seeds`）。
 3. 全部运行 exit code = 0，无 traceback；worker 崩溃会被捕获并打印 `FAILED`。
-4. `<label>/<direction>/<norm>/n<count>_seed<seed>/invasion.json` 每个都有合法
+4. `<label>/<norm>/n<count>_seed<seed>/invasion.json` 每个都有合法
    `final_invader_frequency ∈ [0,1]`，且 `invader_fixed`/`invader_extinct` 与它自洽。
 5. 绘图脚本通过 `population_size==100`、`selection==synchronous_deterministic_payoff_imitation` 校验。
 6. `README.assets/${RUN_DIR}.png` 生成，且可读到 `assert 结论` 相关的曲线分离现象。
@@ -181,5 +198,5 @@ uv run python -m experiments.analysis.plot_n100_invasion_count_sweep `
 | 输出目录被覆盖 | 多策略用 `--output` 指定独立目录；`--source` 的 LABEL 必须唯一 |
 | 图例显示 "LLM_v3" 误导 | `plot_cross_experiment_clusters` 的 `_experiment_label` 只认 `LLM_v2/v3` 前缀；本文入侵图用 `$LABEL` 列名，无此问题 |
 | 重复跑不更新 | 缓存命中；加 `--force` 强制重跑 |
-| worker 崩溃但主进程继续 | 属预期；查看 FAILED 行定位具体 (source,norm,direction,count,seed) |
+| worker 崩溃但主进程继续 | 属预期；查看 FAILED 行定位具体 (source,norm,count,seed) |
 | C++ 图保存路径 | 输出目录需存在（脚本会自动创建）|

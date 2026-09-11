@@ -1,4 +1,4 @@
-"""Plot the single-invader Leading Eight experiment as a bidirectional comparison."""
+"""Plot the single-invader Leading Eight experiment."""
 
 from __future__ import annotations
 
@@ -11,6 +11,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+
+from .invasion.core import ARCHIVED_DIRECTION_LABEL
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,14 +29,17 @@ NORMS = ("IS", "SS", "SJ", "SC", "SH", "IS+", "SS+", "SJ+")
 AGENT_TYPES = ("agent-type1", "agent-type2")
 
 
-def _fixation_rates(summary: dict, agent_type: str, direction: str) -> list[float]:
-    groups = summary["groups"][agent_type][direction]
+def _fixation_rates(summary: dict, agent_type: str) -> list[float]:
+    groups = summary["groups"][agent_type]
+    # Archived summaries nest a direction level that the experiment no longer has.
+    if ARCHIVED_DIRECTION_LABEL in groups:
+        groups = groups[ARCHIVED_DIRECTION_LABEL]
     rates = []
     for norm in NORMS:
         cell = groups[norm]
         if cell["runs"] != 3:
             raise ValueError(
-                f"Expected three seeds for {agent_type}/{direction}/{norm}; "
+                f"Expected three seeds for {agent_type}/{norm}; "
                 f"found {cell['runs']}"
             )
         rates.append(cell["fixations"] / cell["runs"])
@@ -63,44 +68,38 @@ def plot(summary_path: Path, output_path: Path) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(12, 5.6), sharex=True, sharey=True)
     y = np.arange(len(NORMS))
     evolved_color = "#2878B5"
-    norm_color = "#D1495B"
 
     for ax, agent_type in zip(axes, AGENT_TYPES, strict=True):
-        evolved = np.asarray(
-            _fixation_rates(summary, agent_type, "evolved_invades_norm")
-        )
-        norms = np.asarray(
-            _fixation_rates(summary, agent_type, "norm_invades_evolved")
-        )
-        ax.barh(y, -norms, height=0.62, color=norm_color, label="Leading Eight invades")
-        ax.barh(y, evolved, height=0.62, color=evolved_color, label="Evolved strategy invades")
-        ax.axvline(0, color="#333333", linewidth=0.8)
+        evolved = np.asarray(_fixation_rates(summary, agent_type))
+        ax.barh(y, evolved, height=0.62, color=evolved_color,
+                label="Evolved strategy invades")
         ax.set_title(agent_type)
         ax.set_yticks(y, NORMS)
-        ax.set_xlim(-1.05, 1.05)
+        ax.set_xlim(0, 1.05)
         ax.set_xticks(
-            [-1, -2 / 3, -1 / 3, 0, 1 / 3, 2 / 3, 1],
-            ["3/3", "2/3", "1/3", "0", "1/3", "2/3", "3/3"],
+            [0, 1 / 3, 2 / 3, 1],
+            ["0", "1/3", "2/3", "3/3"],
         )
         ax.grid(axis="x", color="#D9D9D9", linewidth=0.7, alpha=0.8)
         ax.set_axisbelow(True)
         for spine in ("top", "right"):
             ax.spines[spine].set_visible(False)
-        for yi, left, right in zip(y, norms, evolved, strict=True):
-            if left:
-                ax.text(-left + 0.035, yi, f"{round(left * 3)}/3", va="center", ha="left", color="white", fontweight="bold")
+        for yi, value in zip(y, evolved, strict=True):
+            if value:
+                ax.text(value - 0.035, yi, f"{round(value * 3)}/3", va="center",
+                        ha="right", color="white", fontweight="bold")
             else:
-                ax.text(-0.035, yi, "0/3", va="center", ha="right", color=norm_color, fontweight="bold")
-            if right:
-                ax.text(right - 0.035, yi, f"{round(right * 3)}/3", va="center", ha="right", color="white", fontweight="bold")
-            else:
-                ax.text(0.035, yi, "0/3", va="center", ha="left", color=evolved_color, fontweight="bold")
+                ax.text(0.025, yi, "0/3", va="center", ha="left",
+                        color=evolved_color, fontweight="bold")
 
     axes[0].invert_yaxis()
-    fig.suptitle("Bidirectional invasion: best evolved strategies vs. Leading Eight", fontsize=15)
-    fig.supxlabel("Fixations across three seeds  ←  Leading Eight invades | Evolved strategy invades  →", y=0.035)
+    fig.suptitle("Invasion of the Leading Eight by the best evolved strategies",
+                 fontsize=15)
+    fig.supxlabel("Fixations across three seeds (evolved strategy invades norm)",
+                  y=0.035)
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles[::-1], labels[::-1], loc="upper center", bbox_to_anchor=(0.5, 0.91), ncol=2, frameon=False)
+    fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.91),
+               ncol=1, frameon=False)
     fig.tight_layout(rect=(0.02, 0.10, 0.98, 0.86), w_pad=2.2)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, bbox_inches="tight")
