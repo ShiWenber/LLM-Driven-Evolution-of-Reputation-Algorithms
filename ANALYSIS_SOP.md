@@ -5,6 +5,11 @@
 > 含 `lineage_events`）做完整可视化 + 聚类 + 谱系分析，并把产物整理到统一布局。
 > 底层工具细节见 `experiments/analysis/README.md`；本文只规定**执行顺序、命令、
 > 命名约定与验收标准**，是可直接照做的标准操作流程。
+>
+> **§1–§9**：逐 seed 聚类/谱系可视化（回答"策略空间与谱系"）。
+> **§10**：逐目标私人声誉矩阵热图（回答"所有人对同一目标的看法在数值上是否一致"）。
+> 两段互相独立，可只跑其中一段。
+
 
 ---
 
@@ -208,6 +213,71 @@ con.execute("SELECT experiment_id, cluster_id, COUNT(*) FROM cluster_assignments
 |---|---|
 | PowerShell 中 `$LABEL_seed` 变量粘连 | 用反引号转义：`"$OUT/${LABEL}_seed$s/..."` 或 `` "$OUT/$LABEL`_seed$s/..." `` |
 | 单 seed 产物缺失 | 单独重跑该命令；embedding/cache 命中，秒级~分钟级 |
-| `plot_evolution_curves` 缺另一类型 run | 双面板共用同一 label，或跳过该步 |
+| `plot_evolution_curves` 报 `Missing required runs` | `--seeds` 里有 seed 目录缺 `evolutionary.json`；从 `--seeds` 中移除该 seed |
 | 聚类名缓存未命中导致额外 DeepSeek 调用 | 属正常；同代码复跑会命中（`--refresh-cluster-names` 可强制重命名）|
 | `--json` 多文件时用 PowerShell 反引号续行 | 每行末加 `` ` ``，勿留尾随空格 |
+
+---
+
+## 10. 逐目标私人声誉矩阵热图（§1–§9 之外的新增可视化层）
+
+§1–§9 回答的是"策略空间长什么样、谱系怎么分叉"。**本节回答的是另一个问题**：
+最终种群在**私人声誉数值上**是否一致——不是"符号是否一致"，而是"给的是不是同一个数"。
+两者互不依赖，可只跑本节。
+
+> 仅支持 `agent_type == "agent-type1"`。type-2 让 LLM 自持任意内部状态，
+> "私有声誉矩阵"没有良定义，`load_run` 会直接报错——**不要试图绕过**。
+
+### 10.1 逐目标矩阵热图
+
+**热图把声誉矩阵本身画出来**——这是判断"符号一致是否等于数值一致"的唯一直接证据。
+
+```powershell
+uv run python -m experiments.analysis.consensus.plot_private_reputation_matrix `
+  --output "README.assets/private_reputation_matrix_$LABEL.png" `
+  --seed 0 --interactions 1000 `
+  --source N16v2_s0="$OUT/$LABEL`_seed0/evolutionary.json" `
+  --source N16v2_s1="$OUT/$LABEL`_seed1/evolutionary.json"
+```
+
+- **每个 `--source` 一列**（建议 3–6 列；>8 列会太宽）。
+- 每列两行：上行＝声誉矩阵 `[观察者, 目标]`，下行＝两两分歧矩阵 `[观察者, 观察者]`。
+- 声誉色标固定 `[-1,1]`（红好/蓝坏/灰=无记录或自身），分歧色标固定 `[0,1]`；
+  固定而非自动缩放，保证各列可横向比较。
+- 命令会同时打印每列的 `D`。
+
+### 10.2 读图配方（判定"数值是否一致"）
+
+1. 上行**行内是否纯色**？纯色 ⇒ 该 agent 对所有目标一个态度。
+2. 纯色的行**彼此颜色是否相同**？不同 ⇒ 存在**观察者宽严偏移** ⇒
+   **符号一致但数值不一致**（这是最常见的情形）。
+3. 下行红色有多深？深红格 = 该对观察者已严重分歧（`> 0.50`）。
+4. 上行右侧 `observer mean` 条形图的跨度 = 各观察者一贯宽严的极差。
+5. 列下方的 `D` 把 1–3 合并成一个数（`D = 0` 完全一致；越大越分裂）。
+
+> ⚠️ **不要只看"符号是否一致"下结论**。符号级判断对观察者固定偏移**完全免疫**，
+> 而演化种群恰恰是这种形态，所以本模块**不计算它们**，只输出一个数值指标 `D`。
+> 实测出现过"符号全一致"同时 `D = 0.34`。
+
+> ⚠️ **白 ≠ 灰**：声誉矩阵里白 = 分数恰为 0.0（即 GOOD 阈值，有意义的取值），
+> 灰 = 没有记录（对角线／未观测）。分歧矩阵里白 = 零分歧。看错会得出相反结论。
+
+### 10.3 本节验收标准
+
+1. 命令 exit code = 0；不出现 `agent_type` 报错。
+2. 矩阵热图 `.png` + `.pdf` 均生成。
+3. 命令打印的每列 `D` 与图上列下方一致
+   （可用 `--seed 0 --interactions 1000` 逐列核对）。
+4. 若某列显示 `no shared targets observed`，说明没有任何两个观察者共同评过同一目标，
+   `D = NaN`，属正常。
+5. 测试全绿：`uv run pytest tests/test_private_reputation_consensus.py -q`
+
+### 10.4 本节常见坑
+
+| 现象 | 处理 |
+|---|---|
+| `load_run` 报 `agent_type='agent-type2'` | 该 run 不适用本节；换 type-1 run 或跳过 |
+| `--condition` 设了但条件没变 | `--condition` **只是标签**；用 `--action-error` / `--observation-error` / `--observability` 真正指定 |
+| 某列整片 `D ≈ 0` | 数值上完全一致（饱和稳态 ），属正常 |
+| 图太宽/数字看不清 | 减少 `--source` 列数；`n > 12` 时自动关闭格内标注（`--annotate` 可强制开启） |
+
