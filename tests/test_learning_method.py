@@ -16,23 +16,17 @@ def test_cli_defaults_to_fermi_and_accepts_tournament():
     )
 
 
-def test_legacy_use_fermi_is_still_supported():
-    assert V2EvolutionaryPopulation(population_size=4).learning_method == "tournament"
-    assert (
-        V2EvolutionaryPopulation(population_size=4, use_fermi=True).learning_method
-        == "fermi"
-    )
+def test_default_learning_method_is_fermi():
+    assert V2EvolutionaryPopulation(population_size=4).learning_method == "fermi"
 
 
 def test_explicit_learning_method_is_authoritative():
     population = V2EvolutionaryPopulation(
         population_size=4,
-        use_fermi=True,
         learning_method="tournament",
     )
 
     assert population.learning_method == "tournament"
-    assert population.use_fermi is False
 
 
 def test_learning_method_validation():
@@ -65,7 +59,7 @@ def test_learning_method_dispatch(method, expected, monkeypatch):
     assert calls == [(expected, 7)]
 
 
-def test_result_config_records_new_and_legacy_fields():
+def test_result_config_records_learning_method():
     population = V2EvolutionaryPopulation(
         population_size=4, learning_method="tournament"
     )
@@ -73,4 +67,3 @@ def test_result_config_records_new_and_legacy_fields():
     config = population._result_config(num_generations=2)
 
     assert config["learning_method"] == "tournament"
-    assert config["use_fermi"] is False

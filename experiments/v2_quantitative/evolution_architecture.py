@@ -16,7 +16,7 @@ from ..evolution_log import (
     ORIGIN_INDEPENDENT_INIT,
     ORIGIN_MUTATE,
 )
-from .game import V2DonorGame
+from .game import DonorGame
 from .prompts import OVERALL_GAME_RULES_PROMPT
 
 
@@ -125,7 +125,7 @@ class OffspringGenerator(Protocol):
 
 
 class ReputationPrisonersDilemmaScenario:
-    """Default adapter around the historical ``V2DonorGame`` engine."""
+    """Default adapter around the ``DonorGame`` engine."""
 
     name = "reputation_prisoners_dilemma"
 
@@ -155,7 +155,7 @@ class ReputationPrisonersDilemmaScenario:
         generation_seed: int,
         num_rounds: int,
     ) -> EvaluationResult:
-        game = V2DonorGame(
+        game = DonorGame(
             population_size=self.population_size,
             benefit=self.benefit,
             cost=self.cost,
@@ -177,10 +177,11 @@ class ReputationPrisonersDilemmaScenario:
         coop_count = sum(
             1
             for interaction in game._global_log
-            if interaction["donor_action"] == "cooperate"
+            for role in ("donor_action", "recipient_action")
+            if interaction[role] == "cooperate"
         )
         return EvaluationResult(
-            cooperation_rate_mean=coop_count / max(1, len(game._global_log)),
+            cooperation_rate_mean=coop_count / max(1, 2 * len(game._global_log)),
             n_interactions=len(game._global_log),
             round_num=num_rounds,
             payoffs=tuple(game.get_windowed_fitness()),

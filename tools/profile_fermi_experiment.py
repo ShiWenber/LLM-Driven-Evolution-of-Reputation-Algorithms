@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from experiments import run_fermi_v3
-from experiments.v2_quantitative.game import V2DonorGame
+from experiments.v2_quantitative.game import DonorGame
 from experiments.v2_quantitative.population import V2EvolutionaryPopulation
 
 
@@ -82,8 +82,8 @@ def main(argv: list[str] | None = None) -> int:
     instrument(V2EvolutionaryPopulation, "_select_and_reproduce_fermi", "fermi_reproduction")
     instrument(V2EvolutionaryPopulation, "_validate_code", "strategy_validation")
     instrument(V2EvolutionaryPopulation, "_make_agent", "strategy_compile_instantiate")
-    instrument(V2DonorGame, "play_round", "game_round")
-    instrument(V2DonorGame, "distribute_observations_and_self_judgments", "observation_distribution")
+    instrument(DonorGame, "play_round", "game_round")
+    instrument(DonorGame, "distribute_observations_and_self_judgments", "observation_distribution")
 
     cli_args = [
         "--seed", str(args.seed),

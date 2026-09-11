@@ -86,7 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="random",
         help="How the LLM creates a child after imitation.",
     )
-    parser.add_argument("--benefit", type=float, default=2.0,
+    parser.add_argument("--benefit", type=float, default=3.0,
                         help="PD cooperation benefit.")
     parser.add_argument("--cost", type=float, default=1.0,
                         help="PD cooperation cost.")
@@ -115,9 +115,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-root", type=str, default=str(DEFAULT_OUTPUT_ROOT),
                         help="Root directory where per-seed result folders are created.")
     parser.add_argument("--agent-type", type=str, default="agent-type2",
-                        choices=["agent-type1", "agent-type2", "v2", "v3"],
-                        help="Agent family to evolve: 'agent-type1' (legacy 'v2', type-1 "
-                             "functions) or 'agent-type2' (legacy 'v3', full LLMAgent class).")
+                        choices=["agent-type1", "agent-type2"],
+                        help="Agent family to evolve: 'agent-type1' (type-1 "
+                             "functions) or 'agent-type2' (full LLMAgent class).")
     parser.add_argument("--dry-run", action="store_true",
                         help="Validate arguments and print the seed plan without running.")
     return parser
@@ -247,10 +247,6 @@ def run_one_resume(
         else cfg.get("llm_concurrency")
     )
     agent_type = cfg.get("agent_type", "agent-type1")
-    if agent_type == "v2":
-        agent_type = "agent-type1"
-    elif agent_type == "v3":
-        agent_type = "agent-type2"
 
     print(
         f"=== seed {seed} resume {len(previous['trajectory'])} "
@@ -270,7 +266,7 @@ def run_one_resume(
             num_rounds_per_gen=int(cfg.get("num_rounds_per_gen", 30)),
             target_interactions_per_gen=cfg.get("target_interactions_per_gen"),
             fitness_window_interactions=cfg.get("fitness_window_interactions", 200),
-            benefit=float(cfg.get("benefit", 2.0)),
+            benefit=float(cfg.get("benefit", 3.0)),
             cost=float(cfg.get("cost", 1.0)),
             num_generations=len(previous["trajectory"]) + args.additional_gens,
             observability=cfg.get("observability", "full"),
@@ -287,7 +283,6 @@ def run_one_resume(
             use_baseline=cfg.get("use_baseline"),
             agent_type=agent_type,
             llm_thinking=bool(cfg.get("llm_thinking", False) or args.llm_thinking),
-            use_fermi=bool(cfg.get("use_fermi", False)),
             learning_method=cfg.get("learning_method"),
             fermi_beta=float(cfg.get("fermi_beta", 5.0)),
             mutation_rate_on_adoption=float(
@@ -442,7 +437,7 @@ def run_resume_cli(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
         )
     for path, data in zip(sources, previews):
         cfg = data["config"]
-        if cfg.get("use_baseline") or not cfg.get("use_fermi"):
+        if cfg.get("use_baseline") or cfg.get("learning_method", "fermi") != "fermi":
             parser.error(f"resume currently requires a Fermi LLM log: {path}")
 
     out_root = Path(args.output_root)
@@ -515,12 +510,6 @@ def run_resume_cli(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-
-    # Normalize legacy agent_type aliases to canonical values.
-    if args.agent_type == "v2":
-        args.agent_type = "agent-type1"
-    elif args.agent_type == "v3":
-        args.agent_type = "agent-type2"
 
     provider = args.provider.lower()
     if args.llm_concurrency is not None and args.llm_concurrency < 1:

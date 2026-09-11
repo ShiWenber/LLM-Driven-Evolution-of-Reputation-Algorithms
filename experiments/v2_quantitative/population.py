@@ -1,25 +1,26 @@
 """Population + LLM-driven evolution for the v2 quantitative interface.
 
 Mirrors the v1 EvolutionaryPopulation but uses the v2 QuantitativeAgent
-and V2DonorGame.
+and DonorGame.
 
 Supports two agent types:
-  - `agent_type="agent-type1"` (legacy "v2"): type-1 agents. The LLM
+  - `agent_type="agent-type1"`: type-1 agents. The LLM
     emits two top-level Python functions (`observe` + `decide`); the
     framework maintains a scalar reputation matrix for them. observe()
     is ONE-DIRECTIONAL: it judges a single target player and returns
     that player's new reputation; the framework calls it twice per
     joint action (roles swapped) to update both players.
-  - `agent_type="agent-type2"` (legacy "v3"): type-2 agents. The LLM
+  - `agent_type="agent-type2"`: type-2 agents. The LLM
     emits a full Python class named `LLMAgent` with `__init__(agent_id)`,
     `decide()`, and `observe(...)` methods. The LLM owns its own
     internal state structure (dicts, lists, counters — anything). The
     framework still maintains a scalar `reputations` matrix for
     bookkeeping, but the LLM is not required to read it.
 
-Type 2 baseline mode currently only supports ALLCClass and ALLDClass
-(class wrappers around the trivial always-cooperate / always-defect
-strategies). The 8 leading-eight rules live in type-1 land.
+Type 2 baseline mode currently only supports ALLC and ALLD
+(via the ALLC_CLASS_SOURCE / ALLD_CLASS_SOURCE source strings for the
+trivial always-cooperate / always-defect strategies). The 8
+leading-eight rules live in type-1 land.
 """
 from __future__ import annotations
 import copy
@@ -47,14 +48,13 @@ from ..evolution_log import (
     F_CONFIG_OBSERVABILITY, F_CONFIG_OBSERVABILITY_P,
     F_CONFIG_POPULATION_SIZE, F_CONFIG_SEED,
     F_CONFIG_TARGET_INTERACTIONS_PER_GEN, F_CONFIG_TOURNAMENT_SIZE,
-    F_CONFIG_UPDATES_PER_GEN, F_CONFIG_USE_BASELINE, F_CONFIG_USE_FERMI,
+    F_CONFIG_UPDATES_PER_GEN, F_CONFIG_USE_BASELINE,
     F_CONFIG_INITIAL_REPUTATION, F_CONFIG_LLM_CONCURRENCY,
 )
 from .agent import INITIAL_REPUTATION, QuantitativeAgent
 from .agent_full import (
     INITIAL_REPUTATION as FULL_INITIAL_REPUTATION,
     FullAgent, V3StrategyExecutor,
-    ALLCClass, ALLDClass,
     ALLC_CLASS_SOURCE, ALLD_CLASS_SOURCE,
 )
 from .executor import V2StrategyExecutor
@@ -76,7 +76,7 @@ from .prompts import (
     INIT_PROMPT_V3, MUTATION_PROMPT_V3, SMALL_MUTATION_PROMPT_V3,
     DELIBERATE_MUTATION_PROMPT_V3,
 )
-from .baselines import get_baseline
+from .baselines import get_baseline, BASELINE_VERSION
 
 
 # Fallback strategies when LLM fails (type 1: two top-level functions)
@@ -179,7 +179,7 @@ class V2EvolutionaryPopulation:
         # burn-in. Pass None (or 0) to use all interactions
         # (legacy behavior).
         fitness_window_interactions: Optional[int] = 200,
-        benefit: float = 2.0,
+        benefit: float = 3.0,
         cost: float = 1.0,
         # Total number of generations to evolve. Injected into the
         # prompt templates so the LLM sees the real simulation
@@ -190,12 +190,12 @@ class V2EvolutionaryPopulation:
         elite_count: int = 2,
         num_eliminate: int = 5,
         tournament_size: int = 3,
-        # Selection rule. When use_fermi is True, the per-generation
-        # update step is a synchronous Fermi imitation process
-        # (Moran-process style) instead of tournament+elite. The
-        # legacy tournament code path is kept behind use_fermi=False
-        # for backward compatibility; see
-        # _select_and_reproduce_fermi() for the implementation.
+        # Selection rule. The per-generation update step is a
+        # synchronous Fermi imitation process (Moran-process style) by
+        # default; ``learning_method="tournament"`` selects the
+        # tournament+elite path instead. See
+        # _select_and_reproduce_fermi() and _select_and_reproduce()
+        # for the implementations.
         #
         # Per update event we sample i (learner) and j (role model,
         # i != j) and apply
@@ -206,8 +206,7 @@ class V2EvolutionaryPopulation:
         # otherwise the LLM creates a parent-conditioned child using
         # imitation_learning_mode ("random" or "deliberate"). The actual
         # role-model fitness is included in either parent-conditioned prompt.
-        use_fermi: bool = False,
-        learning_method: Optional[str] = None,
+        learning_method: str = "fermi",
         fermi_beta: float = 5.0,
         mutation_rate_on_adoption: float = 0.1,
         imitation_learning_mode: str = "random",
@@ -225,10 +224,10 @@ class V2EvolutionaryPopulation:
         # If use_baseline is set, all agents use that baseline strategy and
         # the LLM is not used. If None, LLM evolution runs.
         # agent_type:
-        #   "agent-type1" (default, legacy "v2") — type-1 agents. LLM
+        #   "agent-type1" (default) — type-1 agents. LLM
         #       emits two top-level functions (`observe` + `decide`);
         #       framework maintains a scalar `reputations` dict.
-        #   "agent-type2" (legacy "v3") — type-2 agents. LLM emits a
+        #   "agent-type2" — type-2 agents. LLM emits a
         #       full `LLMAgent` class with `__init__(agent_id)`,
         #       `decide()`, and `observe(...)` methods. LLM owns its own
         #       state structure; framework only handles bookkeeping.
@@ -247,31 +246,22 @@ class V2EvolutionaryPopulation:
         evolution_rule: Optional[EvolutionRule] = None,
         offspring_generator: Optional[OffspringGenerator] = None,
     ):
-        if agent_type not in ("agent-type1", "agent-type2", "v2", "v3"):
+        if agent_type not in ("agent-type1", "agent-type2"):
             raise ValueError(
-                f"agent_type must be 'agent-type1' or 'agent-type2' "
-                f"(legacy 'v2'/'v3' accepted), got {agent_type!r}"
+                f"agent_type must be 'agent-type1' or 'agent-type2', "
+                f"got {agent_type!r}"
             )
         if imitation_learning_mode not in ("random", "deliberate"):
             raise ValueError(
                 "imitation_learning_mode must be 'random' or 'deliberate', "
                 f"got {imitation_learning_mode!r}"
             )
-        if learning_method is None:
-            # Backward compatibility for callers and historical scripts that
-            # still select the rule through ``use_fermi``.
-            learning_method = "fermi" if use_fermi else "tournament"
         learning_method = learning_method.lower()
         if learning_method not in ("fermi", "tournament"):
             raise ValueError(
                 "learning_method must be 'fermi' or 'tournament', "
                 f"got {learning_method!r}"
             )
-        # Normalize legacy aliases to canonical values.
-        if agent_type == "v2":
-            agent_type = "agent-type1"
-        elif agent_type == "v3":
-            agent_type = "agent-type2"
         self.population_size = population_size
         # If caller asked for a target interaction count, derive the
         # round count from it. With N=16 we get 8 pairs/round; with
@@ -295,8 +285,6 @@ class V2EvolutionaryPopulation:
         self.num_eliminate = num_eliminate
         self.tournament_size = tournament_size
         self.learning_method = learning_method
-        # Retained in logs and as a public attribute for compatibility.
-        self.use_fermi = learning_method == "fermi"
         self.fermi_beta = fermi_beta
         self.mutation_rate_on_adoption = mutation_rate_on_adoption
         self.imitation_learning_mode = imitation_learning_mode
@@ -794,6 +782,8 @@ class V2EvolutionaryPopulation:
         scenario = self._get_game_scenario()
         custom_rule = getattr(self, "evolution_rule", None)
         fields = {
+            "cooperation_metric": "both_players_per_joint_action_v1",
+            "baseline_version": BASELINE_VERSION if self.use_baseline else None,
             F_CONFIG_AGENT_TYPE: self.agent_type,
             F_CONFIG_POPULATION_SIZE: self.population_size,
             F_CONFIG_NUM_ROUNDS_PER_GEN: self.num_rounds_per_gen,
@@ -813,7 +803,6 @@ class V2EvolutionaryPopulation:
             "fitness_window_interactions": self.fitness_window_interactions,
             F_CONFIG_LLM_THINKING: self.llm_thinking,
             F_CONFIG_LLM_MAX_TOKENS: self._llm_max_tokens,
-            F_CONFIG_USE_FERMI: self.use_fermi,
             F_CONFIG_LEARNING_METHOD: self.learning_method,
             F_CONFIG_FERMI_BETA: self.fermi_beta,
             F_CONFIG_MUTATION_RATE_ON_ADOPTION:
@@ -908,7 +897,7 @@ class V2EvolutionaryPopulation:
         """
         if additional_generations < 1:
             raise ValueError("additional_generations must be >= 1")
-        if self.use_baseline or not self.use_fermi:
+        if self.use_baseline or self.learning_method != "fermi":
             raise ValueError("resume currently supports non-baseline Fermi runs only")
 
         old_config = previous.get("config", {})
@@ -1022,7 +1011,7 @@ class V2EvolutionaryPopulation:
         # ratio >30% usually means the model is producing invalid
         # code at a high rate.
         init_ratio = self._fallback_init_count / max(1, self.population_size)
-        if self.use_fermi:
+        if self.learning_method == "fermi":
             # Z-like: every Fermi copy event triggers exactly one LLM
             # call (μ path = init, 1-μ path = small_mutate). Upper
             # bound on LLM calls is updates_per_gen per gen.
@@ -1038,7 +1027,7 @@ class V2EvolutionaryPopulation:
             f"mutation={self._fallback_mutation_count}/{mut_total} "
             f"({mut_ratio:.0%}), thinking={self.llm_thinking}, "
             f"max_tokens={self._llm_max_tokens}, "
-            f"use_fermi={self.use_fermi} (beta={self.fermi_beta}, "
+            f"learning_method={self.learning_method} (beta={self.fermi_beta}, "
             f"mu={self.mutation_rate_on_adoption}, updates/gen={self.updates_per_gen})"
         )
         if init_ratio > 0.3:
@@ -1268,8 +1257,8 @@ class V2EvolutionaryPopulation:
         To get pure Fermi + no mutation, set
         mutation_rate_on_adoption=1 so every copy is a free LLM
         init — but note: that still costs LLM calls. For pure
-        replicator dynamics, run with use_fermi=False (legacy
-        tournament+elite path, no LLM in selection step).
+        replicator dynamics, run with learning_method="tournament"
+        (tournament+elite path, no LLM in selection step).
 
         Sanity checks (should pass):
           * Fermi + ALLC, mu=0       -> stays at 1.0

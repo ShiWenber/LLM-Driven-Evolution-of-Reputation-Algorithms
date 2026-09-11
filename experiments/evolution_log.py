@@ -6,8 +6,8 @@ quantitative evolution experiment and every analysis consumer.
 Writer side (must produce exactly this shape)
 ==============================================
   * ``experiments.v2_quantitative.population.V2EvolutionaryPopulation.run_evolution()``
-    — both ``agent_type="agent-type1"`` (QuantitativeAgent, legacy "v2")
-    and ``agent_type="agent-type2"`` (FullAgent, legacy "v3") converge on
+    — both ``agent_type="agent-type1"`` (QuantitativeAgent)
+    and ``agent_type="agent-type2"`` (FullAgent) converge on
     the SAME record layout. ``run_evolution()``
     assembles its return value through ``build_evolution_results()``.
   * CLI runners persist it via ``write_evolution_json()`` at the canonical
@@ -158,7 +158,6 @@ F_CONFIG_NUM_GENERATIONS = "num_generations"
 F_CONFIG_TARGET_INTERACTIONS_PER_GEN = "target_interactions_per_gen"
 F_CONFIG_LLM_THINKING = "llm_thinking"
 F_CONFIG_LLM_MAX_TOKENS = "llm_max_tokens"
-F_CONFIG_USE_FERMI = "use_fermi"
 F_CONFIG_LEARNING_METHOD = "learning_method"
 F_CONFIG_FERMI_BETA = "fermi_beta"
 F_CONFIG_MUTATION_RATE_ON_ADOPTION = "mutation_rate_on_adoption"
@@ -177,10 +176,8 @@ REQUIRED_CONFIG_FIELDS = (
 )
 
 # Agent families supported by the v2/v3 quantitative interface.
-# Canonical values: "agent-type1" (legacy "v2") and "agent-type2" (legacy "v3").
+# Canonical values: "agent-type1" and "agent-type2".
 AGENT_TYPES = ("agent-type1", "agent-type2")
-# Legacy aliases accepted when reading historical records.
-AGENT_TYPES_LEGACY = ("v2", "v3")
 
 # ---------------------------------------------------------------------------
 # Canonical directory / file layout
@@ -366,11 +363,10 @@ def validate_evolution_results(
                  f"missing top-level key {K_LINEAGE_EVENTS!r} (schema v4)")
         agent_type = config.get(F_CONFIG_AGENT_TYPE)
         if agent_type is not None and (
-            agent_type not in AGENT_TYPES and agent_type not in AGENT_TYPES_LEGACY
+            agent_type not in AGENT_TYPES
         ):
             errors.append(
-                f"config agent_type={agent_type!r} not in "
-                f"{AGENT_TYPES} (legacy {AGENT_TYPES_LEGACY})"
+                f"config agent_type={agent_type!r} not in {AGENT_TYPES}"
             )
         for i, ev in enumerate(data.get(K_LINEAGE_EVENTS, [])):
             if not isinstance(ev, dict):

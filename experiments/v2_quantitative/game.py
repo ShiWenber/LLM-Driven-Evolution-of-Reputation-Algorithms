@@ -7,9 +7,9 @@ Game model:
   - Each round: form a random matching of the N agents into pairs (one
     agent sits out if N is odd).
   - In each pair, BOTH players simultaneously choose C (cooperate) or
-    D (defect). Payoffs (benefit=2, cost=1):
-      (C, C) -> each +1
-      (C, D) -> C gets -1, D gets +2
+    D (defect). Payoffs (benefit=3, cost=1):
+      (C, C) -> each +2
+      (C, D) -> C gets -1, D gets +3
       (D, C) -> symmetric
       (D, D) -> each 0
   - After all pairs decide, distribute observations per observability
@@ -27,21 +27,15 @@ from __future__ import annotations
 import random
 from typing import Dict, List, Optional, Tuple
 from .agent import QuantitativeAgent
-from .executor import V2StrategyExecutor
 
 
-class V2DonorGame:
-    """2-player simultaneous-PD game with reputation tracking.
-
-    Note: despite the historical name "V2DonorGame" (kept for backward
-    compat with existing imports), the underlying game is a 2-player
-    symmetric prisoner's dilemma, not a donor game.
-    """
+class DonorGame:
+    """2-player simultaneous-PD game with reputation tracking."""
 
     def __init__(
         self,
         population_size: int,
-        benefit: float = 2.0,
+        benefit: float = 3.0,
         cost: float = 1.0,
         observability: str = "full",
         observability_p: float = 1.0,

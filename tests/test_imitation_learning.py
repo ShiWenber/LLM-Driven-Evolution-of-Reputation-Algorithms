@@ -88,10 +88,17 @@ def test_type1_init_and_ordinary_mutation_requests_share_overall_rules():
     population._mutate(TYPE1_CODE, 1.0)
 
     assert len(captured) == 2
+    # Derive the expected payoff row from the configured benefit/cost instead
+    # of hardcoding it, so this test keeps checking "the rules block reflects
+    # the configured payoffs" when the defaults change.
+    cc_payoff = population.benefit - population.cost
+    expected_cc = f"(C, C): {cc_payoff:g} each"
+    expected_cd = f"defector +{population.benefit:g}"
     for prompt in captured:
         assert "OVERALL GAME RULES" in prompt
         assert "randomly partitioned" in prompt
-        assert "(C, C): 1 each" in prompt
+        assert expected_cc in prompt
+        assert expected_cd in prompt
         assert "cold-start" not in prompt.lower()
         assert "initial reputation" not in prompt.lower()
 

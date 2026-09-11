@@ -3,7 +3,7 @@
 # Population parameters
 population_size: 20
 num_rounds: 100
-benefit: 2  # Benefit to recipient
+benefit: 3  # Benefit to recipient
 cost: 1      # Cost to donor
 
 # Model configurations

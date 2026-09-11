@@ -83,23 +83,9 @@ class LLMAgent:
         return None
 
 
-class ALLCClass(LLMAgent):
-    """Always cooperate. Fallback for when LLM code is broken."""
-
-    def decide(self) -> bool:
-        return True
-
-
-class ALLDClass(LLMAgent):
-    """Always defect. Fallback for when LLM code is broken."""
-
-    def decide(self) -> bool:
-        return False
-
-
 # Source strings for the fallback classes (V3StrategyExecutor looks for
 # a class literally named `LLMAgent`, so we wrap the trivial behavior
-# inside that class name rather than reusing ALLCClass/ALLDClass).
+# inside that class name).
 ALLC_CLASS_SOURCE = '''
 class LLMAgent:
     def __init__(self, agent_id: int):
