@@ -1,230 +1,96 @@
-"""Baseline strategies for the v2 quantitative interface (PD version):
-the 8 leading-eight norms from Ohtsuki & Iwasa 2006, rewritten for the
-2-player simultaneous Prisoner's Dilemma.
+"""Canonical leading-eight truth tables with quantitative reputation updates.
 
-Each norm has two components:
-    - an assignment rule (observe how to update the OBSERVER's view of
-        one target player after a joint action)
-  - an action rule (decide when to cooperate)
+Tables: Hilbe et al. (2018), PNAS Table 1, doi:10.1073/pnas.1810565115,
+following Ohtsuki & Iwasa (2006). Quantitative assessment: Schmid et al.
+(2023), doi:10.1038/s41467-023-37817-x. Scores normalise [-R,R] to [-1,1];
+positive/negative assessments add/subtract 1/R; score >= 0 is GOOD.
 
-The 5-arg observe signature is ONE-DIRECTIONAL:
-    def observe(A_rep, A_action, B_rep, B_action,
-                            my_reputation) -> float:
-            # returns A's NEW reputation only
-
-The framework calls observe() twice per observed joint action — once
-judging the donor (A=donor, B=recipient) and once judging the
-recipient (A=recipient, B=donor) — so each baseline defines a single
-judging rule for one target player.
-
-Conventions:
-  - A_rep > 0  =>  "Good" reputation
-  - A_rep <= 0  =>  "Bad" reputation
-  - Step size 0.333 (1/R with R=3) for IS-style updates
-  - Step size 0.5 for SJ/IS+ stricter updates
-  - Return value clamped to [-1, 1]
-
-The 8 leading-eight norms (canonical naming and definitions follow
-Ohtsuki & Iwasa 2006, Table 1):
-
-  1. IS   - Image Scoring
-  2. SS   - Simple Standing
-  3. SJ   - Stern Judging
-  4. SC   - Scoring
-  5. SH   - Shunning
-  6. IS+  - Image Scoring plus
-  7. SS+  - Simple Standing plus
-  8. SJ+  - Stern Judging plus
-
-In PD, each leading-eight's assignment rule is applied to BOTH the
-donor and the recipient (independently, via two observe() calls with
-swapped roles).
+Assessment uses the observer's ratings of the actor and recipient, not
+the observer's self-rating. The engine applies this donor rule to both
+simultaneous actions using pre-interaction scores. This game adaptation
+is not an exact replication of the papers' sequential donation games.
+IS and SH are additional comparators, not members of the leading eight.
+Legacy plus labels have no validated canonical mapping and are rejected.
 """
 
-STEP = 0.333    # IS-style step
-BIG_STEP = 0.5  # SJ/IS+ style stricter step
+BASELINE_VERSION = "leading-eight-hilbe2018-quantitative-v1"
+LEADING_EIGHT = tuple(f"L{i}" for i in range(1, 9))
+# Rows: GCG, GCB, BCG, BCB, GDG, GDB, BDG, BDB (actor/action/recipient).
+ASSESSMENT_TABLES = {
+    "L1": "GGGGBGBB", "L2": "GBGGBGBB",
+    "L3": "GGGGBGBG", "L4": "GGGBBGBG",
+    "L5": "GBGGBGBG", "L6": "GBGBBGBG",
+    "L7": "GGGBBGBB", "L8": "GBGBBGBB",
+}
+# Rows: GG, GB, BG, BB (self/recipient).
+ACTION_TABLES = {name: "CDCC" if name in ("L1", "L2") else "CDCD"
+                 for name in LEADING_EIGHT}
+STEP = 1.0 / 3.0
 
-# Convenience: G/B as 0.0 threshold
-def _is_G(x): return x > 0.0
-def _is_B(x): return x <= 0.0
 
+def make_leading_eight(name: str, radius: int = 3) -> str:
+    """Return standalone strategy source; R controls assessment resolution."""
+    if name not in ASSESSMENT_TABLES:
+        raise KeyError(f"Unknown leading-eight norm: {name}")
+    if isinstance(radius, bool) or not isinstance(radius, int) or radius < 1:
+        raise ValueError("radius must be a positive integer")
+    return f'''
+# {BASELINE_VERSION}; {name}; R={radius}; threshold S=0.
+def _good(score):
+    # Numerical tolerance only: repeated thirds must recover neutral GOOD.
+    return float(score) >= -1e-12
 
-# --- 1. IS (Image Scoring) -------------------------------------------------
-# In PD: reward cooperation, punish defection, regardless of recipient.
-IS = f'''
 def observe(A_rep, A_action, B_rep, B_action, my_reputation):
-    if A_action == 'cooperate':
-        new = A_rep + {STEP}
-    else:
-        new = A_rep - {STEP}
-    return max(-1.0, min(1.0, new))
+    if A_action not in ('cooperate', 'defect'):
+        raise ValueError('action must be cooperate or defect')
+    row = (0 if A_action == 'cooperate' else 4) + (0 if _good(A_rep) else 2) + (0 if _good(B_rep) else 1)
+    delta = 1 if {ASSESSMENT_TABLES[name]!r}[row] == 'G' else -1
+    score = max(-1.0, min(1.0, A_rep + delta / {radius}))
+    return 0.0 if abs(score) < 1e-12 else score
 
 def decide(my_reputation, opponent_reputation):
-    return my_reputation > 0.0
+    row = (0 if _good(my_reputation) else 2) + (0 if _good(opponent_reputation) else 1)
+    return {ACTION_TABLES[name]!r}[row] == 'C'
 '''
 
 
-# --- 2. SS (Simple Standing) ----------------------------------------------
-# In PD: only reward if BOTH the observer (self) and the target were Good
-# AND the target cooperated. Otherwise punish. (No-op self-judgment case:
-# if my_rep is B, can't recover; symmetric for target.)
-SS = f'''
+IS = '''
 def observe(A_rep, A_action, B_rep, B_action, my_reputation):
-    if my_reputation > 0.0 and A_rep > 0.0 and A_action == 'cooperate':
-        new = A_rep + {STEP}
-    else:
-        new = A_rep - {STEP}
-    return max(-1.0, min(1.0, new))
-
+    score = max(-1.0, min(1.0, A_rep + (1 if A_action == 'cooperate' else -1) / 3))
+    return 0.0 if abs(score) < 1e-12 else score
 def decide(my_reputation, opponent_reputation):
-    return my_reputation > 0.0 and opponent_reputation > 0.0
+    return opponent_reputation >= -1e-12
 '''
-
-
-# --- 3. SJ (Stern Judging) ------------------------------------------------
-# Like SS, but stronger punishment when the condition fails.
-SJ = f'''
+SH = '''
 def observe(A_rep, A_action, B_rep, B_action, my_reputation):
-    if my_reputation > 0.0 and A_rep > 0.0 and A_action == 'cooperate':
-        new = A_rep + {STEP}
-    else:
-        new = A_rep - {BIG_STEP}
-    return max(-1.0, min(1.0, new))
-
+    good = A_action == 'cooperate' and B_rep >= -1e-12
+    score = max(-1.0, min(1.0, A_rep + (1 if good else -1) / 3))
+    return 0.0 if abs(score) < 1e-12 else score
 def decide(my_reputation, opponent_reputation):
-    return my_reputation > 0.0 and opponent_reputation > 0.0
+    return opponent_reputation >= -1e-12
 '''
-
-
-# --- 4. SC (Scoring) -------------------------------------------------------
-# Lenient: only defection is judged Bad. Cooperation always Good (even
-# if observer or target is B). In PD this means target is always
-# rewarded for cooperation regardless of context.
-SC = f'''
+ALLC = '''
 def observe(A_rep, A_action, B_rep, B_action, my_reputation):
-    if A_action == 'cooperate':
-        new = A_rep + {STEP}
-    else:
-        new = A_rep - {STEP}
-    return max(-1.0, min(1.0, new))
-
-def decide(my_reputation, opponent_reputation):
-    return my_reputation > 0.0
-'''
-
-
-# --- 5. SH (Shunning) ------------------------------------------------------
-# A B-target is shamed (always judged as B) regardless of action. A
-# G-target that cooperates is rewarded. Otherwise punish.
-SH = f'''
-def observe(A_rep, A_action, B_rep, B_action, my_reputation):
-    if A_rep <= 0.0:
-        new = A_rep - {BIG_STEP}
-    elif A_action == 'cooperate':
-        new = A_rep + {STEP}
-    else:
-        new = A_rep - {STEP}
-    return max(-1.0, min(1.0, new))
-
-def decide(my_reputation, opponent_reputation):
-    return my_reputation > 0.0 and opponent_reputation > 0.0
-'''
-
-
-# --- 6. IS+ (Image Scoring plus) ------------------------------------------
-# Like IS but B-targets are punished even harder and never recover.
-IS_PLUS = f'''
-def observe(A_rep, A_action, B_rep, B_action, my_reputation):
-    if A_rep <= 0.0:
-        new = A_rep - {BIG_STEP}
-    elif A_action == 'cooperate':
-        new = A_rep + {STEP}
-    else:
-        new = A_rep - {STEP}
-    return max(-1.0, min(1.0, new))
-
-def decide(my_reputation, opponent_reputation):
-    return my_reputation > 0.0
-'''
-
-
-# --- 7. SS+ (Simple Standing plus) -----------------------------------------
-# Like SS but B-targets never recover (BIG_STEP punishment).
-SS_PLUS = f'''
-def observe(A_rep, A_action, B_rep, B_action, my_reputation):
-    if A_rep <= 0.0:
-        new = A_rep - {BIG_STEP}
-    elif my_reputation > 0.0 and A_action == 'cooperate':
-        new = A_rep + {STEP}
-    else:
-        new = A_rep - {STEP}
-    return max(-1.0, min(1.0, new))
-
-def decide(my_reputation, opponent_reputation):
-    return my_reputation > 0.0 and opponent_reputation > 0.0
-'''
-
-
-# --- 8. SJ+ (Stern Judging plus) ------------------------------------------
-# Like SJ but EVERY failure case (not just the G-cooperate condition)
-# is punished with BIG_STEP. B-targets are shamed.
-SJ_PLUS = f'''
-def observe(A_rep, A_action, B_rep, B_action, my_reputation):
-    if A_rep <= 0.0:
-        new = A_rep - {BIG_STEP}
-    elif my_reputation > 0.0 and A_rep > 0.0 and A_action == 'cooperate':
-        new = A_rep + {STEP}
-    else:
-        new = A_rep - {BIG_STEP}
-    return max(-1.0, min(1.0, new))
-
-def decide(my_reputation, opponent_reputation):
-    return my_reputation > 0.0 and opponent_reputation > 0.0
-'''
-
-
-# --- 0. ALLC / ALLD (sanity baselines, not in the 8 leading-eight) ----------
-ALLC = f'''
-def observe(A_rep, A_action, B_rep, B_action, my_reputation):
-    if A_action == 'cooperate':
-        new = A_rep + {STEP}
-    else:
-        new = A_rep - {STEP}
-    return max(-1.0, min(1.0, new))
-
+    return 1.0
 def decide(my_reputation, opponent_reputation):
     return True
 '''
-
-ALLD = f'''
+ALLD = '''
 def observe(A_rep, A_action, B_rep, B_action, my_reputation):
-    if A_action == 'cooperate':
-        new = A_rep + {STEP}
-    else:
-        new = A_rep - {STEP}
-    return max(-1.0, min(1.0, new))
-
+    return -1.0
 def decide(my_reputation, opponent_reputation):
     return False
 '''
-
-
-# --- Index ----------------------------------------------------------------
-BASELINES = {
-    "ALLC":    ALLC,
-    "ALLD":    ALLD,
-    "IS":      IS,
-    "SS":      SS,
-    "SJ":      SJ,
-    "SC":      SC,
-    "SH":      SH,
-    "IS+":     IS_PLUS,
-    "SS+":     SS_PLUS,
-    "SJ+":     SJ_PLUS,
-}
+BASELINES = {name: make_leading_eight(name) for name in LEADING_EIGHT}
+SS = BASELINES["L3"]
+SJ = BASELINES["L6"]
+SC = IS  # Scoring synonym, never counted as a separate leading-eight norm.
+BASELINES.update(ALLC=ALLC, ALLD=ALLD, IS=IS, SS=SS, SJ=SJ, SC=SC, SH=SH)
 
 
 def get_baseline(name: str) -> str:
+    if name in ("IS+", "SS+", "SJ+"):
+        raise ValueError(f"{name} was a mislabelled legacy rule; choose an explicit L1--L8 norm")
     if name not in BASELINES:
         raise KeyError(f"Unknown baseline: {name}. Available: {list(BASELINES)}")
     return BASELINES[name]

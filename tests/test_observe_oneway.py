@@ -26,7 +26,7 @@ import pytest
 
 from experiments.v2_quantitative.agent import QuantitativeAgent
 from experiments.v2_quantitative.baselines import (
-    ALLC, ALLD, IS, IS_PLUS, SC, SH, SJ, SJ_PLUS, SS, SS_PLUS, get_baseline,
+    BASELINES, get_baseline,
 )
 from experiments.v2_quantitative.executor import V2StrategyExecutor
 
@@ -163,12 +163,10 @@ def test_observe_and_judge_symmetric_interaction():
 @pytest.mark.parametrize(
     "name, action, expected_step",
     [
-        ("IS", "cooperate", 0.333),
-        ("IS", "defect", -0.333),
-        ("SC", "cooperate", 0.333),
-        ("SC", "defect", -0.333),
-        ("ALLC", "cooperate", 0.333),
-        ("ALLD", "defect", -0.333),
+        ("IS", "cooperate", 1/3),
+        ("IS", "defect", -1/3),
+        ("SC", "cooperate", 1/3),
+        ("SC", "defect", -1/3),
     ],
 )
 def test_baseline_observe_is_one_directional(name, action, expected_step):
@@ -181,7 +179,7 @@ def test_baseline_observe_is_one_directional(name, action, expected_step):
 
 def test_all_baselines_compile_and_return_float():
     """Every leading-eight baseline compiles and returns a single float."""
-    for name in ("ALLC", "ALLD", "IS", "SS", "SJ", "SC", "SH", "IS+", "SS+", "SJ+"):
+    for name in BASELINES:
         ex = V2StrategyExecutor(get_baseline(name))
         out = ex.observe(0.2, "cooperate", 0.4, "defect", 0.1)
         assert isinstance(out, float)
