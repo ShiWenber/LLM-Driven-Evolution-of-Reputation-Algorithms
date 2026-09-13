@@ -14,7 +14,7 @@ rather than derived from the sweep.
 
 ### What the imitation sweep does and does not show
 
-`run-n100-invasion-count-sweep` runs a deterministic payoff-imitation process
+`run-invasion --norms` runs a deterministic payoff-imitation process
 for 50 generations and reports the invader's final frequency. That is a
 finite-time transient. It cannot distinguish "grows but stalls" from "fixes",
 and the manuscript already states the consequence: it "cannot measure fixation

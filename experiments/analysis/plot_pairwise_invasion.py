@@ -1,6 +1,6 @@
 """Plot pairwise invasion results (strategy vs strategy).
 
-Reads the ``summary.json`` written by ``run_pairwise_invasion`` and produces:
+Reads the ``summary.json`` written by ``run_invasion --residents`` and produces:
   1. Response curves for selected unordered pairs, with the no-change diagonal.
   2. A dominance-threshold matrix (row invades column).
 
@@ -36,6 +36,23 @@ def _has_pair(summary, inv, res):
     return inv in summary.get("groups", {}) and res in summary["groups"].get(inv, {})
 
 
+def strategy_labels(summary: dict) -> list[str]:
+    """Every strategy label in the summary.
+
+    Archived pairwise summaries recorded a ``strategies`` block; the unified
+    runner records ``sources`` (candidates) plus ``residents``. Both are needed:
+    ``groups`` is keyed by the invader only, so a resident that never invades
+    would be missing from the ``groups`` fallback.
+    """
+    if "strategies" in summary:
+        return list(summary["strategies"])
+    labels = list(summary.get("sources", {}))
+    for label in summary.get("residents", {}):
+        if label not in labels:
+            labels.append(label)
+    return labels or list(summary.get("groups", {}))
+
+
 def _curve(summary, inv, res, counts):
     cells = summary["groups"][inv][res]
     return np.asarray([cells[str(c)]["mean_final_invader_frequency"] for c in counts])
@@ -50,13 +67,26 @@ def _threshold(summary, inv, res, counts, level=0.5):
     return None
 
 
+def share_label(summary: dict) -> str:
+    """Y-axis label, with the seed count read from the summary.
+
+    The count must not be hard-coded: a summary produced with a different
+    ``--seeds`` would otherwise be mislabelled (the earlier version always said
+    "3 seeds"). Summaries without a ``seeds`` block fall back to a bare label.
+    """
+    n_seeds = len(summary.get("seeds") or [])
+    suffix = f" ({n_seeds} seed{'s' if n_seeds != 1 else ''})" if n_seeds else ""
+    return f"Mean final invader share{suffix}"
+
+
 def plot(summary_path: Path, output_path: Path, pairs: list[tuple[str, str]]) -> None:
     s = json.loads(summary_path.read_text(encoding="utf-8"))
     counts = [int(c) for c in s["initial_invader_counts"]]
     x = np.asarray(counts, dtype=float) / 100.0
-    labels = list(s["strategies"].keys())
+    labels = strategy_labels(s)
     ae = float(s.get("action_error_probability", 0.0))
     oe = float(s.get("observation_error_probability", 0.0))
+    ylabel = share_label(s)
 
     ncols = min(3, len(pairs))
     nrows = int(np.ceil(len(pairs) / ncols))
@@ -86,7 +116,7 @@ def plot(summary_path: Path, output_path: Path, pairs: list[tuple[str, str]]) ->
         ax.set_yticks(np.linspace(0, 1, 6),
                       [f"{int(v * 100)}%" for v in np.linspace(0, 1, 6)])
         ax.set_xlabel("Initial invader share")
-        ax.set_ylabel("Mean final invader share (3 seeds)")
+        ax.set_ylabel(ylabel)
         ax.grid(color="#D9D9D9", linewidth=0.7, alpha=0.75)
         ax.set_axisbelow(True)
         for spine in ("top", "right"):
@@ -151,7 +181,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     s = json.loads(args.summary.resolve().read_text(encoding="utf-8"))
-    labels = list(s["strategies"].keys())
+    labels = strategy_labels(s)
     if args.pairs:
         pairs = [tuple(p.split(">", 1)) for p in args.pairs]
     else:

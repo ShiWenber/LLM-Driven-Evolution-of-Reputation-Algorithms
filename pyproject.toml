@@ -25,15 +25,28 @@ dependencies = [
 
 [project.scripts]
 # Core experiment entry points.
-llm-reputation = "experiments.main:main"
+# Points at experiments/run_fermi_v3.py ("legacy" filename) - the module was
+# renamed from experiments/main.py, so keep this target in sync with README.
+llm-reputation = "experiments.run_fermi_v3:main"
 
-# Fixed-strategy invasion experiments against the Leading Eight norms.
+# Fixed-strategy invasion: one candidate against one resident, N=100.
+# --norms selects canonical-norm residents; --residents selects arbitrary
+# strategy-vs-strategy pairs. The three older entry points below are thin
+# deprecation shims that delegate to the same engine.
+run-invasion = "experiments.analysis.invasion.run_invasion:main"
 run-n100-invasion-count-sweep = "experiments.analysis.invasion.run_n100_invasion_count_sweep:main"
-run-perturbation-robustness = "experiments.analysis.run_perturbation_robustness:main"
-plot-best-leading-eight-invasion = "experiments.analysis.plot_best_leading_eight_invasion:main"
+run-n100-invasion-custom-code = "experiments.analysis.invasion.run_n100_invasion_custom_code:main"
+plot-private-reputation-matrix = "experiments.analysis.consensus.plot_private_reputation_matrix:main"
 plot-n100-invasion-count-sweep = "experiments.analysis.plot_n100_invasion_count_sweep:main"
 plot-agent2-invasion = "experiments.analysis.plot_agent2_schmid_invasion:main"
 plot-evolution-curves = "experiments.analysis.plot_evolution_curves:main"
+
+# Strategy-vs-strategy invasion (now a mode of run-invasion) and the
+# Schmid-style stability benchmark.
+run-pairwise-invasion = "experiments.analysis.invasion.run_pairwise_invasion:main"
+plot-pairwise-invasion = "experiments.analysis.plot_pairwise_invasion:main"
+run-fixation-benchmark = "experiments.analysis.invasion.run_fixation_benchmark:main"
+plot-fixation-benchmark = "experiments.analysis.plot_fixation_benchmark:main"
 
 # General analysis and lineage visualizations.
 make-figures = "experiments.analysis.make_figures:main"

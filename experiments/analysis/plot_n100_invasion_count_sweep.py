@@ -1,4 +1,8 @@
-"""Plot N=100 invasion-count response curves."""
+"""Plot invasion-count response curves.
+
+The host population size is read from the summary, so both the archived N=100
+sweeps and the current N=20 sweeps plot through the same code path.
+"""
 
 from __future__ import annotations
 
@@ -101,13 +105,21 @@ def plot(summary_path: Path, output_path: Path) -> None:
             f"Incomplete sweep: expected a positive multiple of {per_sweep} "
             f"runs, found {completed}"
         )
-    if summary.get("population_size") != 100:
-        raise ValueError("Expected population size 100")
     if summary.get("selection") != "synchronous_deterministic_payoff_imitation":
         raise ValueError("Expected deterministic payoff imitation")
+    population_size = summary.get("population_size")
+    if not isinstance(population_size, int) or population_size < 3:
+        raise ValueError(
+            f"Summary records an unusable population_size: {population_size!r}"
+        )
+    if any(not 1 <= count < population_size for count in summary["initial_invader_counts"]):
+        raise ValueError(
+            f"initial_invader_counts must be in 1..{population_size - 1} "
+            f"for population_size {population_size}"
+        )
 
     counts = np.asarray(summary["initial_invader_counts"], dtype=float)
-    x = counts / 100.0
+    x = counts / float(population_size)
     fig, axes = plt.subplots(
         1, len(agents), figsize=(5.8 * len(agents), 4.5),
         sharex=True, sharey=True, squeeze=False,
@@ -144,11 +156,13 @@ def plot(summary_path: Path, output_path: Path) -> None:
     observation_error = float(summary.get("observation_error_probability", 0.0))
     if action_error or observation_error:
         title = (
-            "N=100 invasion ability with "
+            f"N={population_size} invasion ability with "
             f"{action_error:.0%} action error + {observation_error:.0%} observation error"
         )
     else:
-        title = "N=100 invasion ability across initial invader counts"
+        title = (
+            f"N={population_size} invasion ability across initial invader counts"
+        )
     fig.suptitle(title, fontsize=16)
     fig.tight_layout(rect=(0.03, 0.04, 0.98, 0.82), h_pad=2.2, w_pad=1.6)
     output_path.parent.mkdir(parents=True, exist_ok=True)

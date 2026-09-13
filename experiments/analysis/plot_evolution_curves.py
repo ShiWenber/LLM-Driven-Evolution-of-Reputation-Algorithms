@@ -1,8 +1,9 @@
-"""Plot matched cooperation trajectories for agent-type1 and agent-type2.
+"""Plot cooperation trajectories for one evolution run label.
 
-The default figure compares six current agent-type1 seeds with the three
-available agent-type2 seeds under the 100-generation, 1,000-interaction,
-population-16 generation-reset experiment used in README.
+Draws a single panel: the per-seed cooperation curves of
+``<results-dir>/<label>_seed<N>/evolutionary.json`` for the requested seeds,
+plus their mean and a one-standard-deviation band.
+Any run label can be passed, so the same figure works for either agent type.
 The module exposes a reusable function, module CLI, and ``uv`` console entry.
 """
 
@@ -20,7 +21,6 @@ import numpy as np
 
 from experiments.evolution_log import (
     F_COOPERATION_RATE_MEAN,
-    F_FITNESS_MEAN,
     F_GENERATION,
     K_TRAJECTORY,
     load_evolution_json,
@@ -29,17 +29,13 @@ from experiments.evolution_log import (
 from .paths import evolution_json_path as canonical_json_path
 
 
-DEFAULT_AGENT_TYPE1_LABEL = "LLM_agent-type1_fermi_z_v3_g100_1000inter_N16_genreset"
-DEFAULT_AGENT_TYPE2_LABEL = "LLM_v3_fermi_z_v3_g100_1000inter_N16_genreset"
-
-AGENT_STYLES = {
-    "agent-type1": ("#2166ac", "two-function strategy"),
-    "agent-type2": ("#b2182b", "stateful LLMAgent class"),
-}
+DEFAULT_LABEL = "LLM_agent-type1_fermi_z_v3_g100_10000inter_N16_genreset_upd4_5seed"
+DEFAULT_SEEDS = (0, 1, 2, 3, 4)
+DEFAULT_COLOR = "#2166ac"
 
 
-def load_trajectory(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
-    """Load generation, cooperation, and fitness arrays from an evolution JSON."""
+def load_trajectory(path: Path) -> tuple[np.ndarray, np.ndarray] | None:
+    """Load generation and cooperation arrays from an evolution JSON."""
     if not path.exists():
         return None
     data: dict[str, Any] = load_evolution_json(path)
@@ -49,7 +45,6 @@ def load_trajectory(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray] | N
     return (
         np.asarray([row[F_GENERATION] for row in trajectory]),
         np.asarray([row[F_COOPERATION_RATE_MEAN] for row in trajectory], dtype=float),
-        np.asarray([row[F_FITNESS_MEAN] for row in trajectory], dtype=float),
     )
 
 
@@ -59,7 +54,7 @@ def load_seed_runs(
     seeds: Sequence[int],
     *,
     require_all: bool = True,
-) -> list[tuple[int, tuple[np.ndarray, np.ndarray, np.ndarray]]]:
+) -> list[tuple[int, tuple[np.ndarray, np.ndarray]]]:
     """Load ``<label>_seedN/evolutionary.json`` runs in canonical layout."""
     runs = []
     missing = []
@@ -74,28 +69,43 @@ def load_seed_runs(
         runs.append((seed, trajectory))
     if require_all and missing:
         formatted = "\n".join(str(path) for path in missing)
-        raise FileNotFoundError(f"Missing required comparison runs:\n{formatted}")
+        raise FileNotFoundError(f"Missing required runs:\n{formatted}")
     if not runs:
         raise FileNotFoundError(f"No trajectories found for {label}")
     return runs
 
 
-def _plot_agent_panel(
-    ax: plt.Axes,
-    agent_type: str,
-    runs: list[tuple[int, tuple[np.ndarray, np.ndarray, np.ndarray]]],
-) -> None:
-    """Draw individual seeds, their mean, and one-standard-deviation band."""
-    color, description = AGENT_STYLES[agent_type]
-    lengths = {len(trajectory[0]) for _, trajectory in runs}
-    if len(lengths) != 1:
-        raise ValueError(f"Mismatched trajectory lengths for {agent_type}: {lengths}")
+def plot_evolution_curves(
+    label: str = DEFAULT_LABEL,
+    seeds: Sequence[int] = DEFAULT_SEEDS,
+    *,
+    results_dir: Path | None = None,
+    output_path: Path | None = None,
+    title: str | None = None,
+    color: str = DEFAULT_COLOR,
+    dpi: int = 180,
+    write_pdf: bool = True,
+) -> Path:
+    """Draw per-seed cooperation curves, their mean, and a ±1 std band."""
+    from .paths import quantitative_results_dir
 
-    reference_generations = runs[0][1][0]
-    for seed, trajectory in runs:
-        generations, cooperation, _ = trajectory
-        if not np.array_equal(generations, reference_generations):
-            raise ValueError(f"Generation indices differ for {agent_type}, seed {seed}")
+    results_dir = Path(results_dir) if results_dir is not None else quantitative_results_dir()
+    output_path = (
+        Path(output_path)
+        if output_path is not None
+        else results_dir / "plots" / f"{label}_evolution_curves.png"
+    )
+
+    print(f"{label}:")
+    runs = load_seed_runs(results_dir, label, seeds)
+
+    generations = runs[0][1][0]
+    for seed, (seed_generations, _) in runs:
+        if not np.array_equal(seed_generations, generations):
+            raise ValueError(f"Generation indices differ for seed {seed}")
+
+    fig, ax = plt.subplots(figsize=(8.5, 5.4))
+    for seed, (_, cooperation) in runs:
         ax.plot(
             generations,
             cooperation,
@@ -109,74 +119,23 @@ def _plot_agent_panel(
     mean = cooperation.mean(axis=0)
     std = cooperation.std(axis=0)
     ax.fill_between(
-        reference_generations,
+        generations,
         np.clip(mean - std, 0, 1),
         np.clip(mean + std, 0, 1),
         color=color,
         alpha=0.16,
         label="mean ± std",
     )
-    ax.plot(
-        reference_generations,
-        mean,
-        linewidth=2.6,
-        color=color,
-        label=f"{len(runs)}-seed mean",
-    )
-    ax.set_title(f"{agent_type}\n{description}", fontsize=13, fontweight="semibold")
+    ax.plot(generations, mean, linewidth=2.6, color=color, label=f"{len(runs)}-seed mean")
+
+    ax.set_title(title or f"{label}\n{len(runs)} seeds", fontsize=13, fontweight="semibold")
     ax.set_xlabel("Generation")
-    ax.set_xlim(reference_generations.min(), reference_generations.max())
+    ax.set_ylabel("Cooperation rate")
+    ax.set_xlim(generations.min(), generations.max())
     ax.set_ylim(-0.02, 1.02)
     ax.grid(alpha=0.25)
     ax.legend(loc="lower right", fontsize=8, framealpha=0.92)
-
-
-def plot_evolution_curves(
-    results_dir: Path | None = None,
-    output_path: Path | None = None,
-    agent_type1_label: str = DEFAULT_AGENT_TYPE1_LABEL,
-    agent_type2_label: str = DEFAULT_AGENT_TYPE2_LABEL,
-    agent_type1_seeds: Sequence[int] = (0, 1, 2, 3, 4, 5),
-    agent_type2_seeds: Sequence[int] = (0, 1, 2),
-    dpi: int = 180,
-    write_pdf: bool = True,
-) -> Path:
-    """Create the matched agent-type1 versus agent-type2 evolution figure."""
-    from .paths import quantitative_results_dir
-
-    results_dir = Path(results_dir) if results_dir is not None else quantitative_results_dir()
-    output_path = (
-        Path(output_path)
-        if output_path is not None
-        else results_dir / "plots" / "evolution_curves.png"
-    )
-
-    print("agent-type1:")
-    type1_runs = load_seed_runs(results_dir, agent_type1_label, agent_type1_seeds)
-    print("agent-type2:")
-    type2_runs = load_seed_runs(results_dir, agent_type2_label, agent_type2_seeds)
-
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5.4), sharex=True, sharey=True)
-    _plot_agent_panel(axes[0], "agent-type1", type1_runs)
-    _plot_agent_panel(axes[1], "agent-type2", type2_runs)
-    axes[0].set_ylabel("Cooperation rate")
-    fig.suptitle(
-        "Evolution of cooperation by agent type "
-        f"({len(agent_type1_seeds)} agent-type1 seeds; "
-        f"{len(agent_type2_seeds)} agent-type2 seeds)",
-        fontsize=15,
-        fontweight="semibold",
-    )
-    fig.text(
-        0.5,
-        0.01,
-        "100 generations · 1,000 target interactions per generation · "
-        "population size 16 · generation reset",
-        ha="center",
-        fontsize=9,
-        color="#555555",
-    )
-    fig.tight_layout(rect=(0, 0.045, 1, 0.94))
+    fig.tight_layout()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=dpi, bbox_inches="tight")
@@ -194,20 +153,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results-dir", type=Path, default=None)
     parser.add_argument("--output", type=Path, default=None)
-    parser.add_argument("--agent-type1-label", default=DEFAULT_AGENT_TYPE1_LABEL)
-    parser.add_argument("--agent-type2-label", default=DEFAULT_AGENT_TYPE2_LABEL)
-    parser.add_argument("--agent-type1-seeds", nargs="+", type=int, default=[0, 1, 2, 3, 4, 5])
-    parser.add_argument("--agent-type2-seeds", nargs="+", type=int, default=[0, 1, 2])
+    parser.add_argument("--label", default=DEFAULT_LABEL, help="Run label to plot")
+    parser.add_argument("--seeds", nargs="+", type=int, default=list(DEFAULT_SEEDS))
+    parser.add_argument("--title", default=None, help="Override the figure title")
+    parser.add_argument("--color", default=DEFAULT_COLOR)
     parser.add_argument("--dpi", type=int, default=180)
     parser.add_argument("--no-pdf", action="store_true", help="Do not write a PDF copy")
     args = parser.parse_args()
     plot_evolution_curves(
+        label=args.label,
+        seeds=args.seeds,
         results_dir=args.results_dir,
         output_path=args.output,
-        agent_type1_label=args.agent_type1_label,
-        agent_type2_label=args.agent_type2_label,
-        agent_type1_seeds=args.agent_type1_seeds,
-        agent_type2_seeds=args.agent_type2_seeds,
+        title=args.title,
+        color=args.color,
         dpi=args.dpi,
         write_pdf=not args.no_pdf,
     )

@@ -260,6 +260,90 @@ def test_occurrences_deduplicate_across_reindex(tmp_path):
     assert occurrence_count == 1
 
 
+def _make_clustering_run(cache, tmp_path):
+    """Create a minimal run so artifact rows satisfy their foreign key."""
+    return cache.put_clustering_run(
+        source_path=tmp_path / "run" / "evolutionary.json",
+        embedding_method="code", model_name="test-model",
+        cluster_count=2, seed=7, parameters={},
+        cluster_names={0: "a", 1: "b"},
+        assignments=[
+            {"code": "x = 1", "generation": 0, "cluster_id": 0},
+            {"code": "y = 2", "generation": 0, "cluster_id": 1},
+        ],
+    )
+
+
+def test_artifact_records_content_hash_and_verify_reports_drift(tmp_path):
+    from experiments.analysis.clustering.cache import AnalysisCache, file_sha256
+
+    cache = AnalysisCache(tmp_path / "analysis.sqlite3")
+    run_id = _make_clustering_run(cache, tmp_path)
+    artifact = tmp_path / "plot.png"
+    artifact.write_bytes(b"png-payload")
+    cache.put_artifact(run_id=run_id, artifact_type="composition", path=artifact)
+
+    with cache.connection() as connection:
+        stored = connection.execute(
+            "SELECT content_sha256 FROM analysis_artifacts"
+        ).fetchone()[0]
+    assert stored == file_sha256(artifact)
+
+    # Untouched file verifies clean.
+    assert [e["status"] for e in cache.verify_artifacts()] == ["ok"]
+
+    # Same length, different bytes -> hash mismatch.
+    artifact.write_bytes(b"png-PAYLOAD")
+    assert [e["status"] for e in cache.verify_artifacts()] == ["hash_mismatch"]
+
+    # Different length -> size mismatch (checked before hashing).
+    artifact.write_bytes(b"short")
+    assert [e["status"] for e in cache.verify_artifacts()] == ["size_mismatch"]
+
+    # Removed file -> missing, recorded digest preserved for recovery.
+    artifact.unlink()
+    report = cache.verify_artifacts()
+    assert [e["status"] for e in report] == ["missing"]
+    assert report[0]["recorded_sha256"] == stored
+
+
+def test_backfill_artifact_hashes_fills_legacy_and_skips_absent_files(tmp_path):
+    from experiments.analysis.clustering.cache import AnalysisCache, file_sha256
+
+    cache = AnalysisCache(tmp_path / "analysis.sqlite3")
+    run_id = _make_clustering_run(cache, tmp_path)
+    present = tmp_path / "present.png"
+    present.write_bytes(b"content")
+    cache.put_artifact(run_id=run_id, artifact_type="composition", path=present)
+    cache.put_artifact(
+        run_id=run_id, artifact_type="lineage", path=tmp_path / "absent.png"
+    )
+
+    # Simulate records written before content hashing existed.
+    with cache.connection() as connection:
+        connection.execute(
+            "UPDATE analysis_artifacts SET content_sha256 = NULL"
+        )
+
+    assert cache.backfill_artifact_hashes() == {
+        "hashed": 1, "already": 0, "missing": 1,
+    }
+    with cache.connection() as connection:
+        digests = dict(
+            connection.execute(
+                "SELECT artifact_type, content_sha256 FROM analysis_artifacts"
+            ).fetchall()
+        )
+    assert digests["composition"] == file_sha256(present)
+    assert digests["lineage"] is None
+
+    # A second pass is a no-op for the hashed row; the absent file stays
+    # pending (digest remains NULL) and is reported again as missing.
+    assert cache.backfill_artifact_hashes() == {
+        "hashed": 0, "already": 1, "missing": 1,
+    }
+
+
 def test_clustering_run_persists_labels_generation_stats_and_artifact(
     codes, patched_pipeline, tmp_path
 ):

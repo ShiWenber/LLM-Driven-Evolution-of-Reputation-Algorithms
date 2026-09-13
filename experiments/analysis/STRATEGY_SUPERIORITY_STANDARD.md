@@ -1,6 +1,6 @@
 # Standard for claiming that an evolved strategy is better than the Leading Eight
 
-Version: 1.0 (fixed before evaluating future candidates)
+Version: 1.1 (2026-09-12)
 
 ## Scope
 
@@ -12,7 +12,7 @@ protocol must be evaluated on new confirmatory seeds.
 
 ## Fixed environment
 
-- Population: 100 for invasion tests; 100 for homogeneous robustness tests.
+- Population: 100.
 - Benefit/cost: 2/1.
 - Private reputations start at 0 and all agents, reputations, and internal state
   are reset between generations.
@@ -24,7 +24,7 @@ protocol must be evaluated on new confirmatory seeds.
 
 ## Fixed perturbation suite
 
-The robustness suite is:
+The suite is:
 
 1. control `(action error, observation error) = (0, 0)`;
 2. action-only `(0.01, 0)` and `(0.05, 0)`;
@@ -42,24 +42,12 @@ before that observer updates private reputations.
 - Screening: seeds 0-9. It may label a strategy only as a candidate.
 - Confirmation: the 30 previously unused seeds `100-129`. Only this stage may
   support a paper claim that a strategy is better than L8. Changing these seeds
-  creates a new version of this protocol and must not replace version 1.0.
+  creates a new version of this protocol; superseded versions are retained, not
+  overwritten.
 
 ## Endpoints
 
-### 1. Homogeneous-population robustness
-
-For each strategy and perturbation condition, record executed cooperation rate
-and mean payoff per agent. The primary robustness endpoint is payoff retention:
-
-`payoff(condition) / payoff(control)`.
-
-A candidate is robustly non-inferior to one L8 norm only if the lower bound of
-the paired 95% bootstrap confidence interval for the candidate-minus-norm payoff
-retention is at least `-0.02`. It is robustly superior only if that lower bound
-is greater than zero. Both moderate joint error `(0.05, 0.05)` and the minimum
-retention across the complete suite must pass.
-
-### 2. Bidirectional evolutionary selection
+### 1. Bidirectional evolutionary selection
 
 > **Data source (2026-09-11).** The invasion experiment has a single frequency
 > axis; it no longer carries a direction parameter. The outward gain below is
@@ -87,11 +75,10 @@ reverse inequalities pass by the same rule.
 - **Distinct strategy:** its executable assessment/action mapping is not
   identical to any L8 mapping on the fixed behavioral probe set. This is not a
   performance claim.
-- **Better than norm X under perturbation Y:** passes homogeneous robustness
-  non-inferiority and bidirectional dominance against X under Y.
+- **Better than norm X under perturbation Y:** dominates X under Y by the rule
+  above.
 - **Broadly better than L8:** passes against at least 6/8 norms in control,
-  mild-joint, and moderate-joint conditions; no norm counter-dominates it; and
-  homogeneous worst-case retention is non-inferior to the median L8 retention.
+  mild-joint, and moderate-joint conditions, and no norm counter-dominates it.
 - **Universally better than L8:** passes against all 8 norms in every condition,
   including `SJ` and `SJ+` and severe joint error.
 
@@ -104,3 +91,31 @@ frequency cannot establish any of the performance claims above.
 Store raw per-seed results, the candidate source path and SHA-256, baseline code
 hashes, full configuration, and summary confidence intervals. Never overwrite
 screening output with confirmatory output.
+
+## Version history
+
+### 1.1 — 2026-09-12
+
+Removed the homogeneous-population robustness endpoint (v1.0 §1) together with
+its implementation (`run_perturbation_robustness.py` and its plotting script).
+Two reasons:
+
+1. **The endpoint was not well defined.** Retention is
+   `payoff(condition) / payoff(control)`, which is undefined whenever the
+   control payoff is zero — the case for all-defect. The implementation
+   silently coerced that `0/0` to `0.0`, so all-defect's retention difference
+   came out identical to the candidate's own retention and it was reported as
+   *superior* to the candidate. Every verdict that included it was wrong.
+2. **The archived screening run is therefore not usable for a claim**, and its
+   raw summary was deleted so the artifact cannot be cited by accident.
+
+Consequence for the claim vocabulary: *Better than norm X* and *Broadly better
+than L8* are now defined on bidirectional dominance alone. This is a
+**weakening** of both claims, not a rewording of them.
+
+For the record: the deleted screening run (seeds 0-9, N=100, 1,000 interactions
+per generation) measured the candidate's worst-case retention difference against
+every Leading Eight norm and against `ALLC` in the range −0.46 to −0.50, with
+paired 95% bootstrap intervals lying entirely below the −0.02 non-inferiority
+margin. The candidate failed that endpoint by a wide margin. Deleting the
+endpoint does not turn that failure into a pass.

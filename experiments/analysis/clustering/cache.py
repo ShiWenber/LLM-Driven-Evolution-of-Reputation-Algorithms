@@ -30,6 +30,21 @@ def code_hash(code: str) -> str:
     return hashlib.sha256(code.encode("utf-8")).hexdigest()
 
 
+def file_sha256(path: str | Path, chunk_size: int = 1 << 20) -> str:
+    """Hash a file's bytes in streaming chunks (safe for large media).
+
+    Artifact payloads (PNG/GIF/MP4) stay on the file system -- the archive
+    only records their path. Hashing the bytes here lets a record be
+    validated against the file later, catching truncation, overwrite, or a
+    path that has gone stale.
+    """
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 class AnalysisCache:
     """Content-addressed archive shared by all local experiments."""
 
@@ -158,6 +173,7 @@ class AnalysisCache:
                 path TEXT NOT NULL,
                 metadata_json TEXT NOT NULL,
                 created_at TEXT NOT NULL,
+                content_sha256 TEXT,
                 UNIQUE (run_id, artifact_type, path)
             );
             """
@@ -169,6 +185,13 @@ class AnalysisCache:
             connection.execute("ALTER TABLE cluster_assignments ADD COLUMN experiment_id TEXT")
         if "source_path" not in assignment_columns:
             connection.execute("ALTER TABLE cluster_assignments ADD COLUMN source_path TEXT")
+        artifact_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(analysis_artifacts)")
+        }
+        if "content_sha256" not in artifact_columns:
+            connection.execute(
+                "ALTER TABLE analysis_artifacts ADD COLUMN content_sha256 TEXT"
+            )
         return connection
 
     @contextmanager
@@ -423,18 +446,108 @@ class AnalysisCache:
             return
         resolved = Path(path).resolve()
         details = dict(metadata or {})
+        content_sha256 = None
         if resolved.exists():
             details.update({"size_bytes": resolved.stat().st_size, "suffix": resolved.suffix})
+            content_sha256 = file_sha256(resolved)
         now = datetime.now(timezone.utc).isoformat()
         with self.connection() as connection:
             connection.execute(
                 """INSERT OR REPLACE INTO analysis_artifacts
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                   (artifact_id, run_id, artifact_type, path, metadata_json,
+                    created_at, content_sha256)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (stable_hash({"run_id": run_id, "type": artifact_type,
                               "path": str(resolved)}),
                  run_id, artifact_type, str(resolved),
-                 json.dumps(details, ensure_ascii=False, sort_keys=True), now),
+                 json.dumps(details, ensure_ascii=False, sort_keys=True), now,
+                 content_sha256),
             )
+
+    def verify_artifacts(self, *, verify_hash: bool = True) -> list[dict]:
+        """Check every recorded artifact against the file system.
+
+        Returns one entry per artifact with a ``status`` of ``"ok"``,
+        ``"missing"``, ``"size_mismatch"``, ``"hash_mismatch"``, or
+        ``"unverified"`` (the record predates content hashing, or the file
+        was unreachable, so no digest could be compared).
+        """
+        if not self.path.exists():
+            raise FileNotFoundError(f"Analysis cache not found: {self.path}")
+        with self.connection() as connection:
+            rows = connection.execute(
+                """SELECT artifact_id, artifact_type, path, metadata_json,
+                          content_sha256
+                   FROM analysis_artifacts ORDER BY created_at"""
+            ).fetchall()
+        report: list[dict] = []
+        for artifact_id, artifact_type, path, metadata_json, recorded_hash in rows:
+            artifact_path = Path(path)
+            expected_size = json.loads(metadata_json).get("size_bytes")
+            entry = {
+                "artifact_id": artifact_id,
+                "artifact_type": artifact_type,
+                "path": path,
+                "expected_size": expected_size,
+                "recorded_sha256": recorded_hash,
+                "actual_size": None,
+                "actual_sha256": None,
+                "status": "missing",
+            }
+            if artifact_path.exists():
+                actual_size = artifact_path.stat().st_size
+                entry["actual_size"] = actual_size
+                if expected_size is not None and actual_size != expected_size:
+                    entry["status"] = "size_mismatch"
+                elif not verify_hash:
+                    entry["status"] = "ok"
+                elif recorded_hash is None:
+                    entry["status"] = "unverified"
+                else:
+                    actual_hash = file_sha256(artifact_path)
+                    entry["actual_sha256"] = actual_hash
+                    entry["status"] = (
+                        "ok" if actual_hash == recorded_hash else "hash_mismatch"
+                    )
+            report.append(entry)
+        return report
+
+    def backfill_artifact_hashes(self) -> dict[str, int]:
+        """Fill in ``content_sha256`` for records written before hashing.
+
+        Returns counts for ``"hashed"``, ``"already"``, and ``"missing"``.
+        Artifacts whose file is gone keep a NULL digest and are counted as
+        ``"missing"`` rather than being deleted.
+        """
+        if not self.path.exists():
+            raise FileNotFoundError(f"Analysis cache not found: {self.path}")
+        with self.connection() as connection:
+            total = connection.execute(
+                "SELECT COUNT(*) FROM analysis_artifacts"
+            ).fetchone()[0]
+            pending = connection.execute(
+                "SELECT artifact_id, path FROM analysis_artifacts "
+                "WHERE content_sha256 IS NULL"
+            ).fetchall()
+            updates = []
+            missing = 0
+            for artifact_id, path in pending:
+                artifact_path = Path(path)
+                if not artifact_path.exists():
+                    missing += 1
+                    continue
+                updates.append((file_sha256(artifact_path), artifact_id))
+            if updates:
+                connection.executemany(
+                    "UPDATE analysis_artifacts SET content_sha256 = ? "
+                    "WHERE artifact_id = ?",
+                    updates,
+                )
+        return {
+            "hashed": len(updates),
+            "already": total - len(pending),
+            "missing": missing,
+        }
 
     def get_clustering_run_labels(self, run_id: str) -> tuple[dict[str, int], dict[int, str]]:
         """Return exact code-text labels and cluster names stored for a run."""

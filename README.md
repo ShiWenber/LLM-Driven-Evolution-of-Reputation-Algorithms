@@ -123,8 +123,8 @@ seed 4; agent-type2 uses its seed-0 analysis (`K=2`).
 
 ### 8) Representative final survivor from each dominant lineage family
 
-This section documents the representatives used by the bidirectional invasion
-experiment: seed 4 for `agent-type1` and seed 0 for `agent-type2`, matching the
+This section documents the representatives used by the invasion experiment:
+seed 4 for `agent-type1` and seed 0 for `agent-type2`, matching the
 representative runs used by the visual analyses above.
 
 The selection rule is identical for both runs: group final agents by root
@@ -220,56 +220,15 @@ expresses observation and action as two stateless functions, while
 `agent-type2` combines opponent modeling with persistent state and online
 adaptation.
 
-### 9) Best evolved strategies vs. the Leading Eight: bidirectional invasion
+### 9) N=100 invasion ability across initial invader counts
 
-We tested the two representative strategies selected above against all eight
-canonical norms (`IS`, `SS`, `SJ`, `SC`, `SH`, `IS+`, `SS+`, and `SJ+`). The
-experiment uses the project's existing agent executors and private-reputation
-game logic rather than a separate game implementation. Selection is
-deterministic payoff imitation: a sampled learner always copies a sampled role
-model with strictly higher fitness and never copies one with equal or lower
-fitness; no Fermi/logistic acceptance probability is used.
-
-For each agent type and norm, the experiment starts with one invader in a
-population of 15 and tests both directions. Bar length is the number of
-fixations across seeds `0`, `1`, and `2`; leftward bars show a Leading Eight
-norm invading the evolved strategy, and rightward bars show the evolved
-strategy invading the norm.
-
-![Bidirectional invasion results for the best agent-type1 and agent-type2 strategies against the Leading Eight](README.assets/best_vs_leading_eight_invasion.png)
-
-The formal batch contains 96 runs: two agent types, eight norms, two invasion
-directions, and three seeds. Every run uses 50 generations, 1,000 interactions
-per generation, an 800-interaction burn-in, a 200-interaction fitness window,
-`b=2`, `c=1`, full observation, observer-private reputations, and 15 sampled
-imitation opportunities per generation. As in the population module, every slot is
-re-instantiated after selection: its stable ID and selected strategy type are
-preserved, while private reputations and strategy-internal state reset.
-
-The updated result is asymmetric for `agent-type2`: it fixed in `1/3` runs
-against `IS`, `SS`, `SC`, `SH`, `IS+`, and `SS+`, while those six norms had
-`0/3` reverse-direction fixations. `SJ` and `SJ+` show the opposite pattern:
-each fixed in `3/3` runs against `agent-type2`, while the evolved strategy had
-`0/3` outward fixations. For the seed-4 `agent-type1` representative, every
-norm and both directions produced `0/3` fixations; all single invaders became
-extinct in this three-seed batch.
-Because each cell contains only three seeds, these fractions are descriptive
-results rather than precise estimates of fixation probability.
-
-The 96 formal runs are cached and remain available for reproducibility.
-Regenerate the README figure with `uv run plot-best-leading-eight-invasion`.
-The legacy single-invader runner has been retired: shared fixed-strategy
-primitives (representative selection, competitor construction, and generation
-play) now live in `experiments/analysis/invasion/core.py`, and the N=100 sweep
-in the next section takes explicit `LABEL=AGENT_TYPE=PATH` sources.
-
-### 10) N=100 invasion ability across initial invader counts
-
-The single-invader result does not show whether a strategy needs a critical
-mass before it can spread. We therefore ran a separate bidirectional experiment
+A single invader in a small population does not show whether a strategy needs a
+critical mass before it can spread. We therefore ran a separate experiment
 in a population of 100, starting with `1, 5, 10, 20, 30, 40, 50, 60, 70, 80,
-90, 95, 99` invaders. The full design contains 1,248 runs: two agent types,
-eight Leading Eight norms, two directions, 13 initial counts, and three seeds.
+90, 95, 99` evolved-strategy invaders. The sweep covers 624 compositions: two
+agent types, eight Leading Eight norms, 13 initial counts, and three seeds. The
+archive holds 1,248 records because an earlier layout stored each composition
+twice; only one reading per composition is plotted.
 Each run retains the 50-generation, 1,000-interaction, `800/200` burn-in and
 fitness-window design. There are 100 deterministic payoff-imitation
 opportunities per generation, and absorbing fixation/extinction states stop
@@ -279,45 +238,40 @@ The dashed diagonal in each panel is the no-frequency-change reference
 (`final share = initial share`). Curves above it indicate expansion; curves
 below it indicate contraction.
 
-![N=100 bidirectional invasion ability across initial invader counts](README.assets/n100_invasion_count_sweep.png)
+![N=100 invasion ability across initial invader counts](README.assets/n100_invasion_count_sweep.png)
 
 The seed-4 `agent-type1` curves coincide with the diagonal for every tested
-norm and both directions: after 50 generations the mean final share equals the
+norm: after 50 generations the mean final share equals the
 initial share. Under strict higher-payoff imitation, neither side gains a
 systematic payoff advantage that changes its frequency. Increasing the initial
 number therefore does not reveal a hidden invasion threshold for this strategy.
 
-The `agent-type2` result is strongly asymmetric. Against `IS`, `SC`, and `IS+`,
-a 1% evolved-strategy minority reaches a mean final share of 50%; against `SS`,
-`SH`, and `SS+`, it reaches 56%. Starting from 5%, these six comparisons end at
-94–96% on average. `SJ` and `SJ+` are harder at very low frequency: a 1%
-minority becomes extinct, but 5%, 10%, and 20% minorities reach approximately
-60%, 88%, and 95%, respectively, and a 30% minority reaches 99%.
-
-In the reverse direction, no Leading Eight norm expands on average from any
-tested initial share. Up to a 90% initial majority, the norms generally collapse
-to 0–5% against `agent-type2`. Even from 99%, the six non-SJ norms finish at
-47–62% on average, while `SJ` and `SJ+` finish at 85%. Thus invasion count
-changes the low-frequency outcome for `SJ`/`SJ+`, but the N=100 sweep still
-shows a broad frequency-selection advantage for `agent-type2` under this
-deterministic payoff-imitation rule.
+The `agent-type2` curves sit strongly above the diagonal. Against `IS`, `SC`,
+and `IS+`, a 1% evolved-strategy minority reaches a mean final share of 50%;
+against `SS`, `SH`, and `SS+`, it reaches 56%. Starting from 5%, these six
+comparisons end at 94–96% on average. `SJ` and `SJ+` are harder at very low
+frequency: a 1% minority becomes extinct, but 5%, 10%, and 20% minorities reach
+approximately 60%, 88%, and 95%, respectively, and a 30% minority reaches 99%.
+Thus invasion count changes the low-frequency outcome for `SJ`/`SJ+`, but the
+N=100 sweep still shows a broad frequency-selection advantage for `agent-type2`
+under this deterministic payoff-imitation rule.
 
 Run or resume the experiment and regenerate the figure by passing explicit
 strategy sources (`LABEL=AGENT_TYPE=PATH` pointing at a run's
 `evolutionary.json`):
 
 ```powershell
-uv run run-n100-invasion-count-sweep --workers 12 `
+uv run run-invasion --workers 12 `
   --source agent-type1=agent-type1=results/quantitative_baseline/LLM_agent-type1_fermi_z_v3_g100_1000inter_N16_genreset_seed4/evolutionary.json `
   --source agent-type2=agent-type2=results/quantitative_baseline/LLM_v3_fermi_z_v3_g100_1000inter_N16_genreset_seed0/evolutionary.json
 uv run plot-n100-invasion-count-sweep
 ```
 
-### 11) N=100 invasion with action and observation errors
+### 10) N=100 invasion with action and observation errors
 
 The diagonal `agent-type1` baseline above can arise when reputations converge to
 an all-good state and the strategies consequently produce nearly identical
-behavior. To perturb that state, we repeated the complete 1,248-run N=100 sweep
+behavior. To perturb that state, we repeated the complete N=100 sweep
 with a 1% action-error probability and a 1% observation-error probability. An
 action error flips a strategy's intended action before payoffs are calculated.
 An observation error independently flips each executed action as seen by each
@@ -331,7 +285,7 @@ agents, private reputations, and internal state between generations. Selection
 still uses deterministic payoff imitation—when the sampled model has strictly
 higher fitness, the learner copies it; no Fermi parameter is used.
 
-![N=100 bidirectional invasion with 1% action error and 1% observation error](README.assets/n100_noisy_invasion_count_sweep.png)
+![N=100 invasion with 1% action error and 1% observation error](README.assets/n100_noisy_invasion_count_sweep.png)
 
 The perturbation breaks the previous neutrality of `agent-type1`. From a 5%
 minority it reaches about 33% against `IS`, `SC`, and `IS+`, and about 46%
@@ -340,31 +294,93 @@ to stochastic loss: it becomes extinct against the first group in these three
 seeds, while its mean final share is about 25% against the second group.
 `SJ` and `SJ+` remain the clearest low-frequency barrier: `agent-type1` becomes
 extinct from 1%, 5%, and 10%, but grows to about 83% when starting from 50%.
-In the reverse direction, Leading Eight minorities generally contract, although
-`SJ`/`SJ+` can recover when they already begin near dominance. The noisy result
-therefore rejects the earlier interpretation of universal two-way neutrality:
-the all-good steady state had hidden selection differences, but
+The noisy result therefore rejects the earlier interpretation of universal
+neutrality: the all-good steady state had hidden selection differences, but
 `agent-type1`'s advantage is norm- and frequency-dependent.
 
 `agent-type2` remains substantially stronger. A single evolved invader reaches
 about 67% against the six non-`SJ` norms, and a 5% minority fixes in all three
 seeds. Against `SJ`/`SJ+`, 1% and 5% minorities become extinct, a 10% minority
-reaches about 38%, and a 50% start reaches about 56%. In the reverse direction,
-the six non-`SJ` norms normally become extinct even from very high initial
-shares; `SJ`/`SJ+` still expand when they start at 90% or more. Consequently,
-the errors reveal an even clearer broad invasion and resistance advantage for
+reaches about 38%, and a 50% start reaches about 56%. Consequently
+the errors reveal an even clearer broad invasion advantage for
 `agent-type2`, while preserving a frequency-dependent exception for
 `SJ`/`SJ+`.
 
 Run or resume the noisy sweep and regenerate its figure with:
 
 ```powershell
-uv run run-n100-invasion-count-sweep --workers 12 `
+uv run run-invasion --workers 12 `
   --action-error 0.01 --observation-error 0.01 `
   --source agent-type1=agent-type1=results/quantitative_baseline/LLM_agent-type1_fermi_z_v3_g100_1000inter_N16_genreset_seed4/evolutionary.json `
   --source agent-type2=agent-type2=results/quantitative_baseline/LLM_v3_fermi_z_v3_g100_1000inter_N16_genreset_seed0/evolutionary.json
 uv run plot-n100-invasion-count-sweep --summary results/quantitative_baseline/invasion/n100_noisy_invasion_count_sweep_ae0p01_oe0p01/summary.json --output README.assets/n100_noisy_invasion_count_sweep.png
 ```
+
+### 11) Fixation probability: the stability question the imitation sweep cannot answer
+
+Every sweep above reports the invader's frequency after a fixed 50 generations.
+That is a finite-time transient: it cannot distinguish "grows but stalls" from
+"takes over". For a stability claim we need the **fixation probability** $\rho$,
+following Schmid, Ekbatani, Hilbe & Chatterjee (2023), *Nat. Commun.* 14:2086
+(doi:10.1038/s41467-023-37817-x). For each composition of $k$ mutants and $N-k$
+residents we simulate the reputation dynamics to stationarity (reputations are
+**not** reset), measure the stationary payoffs, and apply the Traulsen–Hauert
+formula
+
+$$\rho_{MR} = \frac{1}{1 + \sum_{i=1}^{N-1}\prod_{k=1}^{i}\exp(-\beta\, d_k)},
+\qquad d_k = \pi_M(k) - \pi_R(k),$$
+
+where neutrality is $\rho = 1/N$. A single 49-composition sweep yields **both**
+orderings, so the comparison is paired by construction.
+
+Two representative hand-written strategies were benchmarked at `N=50`, 12,000
+burn-in + 12,000 measure interactions, five replicates per composition, `β=1`,
+and 1% action + 1% observation error (neutral `ρ = 0.0200`):
+
+![Fixation probability benchmark for readme_best](README.assets/fixation_benchmark_readme_best_N50.png)
+
+![Fixation probability benchmark for n50_seed2](README.assets/fixation_benchmark_n50_seed2_N50.png)
+
+The two candidates fail to replace the canonical norms for **different** reasons.
+
+* **`readme_best`** is a *conditional* norm. It invades **ALLD** from rare
+  (`ρ = 0.0803`, 4.0 × neutral) and nothing else, while being invadable by
+  **ALLC** (`ρ = 0.5254`, a 26 × advantage) and by **L1, L2, L7, L8**
+  (`ρ = 0.063–0.084`); it **resists L3–L6** (`ρ ≤ 0.0004`). The split
+  {L1,L2,L7,L8} vs {L3–L6} reproduces exactly the four norms Schmid et al.
+  classify as robust, so the implementation is behaving as the source paper
+  requires.
+* **`n50_seed2`** is **payoff-neutral against the whole norm set**: `ρ ≈ 0.023`
+  against every leading-eight norm and ALLC, and *suppressed* against ALLD
+  (`ρ = 0.0054 < 1/N`). Neither it nor its opponents gain an edge in either
+  direction.
+
+This also shows why the endpoint-frequency sweep was not sufficient.
+`readme_best` grows from a 10% minority against L1 in the N=100 imitation sweep
+(mean final share 0.82) — which reads as an invasion — yet its fixation
+probability against L1 is `0.0000`. The growth was a transient *inside a
+coexisting mixture*.
+
+Both runs still drift at the most extreme compositions, where the reputation
+dynamics are bimodal; the benchmark prints a per-probe stationarity warning and
+the figures mark the drifting probes. Read any quoted `ρ` together with its
+stationarity block, and raise `--burn-in` / `--measure` before publishing a
+value whose block is tripped.
+
+```powershell
+uv run run-fixation-benchmark `
+  --candidate "readme_best=experiments/analysis/invasion/custom_strategies/readme_best.py" `
+  --probes ALLC ALLD L1 L2 L3 L4 L5 L6 L7 L8 `
+  --population-size 50 --burn-in 12000 --measure 12000 --replicates 5 `
+  --beta 1.0 --action-error 0.01 --observation-error 0.01 --workers 28 `
+  --output "results/quantitative_baseline/fixation/readme_best_N50" --force
+uv run plot-fixation-benchmark `
+  --summary "results/quantitative_baseline/fixation/readme_best_N50/fixation_benchmark.json" `
+  --output "README.assets/fixation_benchmark_readme_best_N50.png"
+```
+
+The method, the ordering-redundancy derivation, and the full measured tables
+are in [`docs/fixation_benchmark.md`](docs/fixation_benchmark.md).
 
 ---
 
@@ -421,13 +437,17 @@ The Agent 2 invasion runner and dashboard are maintained under
 Analysis commands resolve project-relative result directories at runtime;
 paths can be overridden with explicit CLI options.
 
-The matched `agent-type1` versus `agent-type2` evolution plot is provided by
-`experiments.analysis.plot_evolution_curves` and writes PNG/PDF figures under
-`results/quantitative_baseline/plots/` by default. To refresh the figure used
-at the top of this README, run:
+The cooperation-evolution plot is provided by
+`experiments.analysis.plot_evolution_curves`. It draws a **single panel** for
+one run label — the per-seed cooperation curves, their mean, and a ±1 standard
+deviation band — and writes PNG/PDF figures under
+`results/quantitative_baseline/plots/` by default. Any run label can be plotted,
+so the same command works for either agent type:
 
 ```powershell
-uv run plot-evolution-curves --output README.assets/g100_3seed_1000inter.png --no-pdf
+uv run plot-evolution-curves `
+  --label LLM_agent-type1_fermi_z_v3_g100_10000inter_N16_genreset_upd4_5seed `
+  --seeds 0 1 2 3 4 --output results/quantitative_baseline/plots/evolution_curves.png
 ```
 
 ## Common commands
@@ -438,20 +458,23 @@ The configured project scripts can be run with `uv run`:
 # Main legacy donor-game CLI
 uv run llm-reputation --help
 
-# Best agent-type1 and agent-type2 representatives vs. all Leading Eight norms
-uv run plot-best-leading-eight-invasion
-
-# N=100 bidirectional sweep over initial invader counts
-uv run run-n100-invasion-count-sweep --workers 12 `
+# N=100 invasion sweep over initial invader counts (candidate vs Leading Eight norms)
+uv run run-invasion --workers 12 `
   --source agent-type1=agent-type1=results/quantitative_baseline/LLM_agent-type1_fermi_z_v3_g100_1000inter_N16_genreset_seed4/evolutionary.json `
   --source agent-type2=agent-type2=results/quantitative_baseline/LLM_v3_fermi_z_v3_g100_1000inter_N16_genreset_seed0/evolutionary.json
 uv run plot-n100-invasion-count-sweep
 
 # N=100 sweep with independent 1% action and observation errors
-uv run run-n100-invasion-count-sweep --workers 12 --action-error 0.01 --observation-error 0.01 `
+uv run run-invasion --workers 12 --action-error 0.01 --observation-error 0.01 `
   --source agent-type1=agent-type1=results/quantitative_baseline/LLM_agent-type1_fermi_z_v3_g100_1000inter_N16_genreset_seed4/evolutionary.json `
   --source agent-type2=agent-type2=results/quantitative_baseline/LLM_v3_fermi_z_v3_g100_1000inter_N16_genreset_seed0/evolutionary.json
 uv run plot-n100-invasion-count-sweep --summary results/quantitative_baseline/invasion/n100_noisy_invasion_count_sweep_ae0p01_oe0p01/summary.json --output README.assets/n100_noisy_invasion_count_sweep.png
+
+# Strategy vs. strategy: pass --residents instead of --norms
+uv run run-invasion --residents A>B `
+  --source A=results/quantitative_baseline/invasion/custom_strategies/readme_best.py `
+  --source B=results/quantitative_baseline/invasion/custom_strategies/n50_seed2.py `
+  --action-error 0.01 --observation-error 0.01 --output results/quantitative_baseline/invasion/pairwise_A_vs_B
 
 # Regenerate invasion dashboards from cached results
 uv run plot-agent2-invasion
@@ -497,7 +520,7 @@ The runner uses:
 - the final 200 interactions for selection fitness;
 - benefit `b=2`, cost `c=1`, full observation, and observer-private reputations;
 - synchronous fixed-strategy Fermi imitation with `beta=5` and 15 updates per generation;
-- both directions: Agent 2 invading a norm and a norm invading Agent 2;
+- both orderings: Agent 2 invading a norm and a norm invading Agent 2;
 - initial invader counts `n=1..14`.
 
 The 336 formal runs of this historical batch are cached and remain available
@@ -510,7 +533,6 @@ Results are written under:
 results/quantitative_baseline/invasion/
 └── agent2_schmid_L1_L2_L7_L8_mainmatched/
     ├── summary.json
-    ├── agent2_schmid_bidirectional_invasion_dashboard.png
     ├── agent2_invades_norm/<norm>/n<k>_seed<s>/invasion.json
     └── norm_invades_agent2/<norm>/n<k>_seed<s>/invasion.json
 ```
@@ -538,6 +560,23 @@ the production-run script `_run_fermi_3seed_100gen_v3.py` at the repo root.
 At the start of every generation, framework-managed reputations are reset to
 the neutral value `0.0`; reputations do not carry across generations.
 
+Within a generation, each interaction draws a single pair of agents uniformly
+at random and delivers that pair's observations immediately, before the next
+pair is drawn. Reputations therefore evolve continuously inside a generation,
+and a later pair already sees the effects of earlier ones. Because the two
+draws are independent, an agent's number of interactions per generation is a
+random variable (mean two: once as donor, once as recipient) rather than a
+fixed count; averaged over a full generation the exposure is even.
+
+> **Protocol note.** Results generated before 2026-09-12 used an earlier
+> *synchronous* observation protocol instead, in which each round paired up the
+> whole population on a frozen reputation snapshot and delivered that round's
+> observations together. The two protocols are not interchangeable — they imply
+> different within-generation information dynamics — so those archived runs are
+> not directly comparable with runs produced by the current code, and `--resume`
+> refuses to extend a log written under the old protocol. Burn-in/fitness
+> numbers are unaffected (the window is a share of interactions either way).
+
 Run a single seed:
 
 ```powershell
@@ -564,7 +603,8 @@ Common options:
 | `--seed N` / `--seeds N...` | `[0, 1, 2]` | Seed(s) to run; `--seed` overrides `--seeds` |
 | `--seed-workers N` | number of seeds | Maximum seed processes; use `1` for sequential execution |
 | `--gens N` | `100` | Number of generations |
-| `--target-interactions N` | `1000` | Target PD interactions per generation |
+| `--target-interactions N` | `1000` | PD interactions per generation; one randomly drawn pair plays per interaction, with observations delivered immediately |
+| `--fitness-window-fraction F` | `0.2` | Share of each generation's joint actions whose payoffs count toward selection fitness; the earlier interactions are burn-in. Pass `0` to count every interaction |
 | `--population-size N` | `15` | Population size |
 | `--learning-method {fermi,tournament}` | `fermi` | Learning/selection rule; tournament uses elite retention and tournament-selected survivors |
 | `--updates-per-gen N` | population size | Distinct learners sampled without replacement per generation; must not exceed population size |
@@ -573,7 +613,7 @@ Common options:
 | `--mutation-rate F` | `0.1` | Probability of an independent LLM rewrite after accepted imitation (`mu`); the `1-mu` branch is parent-conditioned learning |
 | `--mutation-temperature F` | `0.8` | LLM mutation temperature |
 | `--imitation-learning {random,deliberate}` | `random` | Parent-conditioned child generation: an undirected related variation or an explicit attempt to improve using the parent's real fitness |
-| `--benefit F` / `--cost F` | `2.0` / `1.0` | PD payoffs |
+| `--benefit F` / `--cost F` | `3.0` / `1.0` | PD payoffs |
 | `--observability S` | `full` | Observability mode |
 | `--provider S` | `deepseek` | API provider for key/base-url lookup |
 | `--model S` | provider default | LLM model name |
@@ -786,8 +826,8 @@ itself is covered by `tests/test_seed_multiprocessing.py`.
 ## Repository status
 
 - Core experiment and re-run tooling are implemented.
-- The Agent 2 / Schmid L1–L2–L7–L8 bidirectional invasion runner is implemented
-  and has completed 336 runs.
+- The Agent 2 / Schmid L1–L2–L7–L8 invasion batch (336 historical runs) remains
+  available for reproducibility.
 - The package exposes `uv run` entry points for the main CLI, re-run tool,
   invasion runner, and invasion dashboard.
 - Paper drafts and supplementary artifacts remain under active development.

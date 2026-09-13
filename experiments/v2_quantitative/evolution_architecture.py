@@ -16,7 +16,7 @@ from ..evolution_log import (
     ORIGIN_INDEPENDENT_INIT,
     ORIGIN_MUTATE,
 )
-from .game import DonorGame
+from .game import DonorGame, resolve_fitness_window
 from .prompts import OVERALL_GAME_RULES_PROMPT
 
 
@@ -137,7 +137,7 @@ class ReputationPrisonersDilemmaScenario:
         cost: float,
         observability: str,
         observability_p: float,
-        fitness_window_interactions: int | None,
+        fitness_window_fraction: float | None,
         num_rounds_per_gen: int,
     ) -> None:
         self.population_size = population_size
@@ -145,7 +145,7 @@ class ReputationPrisonersDilemmaScenario:
         self.cost = cost
         self.observability = observability
         self.observability_p = observability_p
-        self.fitness_window_interactions = fitness_window_interactions
+        self.fitness_window_fraction = fitness_window_fraction
         self.num_rounds_per_gen = num_rounds_per_gen
 
     def evaluate(
@@ -162,7 +162,7 @@ class ReputationPrisonersDilemmaScenario:
             observability=self.observability,
             observability_p=self.observability_p,
             seed=generation_seed,
-            fitness_window_interactions=self.fitness_window_interactions,
+            fitness_window_fraction=self.fitness_window_fraction,
         )
         game.setup_population(list(agents))
         for agent in agents:
@@ -172,8 +172,9 @@ class ReputationPrisonersDilemmaScenario:
         game._global_log = []
         game._interaction_deltas = []
         for _ in range(num_rounds):
-            game.play_round()
-            game.distribute_observations_and_self_judgments()
+            game.distribute_observations_and_self_judgments(
+                game.play_interaction()["interactions"]
+            )
         coop_count = sum(
             1
             for interaction in game._global_log
@@ -194,7 +195,6 @@ class ReputationPrisonersDilemmaScenario:
             "population_size": self.population_size,
             "num_rounds_per_gen": self.num_rounds_per_gen,
             "num_generations": num_generations,
-            "num_pairs": max(1, self.population_size // 2),
             "benefit": self.benefit,
             "cost": self.cost,
             "cc_payoff": self.benefit - self.cost,
@@ -220,15 +220,19 @@ class ReputationPrisonersDilemmaScenario:
             )
 
         rounds = self.num_rounds_per_gen
-        total_interactions = rounds * max(1, self.population_size // 2)
-        window = self.fitness_window_interactions
-        if window is None or window <= 0 or window >= total_interactions:
-            fitness_window_description = "summed over all joint interactions in the generation"
+        total_interactions = rounds
+        fraction = self.fitness_window_fraction
+        window = resolve_fitness_window(fraction, total_interactions, 1)
+        if window is None:
+            fitness_window_description = (
+                "summed over all joint interactions in the generation"
+            )
         else:
             burn_in = total_interactions - window
             fitness_window_description = (
                 f"summed over only the final {window} of the generation's "
-                f"{total_interactions} joint interactions; the first {burn_in} "
+                f"{total_interactions} joint interactions (the final "
+                f"{float(fraction):.0%} of the generation); the first {burn_in} "
                 "interactions are burn-in (they still affect observations and "
                 "state, but their payoffs do not count)"
             )

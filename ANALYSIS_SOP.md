@@ -123,20 +123,23 @@ Remove-Item  "$d/lineage_survival__survivors.png" -Force -ErrorAction SilentlyCo
 
 ---
 
-## 5. 汇总图：5-seed 合作率进化曲线
+## 5. 汇总图：合作率进化曲线
 
-`plot_evolution_curves` 是**双面板**（agent-type1 vs agent-type2）设计。若只有单 agent
-类型的新数据，把两侧 label 都指向它即可得到单面板等效图；若确需双类型对比，则
-`--agent-type2-*` 指向旧 run label。
+`plot_evolution_curves` 画**单面板**：一个 run label 的逐 seed 合作率曲线 + 均值 + ±1 标准差带。
+不限 agent 类型 —— 任何 run label 都能画，传 `--label` 即可。
 
 ```powershell
 uv run python -m experiments.analysis.plot_evolution_curves `
-  --agent-type1-label "$LABEL" --agent-type1-seeds 0 1 2 3 4 `
-  --agent-type2-label "$LABEL" --agent-type2-seeds 0 1 2 `
+  --label "$LABEL" --seeds 0 1 2 3 4 `
   --output "$OUT/analysis_<描述>/evolution_curves.png"
 ```
 
 产物：`.png` + `.pdf`。
+
+可选参数：`--title` 覆盖标题、`--color` 改颜色、`--no-pdf` 跳过 PDF、
+`--results-dir` 覆盖结果根目录（默认 `results/quantitative_baseline/`）。
+
+库函数同样可用：`plot_evolution_curves(label, seeds, ...)` 返回输出路径。
 
 ---
 

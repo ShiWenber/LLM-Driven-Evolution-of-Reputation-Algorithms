@@ -82,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
     instrument(V2EvolutionaryPopulation, "_select_and_reproduce_fermi", "fermi_reproduction")
     instrument(V2EvolutionaryPopulation, "_validate_code", "strategy_validation")
     instrument(V2EvolutionaryPopulation, "_make_agent", "strategy_compile_instantiate")
-    instrument(DonorGame, "play_round", "game_round")
+    instrument(DonorGame, "play_interaction", "game_interaction")
     instrument(DonorGame, "distribute_observations_and_self_judgments", "observation_distribution")
 
     cli_args = [

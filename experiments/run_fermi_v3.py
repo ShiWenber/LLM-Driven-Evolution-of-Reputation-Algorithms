@@ -17,9 +17,12 @@ from pathlib import Path
 
 from experiments.config.load_env import get_api_key, get_base_url, get_model
 from experiments.evolution_log import (
+    F_CONFIG_FITNESS_WINDOW_FRACTION,
+    F_CONFIG_OBSERVATION_SCHEDULE,
     evolution_json_path, load_evolution_json, run_dir, write_evolution_json,
 )
 from experiments.v2_quantitative.population import V2EvolutionaryPopulation
+from experiments.v2_quantitative.game import OBSERVATION_SCHEDULE
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "results" / "quantitative_baseline"
@@ -62,8 +65,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--target-interactions", type=int, default=1000,
                         help="Target PD interactions per generation.")
-    parser.add_argument("--population-size", type=int, default=15,
-                        help="Population size.")
+    parser.add_argument(
+        "--fitness-window-fraction", type=float, default=0.2,
+        help=(
+            "Share of each generation's joint actions whose payoffs count "
+            "toward selection fitness; the earlier interactions are burn-in. "
+            "Floored to whole rounds. Pass 0 (or a negative value) to count "
+            "every interaction."
+        ),
+    )
+    parser.add_argument(
+        "--population-size", type=int, default=15,
+        help="Population size."
+    )
     parser.add_argument("--updates-per-gen", type=int, default=None,
                         help="Distinct Fermi learners per generation; defaults to population size.")
     parser.add_argument(
@@ -151,6 +165,7 @@ def run_one_seed(args: argparse.Namespace, seed: int, label: str, out_root: Path
         pop = V2EvolutionaryPopulation(
             population_size=args.population_size,
             target_interactions_per_gen=args.target_interactions,
+            fitness_window_fraction=args.fitness_window_fraction,
             benefit=args.benefit,
             cost=args.cost,
             observability=args.observability,
@@ -219,6 +234,23 @@ def _resume_source_path(value: str | Path) -> Path:
     return path / "evolutionary.json" if path.is_dir() else path
 
 
+def _require_async_protocol(cfg: dict, label: str) -> None:
+    """Refuse to continue a log recorded under a different protocol.
+
+    The framework implements asynchronous observation delivery only. A log
+    written under the earlier synchronous protocol cannot be continued into it:
+    the offspring would be evaluated under different information dynamics than
+    their parents, silently mixing two protocols inside one lineage.
+    """
+    recorded = cfg.get(F_CONFIG_OBSERVATION_SCHEDULE, "synchronous")
+    if recorded != OBSERVATION_SCHEDULE:
+        raise ValueError(
+            f"{label} was recorded under the {recorded!r} observation protocol, "
+            f"but this framework implements only {OBSERVATION_SCHEDULE!r}. "
+            "Start a new run rather than resuming this log."
+        )
+
+
 def run_one_resume(
     args: argparse.Namespace,
     source: str | Path,
@@ -229,6 +261,7 @@ def run_one_resume(
     source_path = _resume_source_path(source)
     previous = load_evolution_json(source_path)
     cfg = previous["config"]
+    _require_async_protocol(cfg, str(source_path))
     seed = int(cfg["seed"])
     out_path = evolution_json_path(out_root, label, seed)
     if out_path.resolve() == source_path.resolve():
@@ -265,7 +298,7 @@ def run_one_resume(
             population_size=int(cfg["population_size"]),
             num_rounds_per_gen=int(cfg.get("num_rounds_per_gen", 30)),
             target_interactions_per_gen=cfg.get("target_interactions_per_gen"),
-            fitness_window_interactions=cfg.get("fitness_window_interactions", 200),
+            fitness_window_fraction=cfg.get(F_CONFIG_FITNESS_WINDOW_FRACTION),
             benefit=float(cfg.get("benefit", 3.0)),
             cost=float(cfg.get("cost", 1.0)),
             num_generations=len(previous["trajectory"]) + args.additional_gens,
@@ -439,6 +472,10 @@ def run_resume_cli(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
         cfg = data["config"]
         if cfg.get("use_baseline") or cfg.get("learning_method", "fermi") != "fermi":
             parser.error(f"resume currently requires a Fermi LLM log: {path}")
+        try:
+            _require_async_protocol(cfg, str(path))
+        except ValueError as exc:
+            parser.error(str(exc))
 
     out_root = Path(args.output_root)
     out_root.mkdir(parents=True, exist_ok=True)
@@ -544,6 +581,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"  provider: {provider}, model: {get_model(provider, args.model)}", flush=True)
     print(f"  num_gens: {args.gens}, target_interactions: {args.target_interactions}", flush=True)
+    print(f"  fitness_window_fraction: {args.fitness_window_fraction}", flush=True)
     print(f"  learning_method: {args.learning_method}", flush=True)
     if args.learning_method == "fermi":
         print(f"  Z-like: mu={args.mutation_rate}, beta={args.fermi_beta}, updates_per_gen={args.updates_per_gen}", flush=True)
@@ -585,6 +623,7 @@ def main(argv: list[str] | None = None) -> int:
                 "label": label,
                 "num_gens": args.gens,
                 "target_interactions_per_gen": args.target_interactions,
+                "fitness_window_fraction": args.fitness_window_fraction,
                 "scheme": args.learning_method,
                 "provider": provider,
                 "model": get_model(provider, args.model),

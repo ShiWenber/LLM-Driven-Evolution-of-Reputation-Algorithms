@@ -2,7 +2,7 @@
 
 WHY THIS EXISTS
 ---------------
-The imitation sweep in ``run_n100_invasion_count_sweep`` reads the *frequency*
+The imitation sweep in ``run_invasion`` reads the *frequency*
 of a strategy after a fixed number of generations. That is a finite-time
 transient of a deterministic imitation process, and the manuscript already
 states the consequence: it "cannot measure fixation probability or establish
@@ -67,7 +67,7 @@ from experiments.v2_quantitative.baselines import BASELINES
 
 from ..paths import quantitative_results_dir
 from .core import NORMS, Competitor, EvolvedSource, write_json_atomic
-from .run_n100_invasion_count_sweep import load_representative_from_path
+from .run_invasion import load_representative_from_path
 
 
 DEFAULT_BURN_IN = 10_000

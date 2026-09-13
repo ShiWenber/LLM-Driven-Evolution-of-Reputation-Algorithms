@@ -1,5 +1,34 @@
 # 入侵 runner 去冗余重构方案
 
+> 状态：⛔ **已被取代（2026-09-11）**。冗余已按下文诊断的理由消除，但采用的不是
+> 本文建议的"保留三个 runner + 抽出声明式 `GridSweep`"，而是**合并为单一入口**
+> `experiments/analysis/invasion/run_invasion.py`。
+>
+> 为什么换方案：本文的诊断是对的（三个 runner 的 `main()` 编排几乎全是复制粘贴），
+> 但把编排参数化仍会保留三份"描述自己的网格"。进一步检查发现**三个 flavour 的差异
+> 可以完全消掉**——norm 就是一个 `BASELINES[norm]` 的 `EvolvedSource`，于是
+> "候选 vs norm"与"候选 vs 任意策略"变成同一件事的两种参数，连 `kind` 分支
+> （`Competitor.create` 里的 `if kind == KIND_NORM`）都不再需要。
+> 实测：同一个复制器（采纳 model 的完整身份）在 norm 模式下与旧实现结果**逐位相同**
+> （0 mismatch），而在策略对策略模式下修复了旧复制器的身份错配 bug。
+>
+> 最终结构：
+>
+> ```
+> experiments/analysis/invasion/
+> ├── core.py                        # 统一原语；norm_source()；一个复制器 + 一个对局循环
+> ├── run_invasion.py                # ★ 唯一引擎 + 唯一 CLI（--norms / --residents）
+> ├── run_n100_invasion_count_sweep.py  # 弃用 shim（~80 行，转调 run_invasion）
+> ├── run_n100_invasion_custom_code.py  # 弃用 shim
+> ├── run_pairwise_invasion.py          # 弃用 shim
+> └── run_fixation_benchmark.py      # 独立方法（Schmid ρ），未受影响
+> ```
+>
+> 旧入口点、旧路径布局、旧 summary schema 均保持可读（`legacy_result_paths` /
+> `_norm_groups`），已验证能命中真实归档结果、无需重跑。
+>
+> 以下为原始方案，保留作为诊断记录。
+
 > 目标：消除 `run_n100_invasion_count_sweep.py` / `run_n100_invasion_custom_code.py` /
 > `run_pairwise_invasion.py` 三者的重复，且**行为完全不变**。
 > 状态：方案（未实施）。测量数据见文末「附录 A：冗余测量」。
@@ -26,7 +55,7 @@
 | R4 | `sha256(...).hexdigest()` | 三文件共 **7 处**；`pairwise` 已包成 `_sha()` | — |
 
 另外 argparse 的 `--norms/--invader-counts/--seeds/--generations/--interactions/
---fitness-interactions/--workers/--force/--action-error/--observation-error`
+--fitness-window-fraction/--workers/--force/--action-error/--observation-error`
 十个参数定义 + 三项校验，在三处重复。
 
 ---
@@ -138,7 +167,7 @@ with ProcessPoolExecutor(max_workers=args.workers) as pool:
 新增 `tests/test_invasion_golden.py`，用**极小参数**固定随机种子并断言精确值：
 
 ```python
-SMALL = dict(generations=2, interactions=20, fitness_interactions=5, seeds=[0])
+SMALL = dict(generations=2, interactions=20, fitness_window_fraction=0.25, seeds=[0])
 
 def test_norm_sweep_golden(tmp_path):
     """固定 seed 下 final_invader_frequency 必须逐位可复现。"""

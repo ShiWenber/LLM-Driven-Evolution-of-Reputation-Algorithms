@@ -42,8 +42,11 @@ def test_neutral_homogeneous_population_cooperates(name,p):
     agents=[QuantitativeAgent(i,code,V2StrategyExecutor(code)) for i in range(12)]
     game=DonorGame(12,observability='partial',observability_p=p,seed=87)
     game.setup_population(agents)
-    for _ in range(20):
-        game.play_round(); game.distribute_observations_and_self_judgments()
+    # One pair plays per interaction, so draw enough of them that every agent
+    # acts (and is judged) many times; 120 matches the old 20-round sweep.
+    for _ in range(120):
+        game.distribute_observations_and_self_judgments(
+            game.play_interaction()['interactions'])
     assert all(a.cooperation_rate==1. for a in agents)
 
 def test_discrimination_justified_defection_and_forgiveness():
@@ -74,7 +77,7 @@ def test_symmetric_cooperation_counts_both_players(seed):
     agents=[QuantitativeAgent(i,get_baseline(name),V2StrategyExecutor(get_baseline(name)))
             for i,name in enumerate(('ALLC','ALLD'))]
     scenario=ReputationPrisonersDilemmaScenario(population_size=2,benefit=2,cost=1,
-        observability='full',observability_p=1,fitness_window_interactions=1,num_rounds_per_gen=1)
+        observability='full',observability_p=1,fitness_window_fraction=None,num_rounds_per_gen=1)
     result=scenario.evaluate(agents,generation_seed=seed,num_rounds=1)
     assert result.cooperation_rate_mean==0.5
     assert result.payoffs==(-1.,2.)

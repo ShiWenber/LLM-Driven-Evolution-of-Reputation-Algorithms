@@ -25,7 +25,7 @@ def population():
     pop.cost = 1.0
     pop.observability = "full"
     pop.observability_p = 1.0
-    pop.fitness_window_interactions = 10
+    pop.fitness_window_fraction = 0.1
     return pop
 
 

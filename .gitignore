@@ -87,7 +87,10 @@ verify_draft_sync.py
 # ---- Experiment logs / results: LOCAL ONLY, never uploaded ----
 results/
 tmp/
+logs/
 results/.analysis_cache/
 
 # DSH project state (skills, per-project harness data)
 .dsh/
+inferface_focus/
+docs/research_doc

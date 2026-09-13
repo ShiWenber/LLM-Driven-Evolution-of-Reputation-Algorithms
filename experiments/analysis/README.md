@@ -7,27 +7,19 @@
 
 以后判断演化策略是否优于 Leading Eight，统一使用
 [`STRATEGY_SUPERIORITY_STANDARD.md`](STRATEGY_SUPERIORITY_STANDARD.md)。该协议
-预先固定扰动网格、筛选与确认种子、收益保持率、置信区间、双向入侵门槛以及允许
-使用的结论措辞，禁止看完结果后更换指标。
+预先固定扰动网格、筛选与确认种子、双向支配门槛以及允许使用的结论措辞，
+禁止看完结果后更换指标。
 
 ## 操作流程（SOP）
 
 两个关注点分离的**可执行标准流程**：
 
 - **演化运行本身的可视化 / 聚类 / 谱系** → 仓库根 [`ANALYSIS_SOP.md`](../../ANALYSIS_SOP.md)
-- **主导策略 vs Leading Eight 的双向入侵扫描** → 仓库根 [`INVASION_SOP.md`](../../INVASION_SOP.md)
+- **主导策略 vs Leading Eight 的入侵扫描** → 仓库根 [`INVASION_SOP.md`](../../INVASION_SOP.md)
 
 > 二者的公共前置是 `V2EvolutionaryPopulation` 的 schema-v4 演化结果；
-> 入侵扫描（`INVASION_SOP.md`）额外依赖 `invasion/run_n100_invasion_count_sweep.py`，
+> 入侵扫描（`INVASION_SOP.md`）额外依赖 `invasion/run_invasion.py`，
 > 宿主种群恒为 100，与演化时的种群规模无关。
-
-```powershell
-# 10-seed screening
-uv run run-perturbation-robustness --workers 12
-
-# Version-1.0 confirmation seeds
-uv run run-perturbation-robustness --seeds 100 101 102 103 104 105 106 107 108 109 110 111 112 113 114 115 116 117 118 119 120 121 122 123 124 125 126 127 128 129 --output results/quantitative_baseline/robustness/agent-type1_seed4_confirmation --workers 12
-```
 
 ---
 
@@ -128,6 +120,12 @@ uv run run-perturbation-robustness --seeds 100 101 102 103 104 105 106 107 108 1
   以及生成的 PNG/GIF/MP4 路径和文件元数据。后续可用 `run_id` 关联
   `clustering_runs`、`cluster_assignments`、`generation_cluster_stats` 和
   `analysis_artifacts`，进行跨实验分析。
+- **产物二进制不入库**：PNG/GIF/MP4 始终留在文件系统上，`analysis_artifacts`
+  只索引其绝对路径、字节数和 SHA-256 内容指纹（`content_sha256`）。用
+  `experiments/analysis/verify_artifacts.py` 校验「索引 ↔ 文件」是否仍然一致：
+  该命令会区分 `ok` / `missing`（文件已删）/ `size_mismatch` / `hash_mismatch`
+  （内容被改写），任一异常时以退出码 1 结束，便于挂到 CI。历史记录可用
+  `--backfill` 补算指纹（文件已删除的记录保留 NULL，不会被删除）。
 - 高层 `cluster_strategies`：跨全部世代拟合一次全局 Code embedding + K-means；
   使用中心化 PCA 投影，使每代策略落在同一个二维平面。
 - `clustering/cluster_cli.py` 只是消费上述原语的 CLI
@@ -183,17 +181,35 @@ uv run run-perturbation-robustness --seeds 100 101 102 103 104 105 106 107 108 1
 ```text
 experiments/analysis/
 ├── __init__.py              # 轻量 facade（无副作用，不 eager 导入重依赖）
+├── paths.py                 # 路径解析辅助（仅给 CLI 提供便利默认值）
+├── make_figures.py          # 结果聚合（CSV/markdown 表）+ 旧论文图生成
 ├── plot_lineage.py          # 演化树可视化（matplotlib）
+├── plot_evolution_curves.py # 每 seed 合作率曲线 + 均值 ± 1 SD 带
+├── plot_observability_comparison.py     # 可观测率 p × agent type 跨条件对比
 ├── plot_strategy_clusters.py    # 最终代策略 SVD 散点图
 ├── plot_strategy_cluster_evolution.py  # 世代堆叠柱状图 + PCA 动图
-├── make_figures.py
-├── plot_agent2_schmid_invasion.py
-├── plot_evolution_curves.py
+├── plot_strategy_dendrogram.py  # 策略层次聚类树状图（Ward 合并高度）
+├── plot_cross_experiment_clusters.py   # 跨实验全局聚类（可直比视图）
+├── plot_agent2_schmid_invasion.py      # agent2 Schmid 入侵存档图（336 runs，含两个 orderings）
+├── plot_n100_invasion_count_sweep.py   # ★ 入侵图 A：候选 vs 规范 norm（INVASION_SOP §4b）
+├── plot_pairwise_invasion.py           # ★ 入侵图 B：策略对策略 + 支配阈值矩阵（INVASION_SOP §4c）
+├── plot_fixation_benchmark.py          # 收益差曲线 d(k) + 固定概率 ρ vs neutral（稳定性判据）
 ├── clustering/              # 可复用聚类原语（sklearn，无 matplotlib）
 │   ├── io.py                # 解析 evolutionary.json → 世代 population
 │   ├── pipeline.py          # embedding / cluster_codes / LLM naming / cluster_strategies
 │   ├── cli_args.py          # 各聚类入口共用的命令行参数
 │   └── cluster_cli.py       # 最终代聚类 CLI（消费 pipeline）
+├── invasion/                # 入侵扫描（宿主恒 N=100）
+│   ├── core.py              # 统一引擎：协议常量 + 单代对局 + 复制器（无 matplotlib）
+│   ├── run_invasion.py      # ★ 唯一 runner（--norms 规范模式 / --residents 策略对策略）
+│   ├── run_n100_invasion_count_sweep.py  # 弃用 shim → run_invasion
+│   ├── run_n100_invasion_custom_code.py  # 弃用 shim → run_invasion
+│   ├── run_pairwise_invasion.py          # 弃用 shim → run_invasion
+│   └── run_fixation_benchmark.py         # 固定概率 ρ（与模仿扫描相互独立）
+├── consensus/               # 逐目标私人声誉矩阵热图
+│   ├── core.py              # 单代重放 + 数值一致指标（无 matplotlib）
+│   ├── plot_private_reputation_matrix.py     # 声誉矩阵 + 两两分歧矩阵热图
+│   └── README.md            # 读图方法、指标定义、限制
 └── lineage/                 # 纯分析包（零 matplotlib 依赖）
     ├── __init__.py          # 仅惰性暴露 build_lineage_tree（PEP 562 __getattr__）
     └── build.py             # 谱系树数据构建（纯逻辑）
@@ -203,7 +219,19 @@ experiments/analysis/
 
 - `clustering/`：**可复用聚类原语 + 聚类 CLI**，不引入 matplotlib。
 - `lineage/`：**谱系数据构建**，不引入 matplotlib。
-- `analysis/plot_*.py`：**画图职责**，消费 `clustering` / `lineage` 的接口。
+- `consensus/`：**逐目标声誉矩阵热图**，`core.py` 不引入 matplotlib。
+  `core.py` 只做两件事：重放一代得到私有声誉矩阵，以及算**数值一致**指标
+  （`mean|a-b|` / ICC(2,1) / 观察者偏移分解）。
+  **符号/排序指标对"每人一个固定宽严偏移"完全免疫**，而演化种群恰恰是这种形态，
+  所以只保留数值层。热图把原始矩阵画出来，是这些标量的 ground truth。
+- `analysis/plot_*.py`：**画图职责**，消费 `clustering` / `lineage` / `consensus` 的接口。
+- `analysis/plot_n100_invasion_count_sweep.py` ⟷ `analysis/plot_pairwise_invasion.py`：
+  **两张入侵图，服务两种实验模式，不要混用**。前者画 `--norms` 扫描（每 source 一列、
+  每 norm 一条曲线，且带 `population_size==100` / `selection` / 完整性三项校验）；
+  后者画 `--residents A>B` 扫描（每个无序对一个子图、两个方向各一条曲线，
+  并额外输出支配阈值矩阵，**不做任何 schema 校验**）。
+  两者读的 summary 结构相同（`groups[一级][二级][count]`），交叉使用不报错但语义错位。
+  选择依据见 `INVASION_SOP.md` §4.0 对照表；详细分工与陷阱见该文 §4b / §4c。
 - `analysis/__init__.py`：轻量 facade，`import experiments.analysis` 零副作用。
 
 ---
@@ -240,8 +268,7 @@ experiments/analysis/
 - `origin` 枚举：`initial` / `imitate` / `independent_init` / `mutate`
   （对应 `ORIGIN_*` 常量）。
 - `config.agent_type` 规范值只能是 `"agent-type1"` 或 `"agent-type2"`
-  （`AGENT_TYPES`）；读取历史数据时仍接受旧别名 `"v2"` / `"v3"`
-  （`AGENT_TYPES_LEGACY`）。
+  （`AGENT_TYPES`）；旧别名 `"v2"` / `"v3"` 已不再接受。
 - 增加字段不破坏 reader（reader 用 `.get`）；删除或**重命名**字段必须
   递增 `SCHEMA_VERSION` 并同步更新迁移感知的 reader。
 - `evolution_json_path()` 的目录约定也可经 `analysis.paths.run_dir()` /
@@ -283,7 +310,29 @@ uv run python -m experiments.analysis.lineage.build \
 # 演化树可视化
 uv run python -m experiments.analysis.plot_lineage \
   --json results/.../evolutionary.json
+
+# 逐目标声誉矩阵热图（每个 run 一列）
+uv run python -m experiments.analysis.consensus.plot_private_reputation_matrix \
+  --source N16v2_s0=results/.../evolutionary.json \
+  --source N16v2_s1=results/.../evolutionary.json \
+  --seed 0 --interactions 1000
+
+# 入侵图 A：候选 vs 规范 norm（--norms 模式的 summary）
+uv run python -m experiments.analysis.plot_n100_invasion_count_sweep \
+  --summary results/quantitative_baseline/invasion/<RUN_DIR>/summary.json \
+  --output README.assets/<RUN_DIR>.png
+
+# 入侵图 B：策略对策略（--residents A>B 模式的 summary）
+# 不给 --pairs = 全部无序对；给出了 = 只画这些有向对
+uv run python -m experiments.analysis.plot_pairwise_invasion \
+  --summary results/quantitative_baseline/invasion/<PAIRWISE_RUN_DIR>/summary.json \
+  --output README.assets/<PAIRWISE_RUN_DIR>.png \
+  --pairs A>B --pairs A>C
 ```
+
+> 入侵图 A/B 的选择与陷阱（交叉使用不报错但语义错位）见
+> [`INVASION_SOP.md`](../../INVASION_SOP.md) §4.0 / §4b / §4c。
+> 注意 A 的 `--summary`/`--output` 有默认值，B 的两个都是**必填**。
 
 ### 7.3 库 API
 

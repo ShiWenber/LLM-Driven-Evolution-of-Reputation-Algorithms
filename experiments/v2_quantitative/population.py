@@ -50,6 +50,8 @@ from ..evolution_log import (
     F_CONFIG_TARGET_INTERACTIONS_PER_GEN, F_CONFIG_TOURNAMENT_SIZE,
     F_CONFIG_UPDATES_PER_GEN, F_CONFIG_USE_BASELINE,
     F_CONFIG_INITIAL_REPUTATION, F_CONFIG_LLM_CONCURRENCY,
+    F_CONFIG_FITNESS_WINDOW_FRACTION,
+    F_CONFIG_OBSERVATION_SCHEDULE,
 )
 from .agent import INITIAL_REPUTATION, QuantitativeAgent
 from .agent_full import (
@@ -70,6 +72,7 @@ from .evolution_architecture import (
     ReputationPrisonersDilemmaScenario,
     TournamentEvolutionRule,
 )
+from .game import OBSERVATION_SCHEDULE
 from .prompts import (
     INIT_PROMPT_V2, MUTATION_PROMPT_V2, SMUTATION_PROMPT_V2,
     DELIBERATE_MUTATION_PROMPT_V2,
@@ -162,23 +165,22 @@ class V2EvolutionaryPopulation:
         # target_interactions_per_gen: if set (and > 0), overrides
         # num_rounds_per_gen at construction time so the caller can
         # think in terms of total PD games per gen rather than
-        # rounds. Computed as ceil(target / (population_size // 2));
-        # with N=16 we get 8 pairs per round, so target=1000 ->
-        # 125 rounds = 1000 games. The LLM call count is governed
-        # separately by num_eliminate (5/gen) and does NOT scale
-        # with rounds, so going from 30 -> 125 rounds is ~4.17x
-        # more game time but the same ~5 LLM calls per gen.
+        # rounds. One pair plays per interaction, so target=1000 ->
+        # 1000 interactions. The LLM call count is governed separately
+        # by num_eliminate (5/gen) and does NOT scale with the
+        # interaction count, so more game time means the same ~5 LLM
+        # calls per gen.
         target_interactions_per_gen: Optional[int] = None,
-        # fitness_window_interactions: if set, only the LAST
-        # `fitness_window_interactions` joint actions of each gen
-        # contribute to an agent's fitness for selection; the
-        # earlier `total - window` are treated as burn-in (still
-        # played so observe() / reputations evolve, but their
-        # payoffs don't count). Default 200: with
-        # target_interactions_per_gen=1000, the first 800 are
-        # burn-in. Pass None (or 0) to use all interactions
-        # (legacy behavior).
-        fitness_window_interactions: Optional[int] = 200,
+        # fitness_window_fraction: the share of each generation's joint
+        # actions whose payoffs count toward an agent's fitness for
+        # selection; the earlier `total - window` interactions are
+        # treated as burn-in (still played so observe() / reputations
+        # evolve, but their payoffs don't count). Default 0.2 (the last
+        # 20% of the generation). The share is floored to a whole number
+        # of rounds so every agent contributes exactly the same number of
+        # counted interactions. Pass None (or 0) to count every
+        # interaction (no burn-in).
+        fitness_window_fraction: Optional[float] = 0.2,
         benefit: float = 3.0,
         cost: float = 1.0,
         # Total number of generations to evolve. Injected into the
@@ -263,19 +265,31 @@ class V2EvolutionaryPopulation:
                 f"got {learning_method!r}"
             )
         self.population_size = population_size
-        # If caller asked for a target interaction count, derive the
-        # round count from it. With N=16 we get 8 pairs/round; with
-        # N=20 we get 10 pairs/round. The result is rounded UP so we
-        # hit the target (slightly over is fine; missing it by
-        # hundreds would be a measurement bug).
+        # The framework implements one protocol: a single randomly drawn pair
+        # per interaction, with its observations delivered immediately. The
+        # value is recorded in each result config so archives stay
+        # self-describing.
+        self.observation_schedule = OBSERVATION_SCHEDULE
+        # If the caller asked for a target interaction count, that IS the step
+        # count, because exactly one pair plays per interaction.
         if target_interactions_per_gen is not None and target_interactions_per_gen > 0:
-            pairs_per_round = max(1, population_size // 2)
-            num_rounds_per_gen = (
-                (target_interactions_per_gen + pairs_per_round - 1) // pairs_per_round
-            )
+            num_rounds_per_gen = target_interactions_per_gen
         self.num_rounds_per_gen = num_rounds_per_gen
         self.target_interactions_per_gen = target_interactions_per_gen
-        self.fitness_window_interactions = fitness_window_interactions
+        if fitness_window_fraction is not None:
+            try:
+                fitness_window_fraction = float(fitness_window_fraction)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "fitness_window_fraction must be a number in [0, 1] or "
+                    f"None, got {fitness_window_fraction!r}"
+                ) from exc
+            if not 0.0 <= fitness_window_fraction <= 1.0:
+                raise ValueError(
+                    "fitness_window_fraction must be in [0, 1] or None, "
+                    f"got {fitness_window_fraction!r}"
+                )
+        self.fitness_window_fraction = fitness_window_fraction
         self.benefit = benefit
         self.cost = cost
         self.num_generations = num_generations
@@ -315,7 +329,7 @@ class V2EvolutionaryPopulation:
             cost=cost,
             observability=observability,
             observability_p=observability_p,
-            fitness_window_interactions=fitness_window_interactions,
+            fitness_window_fraction=fitness_window_fraction,
             num_rounds_per_gen=num_rounds_per_gen,
         )
         # A supplied rule bypasses the legacy string dispatcher.  The default
@@ -378,13 +392,12 @@ class V2EvolutionaryPopulation:
         # the override took effect (and so log analysis can grep for
         # it).
         if target_interactions_per_gen is not None and target_interactions_per_gen > 0:
-            pairs_per_round = max(1, population_size // 2)
-            actual = self.num_rounds_per_gen * pairs_per_round
+            actual = self.num_rounds_per_gen
             print(
                 f"  [V2EvolutionaryPopulation] target_interactions_per_gen="
                 f"{target_interactions_per_gen} -> num_rounds_per_gen="
                 f"{self.num_rounds_per_gen} -> {actual} games/gen "
-                f"(N={population_size}, pairs={pairs_per_round})"
+                f"(N={population_size}, one pair per interaction)"
             )
 
     def _new_lineage(
@@ -582,8 +595,8 @@ class V2EvolutionaryPopulation:
                 cost=self.cost,
                 observability=getattr(self, "observability", "full"),
                 observability_p=getattr(self, "observability_p", 1.0),
-                fitness_window_interactions=getattr(
-                    self, "fitness_window_interactions", 200
+                fitness_window_fraction=getattr(
+                    self, "fitness_window_fraction", 0.2
                 ),
                 num_rounds_per_gen=self.num_rounds_per_gen,
             )
@@ -786,7 +799,8 @@ class V2EvolutionaryPopulation:
             F_CONFIG_NUM_GENERATIONS: num_generations,
             F_CONFIG_TARGET_INTERACTIONS_PER_GEN:
                 self.target_interactions_per_gen,
-            "fitness_window_interactions": self.fitness_window_interactions,
+            F_CONFIG_FITNESS_WINDOW_FRACTION: self.fitness_window_fraction,
+            F_CONFIG_OBSERVATION_SCHEDULE: self.observation_schedule,
             F_CONFIG_LLM_THINKING: self.llm_thinking,
             F_CONFIG_LLM_MAX_TOKENS: self._llm_max_tokens,
             F_CONFIG_LEARNING_METHOD: self.learning_method,

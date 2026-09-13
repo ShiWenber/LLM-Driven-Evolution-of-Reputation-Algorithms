@@ -65,7 +65,7 @@ def test_random_and_deliberate_prompts_have_different_objectives():
 def test_type1_fermi_prompts_include_full_rules_without_cold_start_constraint(mode):
     prompt = _capture_prompt("agent-type1", mode, 3.0)
     assert "OVERALL GAME RULES" in prompt
-    assert "randomly partitioned" in prompt
+    assert "drawn uniformly at random" in prompt
     assert "(C, C): 1 each" in prompt
     assert "Every third-party agent observes" in prompt
     assert "cold-start" not in prompt.lower()
@@ -96,7 +96,7 @@ def test_type1_init_and_ordinary_mutation_requests_share_overall_rules():
     expected_cd = f"defector +{population.benefit:g}"
     for prompt in captured:
         assert "OVERALL GAME RULES" in prompt
-        assert "randomly partitioned" in prompt
+        assert "drawn uniformly at random" in prompt
         assert expected_cc in prompt
         assert expected_cd in prompt
         assert "cold-start" not in prompt.lower()
@@ -115,7 +115,7 @@ def test_task_templates_do_not_repeat_authoritative_game_rules():
         prompts.DELIBERATE_MUTATION_PROMPT_V3,
     )
     repeated_rule_phrases = (
-        "randomly partitioned",
+        "drawn uniformly at random",
         "rounds per generation",
         "pair payoffs",
         "third-party agent observes",

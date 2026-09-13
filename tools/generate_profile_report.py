@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 from pathlib import Path
 
 
@@ -72,11 +71,9 @@ def main() -> None:
 
     population_size = int(config.get("population_size", 0) or 0)
     target_interactions = int(config.get("target_interactions", 0) or 0)
-    pairs_per_round = max(1, population_size // 2)
-    games_per_generation = (
-        math.ceil(target_interactions / pairs_per_round) * pairs_per_round
-        if target_interactions > 0 else 0
-    )
+    # One pair plays per interaction, so the target is already the exact
+    # per-generation game count (no rounding to a whole matching).
+    games_per_generation = target_interactions if target_interactions > 0 else 0
     lineage_events = evolution.get("lineage_events", [])
     fermi_jobs = sum(event.get("origin") != "initial" for event in lineage_events)
     expected_jobs = population_size + fermi_jobs if lineage_events else len(llm_events)

@@ -24,27 +24,38 @@ from experiments.v2_quantitative.baselines import BASELINES
 # The invasion experiment has no direction dimension
 # ---------------------------------------------------------------------------
 def test_invasion_sweep_has_no_direction_dimension():
-    """One frequency axis only: no direction constant and no direction in paths."""
+    """One frequency axis only: no direction constant, and no direction in paths."""
     from experiments.analysis.invasion import core as invasion_core
-    from experiments.analysis.invasion import run_n100_invasion_count_sweep as sweep
+    from experiments.analysis.invasion import run_invasion as uni
 
     assert not hasattr(invasion_core, "DIRECTION")
-    path = sweep.result_path(Path("/out"), "label", "L1", 5, 0)
-    assert path == Path("/out/label/L1/n5_seed0/invasion.json")
+    path = uni.result_path(Path("/out"), "label", "L1", 5, 0)
+    # The resident is folded into the path so distinct pairs cannot collide.
+    assert path == Path("/out/label/invades_L1/n5_seed0/invasion.json")
 
 
 def test_archived_results_are_still_found_for_cache_reuse(tmp_path):
-    """Archived direction-nested results stay readable so re-runs hit the cache."""
-    from experiments.analysis.invasion import run_n100_invasion_count_sweep as sweep
+    """Archived layouts stay readable so re-runs hit the cache."""
+    from experiments.analysis.invasion import run_invasion as uni
 
-    archived = sweep.archived_result_path(tmp_path, "label", "L1", 5, 0)
-    archived.parent.mkdir(parents=True)
-    archived.write_text("{}", encoding="utf-8")
+    # Old flat sweep layout: <label>/<norm>/n<k>_seed<s>/
+    flat = tmp_path / "label" / "L1" / "n5_seed0" / "invasion.json"
+    flat.parent.mkdir(parents=True)
+    flat.write_text("{}", encoding="utf-8")
+    assert uni.existing_result_path(tmp_path, "label", "L1", 5, 0) == flat
 
-    assert sweep.existing_result_path(tmp_path, "label", "L1", 5, 0) == archived
-    # With no archived copy the current flat path is used.
-    assert sweep.existing_result_path(tmp_path, "label", "L2", 5, 0) == (
-        sweep.result_path(tmp_path, "label", "L2", 5, 0)
+    # Old direction-nested layout: <label>/<direction>/<norm>/n<k>_seed<s>/
+    nested = (
+        tmp_path / "label" / uni.ARCHIVED_DIRECTION_LABEL / "L2"
+        / "n5_seed0" / "invasion.json"
+    )
+    nested.parent.mkdir(parents=True)
+    nested.write_text("{}", encoding="utf-8")
+    assert uni.existing_result_path(tmp_path, "label", "L2", 5, 0) == nested
+
+    # With no archived copy the current path is used.
+    assert uni.existing_result_path(tmp_path, "label", "L3", 5, 0) == (
+        uni.result_path(tmp_path, "label", "L3", 5, 0)
     )
 
 

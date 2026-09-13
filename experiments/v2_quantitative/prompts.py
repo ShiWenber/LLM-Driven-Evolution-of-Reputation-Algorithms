@@ -7,28 +7,30 @@ interface, and output constraints.
 
 OVERALL_GAME_RULES_PROMPT = """OVERALL GAME RULES (these rules apply to the task below):
   - The simulation has {population_size} agents and runs for
-    {num_generations} generations, with {num_rounds_per_gen} rounds in each
-    generation.
-  - In every round, agents are randomly partitioned into {num_pairs} pairs.
-    If the population size is odd, one agent sits out. Each paired agent acts
-    exactly once in that round.
-  - The two agents in a pair choose simultaneously, using only information
-    available before that round's observations. Each chooses either
-    "cooperate" or "defect".
+    {num_generations} generations.
+  - Each generation consists of {num_rounds_per_gen} interactions. In every
+    interaction, two agents are drawn uniformly at random from the population.
+    Draws are independent, so the same agents may interact repeatedly; each of
+    the two acts exactly once in that interaction.
+  - The two agents in an interaction choose simultaneously, using only
+    information available before that interaction's observations. Each chooses
+    either "cooperate" or "defect".
+  - Observations are delivered immediately after each interaction, before the
+    next one is drawn. Both players always receive their own interaction as an
+    observation.
   - Cooperating costs the actor {cost:g} and gives the partner {benefit:g};
     defecting costs and gives nothing. Therefore the pair payoffs are:
       (C, C): {cc_payoff:g} each
       (C, D): cooperator -{cost:g}, defector +{benefit:g}
-      (D, C): symmetric
+      (D, C): defector +{benefit:g}, cooperator -{cost:g}
       (D, D): 0 each
-  - After every pair in a round has acted, observations from that round are
-    delivered. Both players always receive their own interaction as an
-    observation. Third-party observation is configured as follows:
+  - Third-party observation is configured as follows:
     {observability_description}
   - Fitness is realized cumulative Prisoner's Dilemma payoff
     {fitness_window_description}. Selection evaluates generated code by this
     realized fitness; the LLM must not assume that a proposed change succeeds.
 """
+
 
 TYPE1_INTERFACE_PROMPT = """The strategy must define both functions:
 
@@ -93,7 +95,8 @@ The code must define exactly one class named `LLMAgent`.
 """
 
 INIT_PROMPT_V2 = (
-    "Design one reputation-based strategy for the simulation.\n\n"
+    "Design one reputation-based strategy for the simulation. The strategy's\n"
+    "goal is to maximize its own cumulative payoff;"
     + TYPE1_INTERFACE_PROMPT + "\n" + TYPE1_OUTPUT_PROMPT
 )
 
