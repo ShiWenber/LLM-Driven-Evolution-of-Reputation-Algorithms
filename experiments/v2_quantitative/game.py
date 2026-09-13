@@ -183,9 +183,9 @@ class DonorGame:
         # Payoffs (indexed by list position)
         self.payoffs = [0.0] * population_size
         # Per-interaction payoff deltas (one entry per joint action played
-        # in the current generation). Used to compute windowed fitness
-        # (= sum of payoffs over only the last N interactions, treating
-        # the first M as burn-in).
+        # in the current generation). Together with the interaction log,
+        # these provide the payoff numerator and action-count denominator
+        # of windowed per-action fitness.
         self._interaction_deltas: List[List[float]] = []
         # Fitness window: the share of the generation's joint actions whose
         # payoffs count toward selection fitness. ``None``, ``0``, or any

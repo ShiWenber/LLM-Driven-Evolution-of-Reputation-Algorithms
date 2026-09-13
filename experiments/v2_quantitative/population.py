@@ -175,20 +175,16 @@ class V2EvolutionaryPopulation:
         # interaction count, so more game time means the same ~5 LLM
         # calls per gen.
         target_interactions_per_gen: Optional[int] = None,
-        # fitness_window_fraction: the share of each generation's joint
-        # actions whose payoffs count toward an agent's fitness for
-        # selection; the earlier `total - window` interactions are
-        # treated as burn-in (still played so observe() / reputations
-        # evolve, but their payoffs don't count). Default 0.2 (the last
-        # 20% of the generation). The share is floored to a whole number
-        # of rounds so every agent contributes exactly the same number of
-        # counted interactions. Pass None (or 0) to count every
-        # interaction (no burn-in).
+        # fitness_window_fraction: the trailing share of joint actions
+        # used for selection. Fitness is each agent's payoff in that
+        # window divided by its own action count there; earlier actions
+        # are burn-in but still update reputations. Default 0.2. Pass
+        # None (or 0) to use the whole generation.
         fitness_window_fraction: Optional[float] = 0.2,
         benefit: float = 3.0,
         cost: float = 1.0,
-        # Noise. Both default to 0.0 (a noise-free run behaves exactly as
-        # before these knobs existed, including its RNG stream).
+        # Noise. Both default to 0.0; with no noise these knobs consume
+        # no RNG draws and do not change game action trajectories.
         #   action_error_probability      -- execution error ("trembling
         #     hand"): each player's intended action is mis-executed with
         #     this probability. The executed action drives payoffs and is
