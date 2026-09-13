@@ -25,6 +25,8 @@ class EvaluationResult:
     cooperation_rate_mean: float
     n_interactions: int
     round_num: int
+    # Historical field name retained for callers; values are selection fitness
+    # (mean payoff per counted action), not cumulative payoff totals.
     payoffs: tuple[float, ...]
 
     def as_dict(self) -> dict[str, object]:
@@ -139,6 +141,8 @@ class ReputationPrisonersDilemmaScenario:
         observability_p: float,
         fitness_window_fraction: float | None,
         num_rounds_per_gen: int,
+        action_error_probability: float = 0.0,
+        observation_error_probability: float = 0.0,
     ) -> None:
         self.population_size = population_size
         self.benefit = benefit
@@ -147,6 +151,10 @@ class ReputationPrisonersDilemmaScenario:
         self.observability_p = observability_p
         self.fitness_window_fraction = fitness_window_fraction
         self.num_rounds_per_gen = num_rounds_per_gen
+        # Execution / perception noise. Recorded here so the whole generation
+        # is played under one noise model; see ``DonorGame`` for the semantics.
+        self.action_error_probability = action_error_probability
+        self.observation_error_probability = observation_error_probability
 
     def evaluate(
         self,
@@ -163,6 +171,8 @@ class ReputationPrisonersDilemmaScenario:
             observability_p=self.observability_p,
             seed=generation_seed,
             fitness_window_fraction=self.fitness_window_fraction,
+            action_error_probability=self.action_error_probability,
+            observation_error_probability=self.observation_error_probability,
         )
         game.setup_population(list(agents))
         for agent in agents:
@@ -225,12 +235,14 @@ class ReputationPrisonersDilemmaScenario:
         window = resolve_fitness_window(fraction, total_interactions, 1)
         if window is None:
             fitness_window_description = (
-                "summed over all joint interactions in the generation"
+                "total payoff divided by the agent's actual number of actions "
+                "over all interactions in the generation"
             )
         else:
             burn_in = total_interactions - window
             fitness_window_description = (
-                f"summed over only the final {window} of the generation's "
+                "total payoff divided by the agent's actual number of actions "
+                f"in only the final {window} of the generation's "
                 f"{total_interactions} joint interactions (the final "
                 f"{float(fraction):.0%} of the generation); the first {burn_in} "
                 "interactions are burn-in (they still affect observations and "

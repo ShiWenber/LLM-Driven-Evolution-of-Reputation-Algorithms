@@ -26,9 +26,9 @@ OVERALL_GAME_RULES_PROMPT = """OVERALL GAME RULES (these rules apply to the task
       (D, D): 0 each
   - Third-party observation is configured as follows:
     {observability_description}
-  - Fitness is realized cumulative Prisoner's Dilemma payoff
+  - Fitness is realized Prisoner's Dilemma payoff per action:
     {fitness_window_description}. Selection evaluates generated code by this
-    realized fitness; the LLM must not assume that a proposed change succeeds.
+    realized average; the LLM must not assume that a proposed change succeeds.
 """
 
 
@@ -96,7 +96,7 @@ The code must define exactly one class named `LLMAgent`.
 
 INIT_PROMPT_V2 = (
     "Design one reputation-based strategy for the simulation. The strategy's\n"
-    "goal is to maximize its own cumulative payoff;"
+    "goal is to maximize its own average payoff per action;"
     + TYPE1_INTERFACE_PROMPT + "\n" + TYPE1_OUTPUT_PROMPT
 )
 

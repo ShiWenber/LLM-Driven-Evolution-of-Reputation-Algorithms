@@ -52,6 +52,7 @@ from ..evolution_log import (
     F_CONFIG_INITIAL_REPUTATION, F_CONFIG_LLM_CONCURRENCY,
     F_CONFIG_FITNESS_WINDOW_FRACTION,
     F_CONFIG_OBSERVATION_SCHEDULE,
+    F_CONFIG_ACTION_ERROR, F_CONFIG_OBSERVATION_ERROR,
 )
 from .agent import INITIAL_REPUTATION, QuantitativeAgent
 from .agent_full import (
@@ -80,6 +81,9 @@ from .prompts import (
     DELIBERATE_MUTATION_PROMPT_V3,
 )
 from .baselines import get_baseline, BASELINE_VERSION
+
+
+FITNESS_METRIC = "mean_payoff_per_counted_action_v1"
 
 
 # Fallback strategies when LLM fails (type 1: two top-level functions)
@@ -183,6 +187,20 @@ class V2EvolutionaryPopulation:
         fitness_window_fraction: Optional[float] = 0.2,
         benefit: float = 3.0,
         cost: float = 1.0,
+        # Noise. Both default to 0.0 (a noise-free run behaves exactly as
+        # before these knobs existed, including its RNG stream).
+        #   action_error_probability      -- execution error ("trembling
+        #     hand"): each player's intended action is mis-executed with
+        #     this probability. The executed action drives payoffs and is
+        #     what every observer sees.
+        #   observation_error_probability -- perception error: each observer
+        #     independently misperceives each action it rates with this
+        #     probability, corrupting the reputation written (never the
+        #     payoff paid). Participants rating themselves are observers too.
+        # Names deliberately match the invasion / fixation / consensus
+        # config keys so evolution and measurement share one noise model.
+        action_error_probability: float = 0.0,
+        observation_error_probability: float = 0.0,
         # Total number of generations to evolve. Injected into the
         # prompt templates so the LLM sees the real simulation
         # horizon (default 30 matches the legacy hardcoded text).
@@ -292,6 +310,16 @@ class V2EvolutionaryPopulation:
         self.fitness_window_fraction = fitness_window_fraction
         self.benefit = benefit
         self.cost = cost
+        for noise_name, noise_value in (
+            ("action_error_probability", action_error_probability),
+            ("observation_error_probability", observation_error_probability),
+        ):
+            if not 0.0 <= float(noise_value) <= 1.0:
+                raise ValueError(
+                    f"{noise_name} must be in [0, 1], got {noise_value!r}"
+                )
+        self.action_error_probability = float(action_error_probability)
+        self.observation_error_probability = float(observation_error_probability)
         self.num_generations = num_generations
         self.observability = observability
         self.observability_p = observability_p
@@ -331,6 +359,8 @@ class V2EvolutionaryPopulation:
             observability_p=observability_p,
             fitness_window_fraction=fitness_window_fraction,
             num_rounds_per_gen=num_rounds_per_gen,
+            action_error_probability=self.action_error_probability,
+            observation_error_probability=self.observation_error_probability,
         )
         # A supplied rule bypasses the legacy string dispatcher.  The default
         # paths retain their public methods for backward compatibility.
@@ -599,6 +629,12 @@ class V2EvolutionaryPopulation:
                     self, "fitness_window_fraction", 0.2
                 ),
                 num_rounds_per_gen=self.num_rounds_per_gen,
+                action_error_probability=getattr(
+                    self, "action_error_probability", 0.0
+                ),
+                observation_error_probability=getattr(
+                    self, "observation_error_probability", 0.0
+                ),
             )
             self.game_scenario = scenario
         return scenario
@@ -782,6 +818,11 @@ class V2EvolutionaryPopulation:
         custom_rule = getattr(self, "evolution_rule", None)
         fields = {
             "cooperation_metric": "both_players_per_joint_action_v1",
+            "fitness_metric": (
+                FITNESS_METRIC
+                if isinstance(scenario, ReputationPrisonersDilemmaScenario)
+                else "scenario_defined"
+            ),
             "baseline_version": BASELINE_VERSION if self.use_baseline else None,
             F_CONFIG_AGENT_TYPE: self.agent_type,
             F_CONFIG_POPULATION_SIZE: self.population_size,
@@ -801,6 +842,11 @@ class V2EvolutionaryPopulation:
                 self.target_interactions_per_gen,
             F_CONFIG_FITNESS_WINDOW_FRACTION: self.fitness_window_fraction,
             F_CONFIG_OBSERVATION_SCHEDULE: self.observation_schedule,
+            # Noise actually in force for this run. Read back by --resume-json,
+            # so a continued lineage keeps the noise level it started under
+            # instead of silently turning noise off mid-run.
+            F_CONFIG_ACTION_ERROR: self.action_error_probability,
+            F_CONFIG_OBSERVATION_ERROR: self.observation_error_probability,
             F_CONFIG_LLM_THINKING: self.llm_thinking,
             F_CONFIG_LLM_MAX_TOKENS: self._llm_max_tokens,
             F_CONFIG_LEARNING_METHOD: self.learning_method,
@@ -901,6 +947,14 @@ class V2EvolutionaryPopulation:
             raise ValueError("resume currently supports non-baseline Fermi runs only")
 
         old_config = previous.get("config", {})
+        if isinstance(self._get_game_scenario(), ReputationPrisonersDilemmaScenario):
+            old_metric = old_config.get("fitness_metric")
+            if old_metric != FITNESS_METRIC:
+                raise ValueError(
+                    "cannot resume a run with a different fitness metric: "
+                    f"checkpoint has {old_metric or 'legacy cumulative payoff'}, "
+                    f"current metric is {FITNESS_METRIC}; start a new run"
+                )
         last_gen = self._restore_from_evolution_log(previous)
         old_fallback_init = int(old_config.get(F_CONFIG_FALLBACK_INIT_COUNT, 0))
         old_fallback_mutation = int(old_config.get(F_CONFIG_FALLBACK_MUTATION_COUNT, 0))
@@ -946,7 +1000,7 @@ class V2EvolutionaryPopulation:
             ))
             print(
                 f"  Gen {gen}: coop={stats['cooperation_rate_mean']:.3f}, "
-                f"fitness_mean={sum(stats['payoffs'])/max(1,len(stats['payoffs'])):.1f}"
+                f"fitness_mean={sum(stats['payoffs'])/max(1,len(stats['payoffs'])):.3f}"
             )
 
         resume_meta = {
@@ -998,7 +1052,7 @@ class V2EvolutionaryPopulation:
                 population=[self._agent_record(a) for a in self.agents],
             ))
             print(f"  Gen {gen}: coop={stats['cooperation_rate_mean']:.3f}, "
-                  f"fitness_mean={sum(stats['payoffs'])/max(1,len(stats['payoffs'])):.1f}")
+                  f"fitness_mean={sum(stats['payoffs'])/max(1,len(stats['payoffs'])):.3f}")
             # Selection + mutation (only for LLM mode)
             if not self.use_baseline and gen < num_generations - 1:
                 self._select_and_reproduce_by_method(next_gen=gen + 1)

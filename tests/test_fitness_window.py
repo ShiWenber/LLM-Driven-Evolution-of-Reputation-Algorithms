@@ -1,22 +1,24 @@
-"""Unit tests for the fractional fitness window (window share / burn-in).
-
-The window used to be an absolute interaction count; it is now a share of the
-generation that is floored to a whole number of rounds, so every agent's
-counted-interaction count stays identical under the engine's perfect matching.
-"""
+"""Unit tests for the fractional fitness window and per-action fitness."""
 from __future__ import annotations
 
+from experiments.v2_quantitative.agent import QuantitativeAgent
+from experiments.v2_quantitative.evolution_architecture import (
+    ReputationPrisonersDilemmaScenario,
+)
+from experiments.v2_quantitative.executor import V2StrategyExecutor
 from experiments.v2_quantitative.game import DonorGame, resolve_fitness_window
+from experiments.v2_quantitative.population import FALLBACK_STRATEGIES
 
 
 class _Stub:
     """Minimal always-cooperate agent surface for engine-level tests."""
 
-    def __init__(self, agent_id):
+    def __init__(self, agent_id, cooperates=True):
         self.agent_id = agent_id
+        self.cooperates = cooperates
 
     def choose(self, other, round_num=None):
-        return True
+        return self.cooperates
 
     def record_donation(self, *args, **kwargs):
         pass
@@ -88,26 +90,23 @@ def test_windowed_fitness_matches_hand_computation():
     window = resolve_fitness_window(fraction, len(game._global_log), 1)
     assert window == 5
 
-    # Every counted interaction nets its two always-cooperating players
-    # benefit - cost, so an agent's windowed fitness is just how often it was
-    # drawn inside the window.
-    expected = [0.0] * population_size
+    # Every counted action has payoff benefit - cost, regardless of how often
+    # the agent was drawn. Undrawn agents have no denominator and score 0.
+    counts = [0] * population_size
     for interaction in game._global_log[-window:]:
         for role in ("donor", "recipient"):
-            expected[interaction[role]] += 2.0 - 1.0
+            counts[interaction[role]] += 1
+    expected = [1.0 if count else 0.0 for count in counts]
     assert game.get_windowed_fitness() == expected
 
     # Draws are independent, so the window does NOT touch every agent equally;
     # that is the defining difference from a perfect-matching schedule.
     assert window < len(game._global_log)
-    counts = [0] * population_size
-    for interaction in game._global_log[-window:]:
-        counts[interaction["donor"]] += 1
-        counts[interaction["recipient"]] += 1
     assert sum(counts) == 2 * window
+    assert len(set(counts)) > 1
 
 
-def test_windowed_fitness_equals_payoffs_when_disabled():
+def test_disabled_window_divides_total_payoff_by_total_actions():
     game = DonorGame(
         population_size=4,
         benefit=2.0,
@@ -117,4 +116,63 @@ def test_windowed_fitness_equals_payoffs_when_disabled():
     )
     game.setup_population([_Stub(i) for i in range(4)])
     _play(game, 5)
-    assert game.get_windowed_fitness() == list(game.payoffs)
+    counts = [0] * 4
+    for interaction in game._global_log:
+        counts[interaction["donor"]] += 1
+        counts[interaction["recipient"]] += 1
+    assert game.get_windowed_fitness() == [
+        game.payoffs[i] / counts[i] if counts[i] else 0.0 for i in range(4)
+    ]
+
+
+def test_window_uses_matching_payoff_and_action_count_slices():
+    game = DonorGame(
+        population_size=4, benefit=3.0, cost=1.0,
+        fitness_window_fraction=0.5, seed=3,
+    )
+    game.setup_population([_Stub(i, cooperates=(i != 0)) for i in range(4)])
+    _play(game, 20)
+    window = resolve_fitness_window(0.5, 20, 1)
+    totals = [0.0] * 4
+    counts = [0] * 4
+    for delta, interaction in zip(
+        game._interaction_deltas[-window:], game._global_log[-window:]
+    ):
+        for pos, payoff in enumerate(delta):
+            totals[pos] += payoff
+        counts[interaction["donor"]] += 1
+        counts[interaction["recipient"]] += 1
+    assert game.get_windowed_fitness() == [
+        totals[i] / counts[i] if counts[i] else 0.0 for i in range(4)
+    ]
+    assert any(
+        total != 0.0 and total != fitness
+        for total, fitness in zip(totals, game.get_windowed_fitness())
+    )
+
+
+def test_no_counted_actions_has_zero_fitness():
+    game = DonorGame(population_size=3, fitness_window_fraction=0.5, seed=0)
+    game.setup_population([_Stub(i) for i in range(3)])
+    assert game.get_windowed_fitness() == [0.0, 0.0, 0.0]
+
+
+def test_scenario_passes_average_payoff_to_evolution():
+    source = FALLBACK_STRATEGIES[0]
+    agents = [
+        QuantitativeAgent(i, source, executor=V2StrategyExecutor(source))
+        for i in range(8)
+    ]
+    scenario = ReputationPrisonersDilemmaScenario(
+        population_size=8, benefit=3.0, cost=1.0,
+        observability="full", observability_p=1.0,
+        fitness_window_fraction=0.2, num_rounds_per_gen=100,
+    )
+    result = scenario.evaluate(agents, generation_seed=0, num_rounds=100)
+    assert result.n_interactions == 100
+    assert result.payoffs == (2.0,) * 8
+    assert "divided by the agent's actual number of actions" in (
+        scenario.overall_rules_prompt(
+            num_generations=2, initial_reputation=0.0
+        )
+    )

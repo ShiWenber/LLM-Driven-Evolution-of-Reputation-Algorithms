@@ -169,6 +169,17 @@ F_CONFIG_LLM_CONCURRENCY = "llm_concurrency"
 F_CONFIG_INITIAL_REPUTATION = "initial_reputation"
 F_CONFIG_FALLBACK_INIT_COUNT = "fallback_init_count"
 F_CONFIG_FALLBACK_MUTATION_COUNT = "fallback_mutation_count"
+# Noise. These two names are load-bearing: the invasion / fixation /
+# consensus analysis modules (experiments/analysis/**) already write them
+# into their own config blocks, and the paper compares evolution results
+# against those measurements. Reusing the exact keys is what keeps the two
+# families of runs directly comparable.
+#   action_error_probability      -- execution error ("trembling hand"):
+#                                    the intended action may be mis-executed.
+#   observation_error_probability -- perception/assessment error: an observer
+#                                    may misperceive an action when judging it.
+F_CONFIG_ACTION_ERROR = "action_error_probability"
+F_CONFIG_OBSERVATION_ERROR = "observation_error_probability"
 
 # Minimal keys every config record must carry (schema_version is stamped by
 # make_config / build_evolution_results).

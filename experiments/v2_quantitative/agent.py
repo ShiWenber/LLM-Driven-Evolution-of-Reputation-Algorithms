@@ -65,8 +65,14 @@ class QuantitativeAgent:
         return self.reputations.get(self.agent_id, INITIAL_REPUTATION)
 
     def update_reputation(self, other_id: int, new_rep: float):
-        new_rep = max(-1.0, min(1.0, float(new_rep)))
-        self.reputations[other_id] = new_rep
+        # Fast path. Executor output is already a float clamped to [-1, 1], so
+        # the common case needs neither the float() conversion nor the
+        # min()/max() pair -- and this is the hottest clamp in the sweep, called
+        # millions of times per run.
+        if type(new_rep) is float and -1.0 <= new_rep <= 1.0:
+            self.reputations[other_id] = new_rep
+            return
+        self.reputations[other_id] = max(-1.0, min(1.0, float(new_rep)))
 
     def update_self_reputation(self, new_rep: float):
         self.update_reputation(self.agent_id, new_rep)
@@ -82,20 +88,15 @@ class QuantitativeAgent:
     ) -> float:
         """Call strategy observe for ONE target player A; returns A's new reputation.
 
-        The executor exposes the 5-arg one-directional observe(); returns
-        a single clamped float.
+        The executor exposes the 5-arg one-directional observe(); it already
+        coerces the strategy's return value to a float and clamps it, and it
+        swallows strategy exceptions itself, so this wrapper adds neither.
         """
-        if self._executor is None:
+        executor = self._executor
+        if executor is None:
             return A_rep
         try:
-            out = self._executor.observe(
-                A_rep=A_rep,
-                A_action=A_action,
-                B_rep=B_rep,
-                B_action=B_action,
-                my_rep=my_rep,
-            )
-            return float(out)
+            return executor.observe(A_rep, A_action, B_rep, B_action, my_rep)
         except Exception:  # noqa: BLE001 - strategy code may raise arbitrary exceptions
             return A_rep
 
@@ -112,22 +113,19 @@ class QuantitativeAgent:
         target player), so the framework calls it twice — once for the
         donor and once for the recipient with the roles swapped.
         """
-        my_rep = self.get_self_reputation()
-        A_rep = self.get_reputation(donor_id)
-        B_rep = self.get_reputation(recipient_id)
+        # Read all three pre-interaction values up front. The dict is aliased
+        # rather than reached through the getters because this method runs once
+        # per (observer, interaction) -- hundreds of millions of times per
+        # sweep -- and the getters are pure lookups.
+        reputations = self.reputations
+        my_rep = reputations.get(self.agent_id, INITIAL_REPUTATION)
+        A_rep = reputations.get(donor_id, INITIAL_REPUTATION)
+        B_rep = reputations.get(recipient_id, INITIAL_REPUTATION)
         new_A_rep = self._call_observe(
-            A_rep=A_rep,
-            A_action=donor_action,
-            B_rep=B_rep,
-            B_action=recipient_action,
-            my_rep=my_rep,
+            A_rep, donor_action, B_rep, recipient_action, my_rep
         )
         new_B_rep = self._call_observe(
-            A_rep=B_rep,
-            A_action=recipient_action,
-            B_rep=A_rep,
-            B_action=donor_action,
-            my_rep=my_rep,
+            B_rep, recipient_action, A_rep, donor_action, my_rep
         )
         self.update_reputation(donor_id, new_A_rep)
         self.update_reputation(recipient_id, new_B_rep)

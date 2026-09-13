@@ -4,10 +4,9 @@ Game model:
   - N agents (15 in the default config), each is its own instance with a
     private reputation matrix `reputations: dict[int, float]` keyed by
     agent_id, with `reputations[agent_id]` being the self-rating.
-  - Each round: form a random matching of the N agents into pairs (one
-    agent sits out if N is odd).
-  - In each pair, BOTH players simultaneously choose C (cooperate) or
-    D (defect). Payoffs (benefit=3, cost=1):
+  - Each interaction: draw one random pair of agents independently of earlier
+    draws. Both players simultaneously choose C (cooperate) or D (defect).
+    Payoffs (benefit=3, cost=1):
       (C, C) -> each +2
       (C, D) -> C gets -1, D gets +3
       (D, C) -> symmetric
@@ -19,6 +18,21 @@ Game model:
     observe_and_judge internally calls its observe() function TWICE
     (once judging the donor, once judging the recipient with roles
     swapped) because the strategy's observe is one-directional.
+
+Noise (both default off, both drawn from ``self.rng`` so a generation stays
+reproducible from its seed):
+
+  - ``action_error_probability`` -- execution error. Each player's intended
+    action is flipped with this probability before it is used. The executed
+    action drives the payoffs and is what everyone observes, so a slip is a
+    real defection/cooperation.
+  - ``observation_error_probability`` -- perception error. Every observer,
+    the two participants included, independently misperceives each action it
+    sees with this probability before rating it. Payoffs are untouched, so a
+    slip here produces a wrong reputation rather than a wrong outcome.
+
+Both are the same two knobs the invasion / fixation / consensus measurement
+modules expose, so evolution and measurement can be run under one noise model.
 
 Backward-compatible with the type1 QuantitativeAgent interface
 (choose / observe_and_judge / self_judge / record_donation / etc.).
@@ -33,6 +47,30 @@ from .agent import QuantitativeAgent
 # The one observation protocol the framework implements. Recorded in result
 # configs so an archived run states which protocol produced it.
 OBSERVATION_SCHEDULE = "asynchronous"
+
+
+def flip_action(action: str, rng, probability: float) -> str:
+    """Return ``action``, flipped to the other PD action with ``probability``.
+
+    The single definition of an action flip in the engine. Both noise sources
+    below are expressed through it, so execution and perception noise cannot
+    drift apart:
+
+      * execution error (``action_error_probability``) is one flip applied to
+        the *executed* action, drawn once per player per interaction;
+      * perception error (``observation_error_probability``) is a flip applied
+        to the *observed* action, drawn once per observer per seen action.
+
+    ``probability <= 0`` returns ``action`` without touching ``rng``. That is
+    what keeps a noise-free run's random stream bit-identical to the stream of
+    a run recorded before this feature existed, so archived results stay
+    reproducible.
+    """
+    if probability <= 0.0:
+        return action
+    if rng.random() >= probability:
+        return action
+    return "defect" if action == "cooperate" else "cooperate"
 
 
 def resolve_fitness_window(
@@ -51,8 +89,9 @@ def resolve_fitness_window(
     any value outside ``(0, 1)`` disables the window.
 
     The window is floored to a whole number of rounds (never fewer than one).
-    Because each round forms a perfect matching, aligning to whole rounds is
-    what keeps every agent's counted interaction count identical.
+    Matching-based callers can pass their pairs-per-round count to preserve
+    round boundaries; this asynchronous game passes 1 and does not assume
+    equal per-agent exposure.
     """
     if fraction is None:
         return None
@@ -116,6 +155,8 @@ class DonorGame:
         observability_p: float = 1.0,
         seed: int = 42,
         fitness_window_fraction: Optional[float] = 0.2,
+        action_error_probability: float = 0.0,
+        observation_error_probability: float = 0.0,
     ):
         self.population_size = population_size
         self.benefit = benefit
@@ -124,6 +165,17 @@ class DonorGame:
         self.observability_p = observability_p
         self.seed = seed
         self.rng = random.Random(seed)
+        # Execution error: the probability that a player's intended action is
+        # mis-executed. The executed action -- not the intention -- determines
+        # the payoffs and is what every observer (including the actor itself)
+        # sees, so an execution slip is a real event.
+        self.action_error_probability = action_error_probability
+        # Perception error: the probability that an observer misperceives an
+        # action while judging it. Each observer draws independently for each
+        # action it sees, so two observers can disagree about the same
+        # interaction. A slip here corrupts a rating; it does not change what
+        # was actually played or paid.
+        self.observation_error_probability = observation_error_probability
         self.agents: List[QuantitativeAgent] = []
         self.round_num = 0
         # Global log of every joint action in the current generation
@@ -164,8 +216,28 @@ class DonorGame:
         # information leaks between the two calls.
         action1 = donor.choose(recipient_id, round_num=self.round_num)
         action2 = recipient.choose(donor_id, round_num=self.round_num)
-        donor.record_donation(recipient_id, action1, self.round_num)
-        recipient.record_donation(donor_id, action2, self.round_num)
+        # Execution error. The flip is applied to the intended action, before
+        # anything else consumes it, so the executed action is what pays out,
+        # what the pair's own members observe about each other, and what the
+        # strategy's own bookkeeping records. Note the flips are drawn for
+        # BOTH players before either is used, so a slip by one player cannot
+        # shift the other's draw.
+        donor_action_str = flip_action(
+            "cooperate" if action1 else "defect",
+            self.rng,
+            self.action_error_probability,
+        )
+        recipient_action_str = flip_action(
+            "cooperate" if action2 else "defect",
+            self.rng,
+            self.action_error_probability,
+        )
+        donor.record_donation(
+            recipient_id, donor_action_str == "cooperate", self.round_num
+        )
+        recipient.record_donation(
+            donor_id, recipient_action_str == "cooperate", self.round_num
+        )
         # Payoffs (use list position to index the payoffs array)
         donor_pos = self.agents.index(donor)
         recipient_pos = self.agents.index(recipient)
@@ -174,16 +246,18 @@ class DonorGame:
         # in this pair have nonzero entries.
         pair_delta = [0.0] * self.population_size
         # Payoffs come from the shared matrix definition so the engine and
-        # the fixed-strategy measurements cannot disagree about it.
+        # the fixed-strategy measurements cannot disagree about it. They use
+        # the EXECUTED actions: a trembling hand that turns cooperation into
+        # defection really does defraud the partner.
         donor_payoff = prisoners_dilemma_payoff(
-            my_cooperates=action1,
-            other_cooperates=action2,
+            my_cooperates=donor_action_str == "cooperate",
+            other_cooperates=recipient_action_str == "cooperate",
             benefit=self.benefit,
             cost=self.cost,
         )
         recipient_payoff = prisoners_dilemma_payoff(
-            my_cooperates=action2,
-            other_cooperates=action1,
+            my_cooperates=recipient_action_str == "cooperate",
+            other_cooperates=donor_action_str == "cooperate",
             benefit=self.benefit,
             cost=self.cost,
         )
@@ -197,8 +271,6 @@ class DonorGame:
         self._interaction_deltas.append(pair_delta)
         # Store actions as STRING so the strategy code can
         # pattern-match on them in observe().
-        donor_action_str = "cooperate" if action1 else "defect"
-        recipient_action_str = "cooperate" if action2 else "defect"
         interaction = {
             "round": self.round_num,
             "donor": donor_id,
@@ -231,6 +303,17 @@ class DonorGame:
             "interactions": [self._play_pair(donor_id, recipient_id)],
         }
 
+    def _perceive(self, action: str) -> str:
+        """The action one observer perceives, subject to perception error.
+
+        Called once per observer per action, with fresh draws, so observers
+        misperceive independently -- two agents can walk away from the same
+        interaction with opposite views of what happened.
+        """
+        return flip_action(
+            action, self.rng, self.observation_error_probability
+        )
+
     def distribute_observations_and_self_judgments(
         self, interactions: Optional[List[Dict]] = None,
     ):
@@ -247,6 +330,13 @@ class DonorGame:
           - recipient observes (self-judgment) via self_judge
           - for each third-party observer (per observability rules),
             call observer.observe_and_judge(...)
+
+        Perception error is applied here, at delivery time: every observer --
+        the two participants included -- sees each action through its own
+        independent flip. That is why a self-judgment can be wrong about the
+        agent's own action, matching the invasion / fixation measurements in
+        ``experiments/analysis`` where the observer loop also covers the two
+        participants.
         """
         recent = self._round_interactions(interactions)
         # Step 1: self-judgments for BOTH players in each pair
@@ -255,17 +345,18 @@ class DonorGame:
             recipient_id = inter["recipient"]
             donor_action = inter["donor_action"]
             recipient_action = inter["recipient_action"]
-            # Donor's self-judgment
+            # Donor's self-judgment. Each of the two actions it perceives is
+            # flipped independently; this does not mutate the logged actions.
             self._agent_by_id[donor_id].self_judge(
-                donor_action=donor_action,
+                donor_action=self._perceive(donor_action),
                 recipient_id=recipient_id,
-                recipient_action=recipient_action,
+                recipient_action=self._perceive(recipient_action),
             )
             # Recipient's self-judgment (in PD, recipient also acts)
             self._agent_by_id[recipient_id].self_judge(
-                donor_action=recipient_action,
+                donor_action=self._perceive(recipient_action),
                 recipient_id=donor_id,
-                recipient_action=donor_action,
+                recipient_action=self._perceive(donor_action),
             )
         # Step 2: distribute third-party observations per observability rules
         if self.observability == "private":
@@ -283,17 +374,17 @@ class DonorGame:
                 if self.observability == "full":
                     self._agent_by_id[obs_id].observe_and_judge(
                         donor_id=donor_id,
-                        donor_action=donor_action,
+                        donor_action=self._perceive(donor_action),
                         recipient_id=recipient_id,
-                        recipient_action=recipient_action,
+                        recipient_action=self._perceive(recipient_action),
                     )
                 elif self.observability.startswith("partial"):
                     if self.rng.random() < self.observability_p:
                         self._agent_by_id[obs_id].observe_and_judge(
                             donor_id=donor_id,
-                            donor_action=donor_action,
+                            donor_action=self._perceive(donor_action),
                             recipient_id=recipient_id,
-                            recipient_action=recipient_action,
+                            recipient_action=self._perceive(recipient_action),
                         )
 
     def _round_interactions(
@@ -344,26 +435,34 @@ class DonorGame:
         }
 
     def get_windowed_fitness(self) -> List[float]:
-        """Return per-agent fitness summed over the windowed tail of the gen.
+        """Return each agent's mean payoff per action in the fitness window.
 
-        Only the last ``resolve_fitness_window(...)`` joint actions count. The
-        earlier ones are burn-in: they were played (so strategies got
-        experience via ``observe()`` and reputations evolved), but their
-        payoffs do not count toward the fitness used for selection.
+        Both the payoff numerator and the action-count denominator use the
+        same trailing joint-action window. Earlier interactions are burn-in:
+        they still affect reputations, but not selection fitness. An agent
+        that was never drawn in the window receives fitness 0.0.
 
-        When the window is disabled or covers the whole generation, every
-        interaction counts and this is equivalent to ``self.payoffs``.
+        Random independent pairing gives agents different exposure counts;
+        dividing by actual actions prevents extra draws alone from raising
+        an otherwise identical strategy's fitness.
         """
         deltas = self._interaction_deltas
         n_total = len(deltas)
-        # One joint action per step, so the window is floored to a whole number
-        # of interactions (i.e. an exact count).
         window = resolve_fitness_window(self.fitness_window_fraction, n_total, 1)
-        if window is None or window >= n_total:
-            return list(self.payoffs)
-        # Sum the deltas of the LAST `window` interactions only.
-        windowed = [0.0] * self.population_size
-        for delta in deltas[-window:]:
+        selected_deltas = deltas if window is None else deltas[-window:]
+        selected_interactions = (
+            self._global_log if window is None else self._global_log[-window:]
+        )
+        payoff_totals = [0.0] * self.population_size
+        action_counts = [0] * self.population_size
+        position_by_id = {agent.agent_id: pos for pos, agent in enumerate(self.agents)}
+        for delta in selected_deltas:
             for pos, d in enumerate(delta):
-                windowed[pos] += d
-        return windowed
+                payoff_totals[pos] += d
+        for interaction in selected_interactions:
+            action_counts[position_by_id[interaction["donor"]]] += 1
+            action_counts[position_by_id[interaction["recipient"]]] += 1
+        return [
+            payoff_totals[pos] / count if count else 0.0
+            for pos, count in enumerate(action_counts)
+        ]

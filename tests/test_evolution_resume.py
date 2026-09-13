@@ -1,9 +1,12 @@
 """Generation-boundary resume tests for Fermi evolution logs."""
 import json
 
+import pytest
+
 from experiments.evolution_log import SCHEMA_VERSION
 from experiments.v2_quantitative.population import (
     FALLBACK_STRATEGIES,
+    FITNESS_METRIC,
     V2EvolutionaryPopulation,
 )
 
@@ -54,6 +57,7 @@ def _old_log():
             "seed": 7,
             "population_size": 2,
             "learning_method": "fermi",
+            "fitness_metric": FITNESS_METRIC,
             "fallback_init_count": 0,
             "fallback_mutation_count": 0,
         },
@@ -96,6 +100,7 @@ def test_resume_transitions_before_first_new_generation_and_preserves_history(mo
     assert [row["generation"] for row in result["trajectory"]] == [0, 1, 2]
     assert len(result["lineage_events"]) == 2
     assert result["config"]["num_generations"] == 3
+    assert result["config"]["fitness_metric"] == FITNESS_METRIC
     assert result["config"]["resume"]["rng_mode"] == "derived_branch"
     assert result["config"]["rng_state_format"] == "python_random_v1"
 
@@ -129,3 +134,10 @@ def test_new_resume_log_uses_saved_rng_checkpoint(monkeypatch):
     assert selected == [3]
     assert [row["generation"] for row in second["trajectory"]] == [0, 1, 2, 3]
     assert second["config"]["resume"]["rng_mode"] == "checkpoint"
+
+
+def test_resume_rejects_legacy_cumulative_fitness():
+    previous = _old_log()
+    del previous["config"]["fitness_metric"]
+    with pytest.raises(ValueError, match="legacy cumulative payoff"):
+        _population().resume_evolution(previous, 1)

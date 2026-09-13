@@ -604,7 +604,7 @@ Common options:
 | `--seed-workers N` | number of seeds | Maximum seed processes; use `1` for sequential execution |
 | `--gens N` | `100` | Number of generations |
 | `--target-interactions N` | `1000` | PD interactions per generation; one randomly drawn pair plays per interaction, with observations delivered immediately |
-| `--fitness-window-fraction F` | `0.2` | Share of each generation's joint actions whose payoffs count toward selection fitness; the earlier interactions are burn-in. Pass `0` to count every interaction |
+| `--fitness-window-fraction F` | `0.2` | Share of joint actions used for selection fitness: each agent's payoff in that window divided by its own action count in the same window. Earlier actions are burn-in; pass `0` to use the whole generation |
 | `--population-size N` | `15` | Population size |
 | `--learning-method {fermi,tournament}` | `fermi` | Learning/selection rule; tournament uses elite retention and tournament-selected survivors |
 | `--updates-per-gen N` | population size | Distinct learners sampled without replacement per generation; must not exceed population size |
@@ -615,6 +615,8 @@ Common options:
 | `--imitation-learning {random,deliberate}` | `random` | Parent-conditioned child generation: an undirected related variation or an explicit attempt to improve using the parent's real fitness |
 | `--benefit F` / `--cost F` | `3.0` / `1.0` | PD payoffs |
 | `--observability S` | `full` | Observability mode |
+| `--action-error P` | `0.0` | Execution error ("trembling hand"): probability that a player's intended action is mis-executed. The executed action drives payoffs and is what every observer sees |
+| `--observation-error P` (alias `--reputation-error`) | `0.0` | Perception/assessment error: probability that an observer misperceives an action while rating it. Corrupts the reputation written, never the payoff paid |
 | `--provider S` | `deepseek` | API provider for key/base-url lookup |
 | `--model S` | provider default | LLM model name |
 | `--llm-thinking` | off | Enable LLM thinking mode |
@@ -624,6 +626,43 @@ Common options:
 | `--dry-run` | off | Validate and print the seed plan without running |
 | `--resume-json PATH...` | off | Continue one or more saved `evolutionary.json` trajectories |
 | `--additional-gens N` | required in resume mode | Number of new evaluated generations appended to each source trajectory |
+
+### Noise in the evolution engine
+
+Two independent noise sources, both off by default. They are the same two knobs
+the invasion / fixation / consensus measurements expose, under the same config
+keys, so an evolution run and its matching measurement sweep can be run under
+one noise model:
+
+```bash
+uv run python -m experiments.run_fermi_v3 --seed 0 --action-error 0.01 --observation-error 0.01
+```
+
+| | `--action-error` | `--observation-error` |
+| --- | --- | --- |
+| Mechanism | A player's intended action is mis-executed | An observer misperceives an action while rating it |
+| Drawn per | Player, per interaction | Observer, per action seen |
+| Affects | Payoffs and every observer's view | The reputation written, and nothing else |
+| Config key | `action_error_probability` | `observation_error_probability` |
+
+Details worth knowing before comparing runs:
+
+- **A self-judgment is fallible.** The two participants are observers too, so an
+  agent can misrate its own action. This matches the invasion / fixation
+  harness, whose observer loop also covers the participants.
+- **Observers disagree.** Each observer draws independently, so two agents can
+  walk away from the same interaction with opposite views of it.
+- **Zero noise does not consume extra random draws.** With both rates at `0.0`,
+  the noise feature leaves the game's random stream unchanged. Selection
+  outcomes can still differ from older runs because fitness is now normalized
+  by each agent's counted actions.
+- **The automatic label carries the level** (`_ae0p01_oe0p01`), using the same
+  suffix convention as the invasion runners, so a noisy run cannot silently
+  overwrite a noise-free run's directory.
+- **Resume inherits the recorded level** from the log's config rather than
+  reading the CLI, so a continued lineage cannot change its noise model
+  mid-run. Only logs already using `mean_payoff_per_counted_action_v1` can be
+  resumed; earlier cumulative-fitness logs require a new evolution run.
 
 ## Continuing evolution from trajectory logs
 

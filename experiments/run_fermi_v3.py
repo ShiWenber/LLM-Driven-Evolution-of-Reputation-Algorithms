@@ -17,7 +17,9 @@ from pathlib import Path
 
 from experiments.config.load_env import get_api_key, get_base_url, get_model
 from experiments.evolution_log import (
+    F_CONFIG_ACTION_ERROR,
     F_CONFIG_FITNESS_WINDOW_FRACTION,
+    F_CONFIG_OBSERVATION_ERROR,
     F_CONFIG_OBSERVATION_SCHEDULE,
     evolution_json_path, load_evolution_json, run_dir, write_evolution_json,
 )
@@ -104,6 +106,31 @@ def build_parser() -> argparse.ArgumentParser:
                         help="PD cooperation benefit.")
     parser.add_argument("--cost", type=float, default=1.0,
                         help="PD cooperation cost.")
+    parser.add_argument(
+        "--action-error",
+        type=float,
+        default=0.0,
+        help=(
+            "Execution error ('trembling hand'): probability that a player's "
+            "intended action is mis-executed. The executed action drives the "
+            "payoffs and is what every observer sees. In [0, 1]; default 0 "
+            "(off). Config key: action_error_probability."
+        ),
+    )
+    parser.add_argument(
+        "--observation-error",
+        "--reputation-error",
+        dest="observation_error",
+        type=float,
+        default=0.0,
+        help=(
+            "Perception/assessment error: probability that an observer "
+            "misperceives an action while rating it. Corrupts the reputation "
+            "written, never the payoff paid; each observer (the two "
+            "participants included) draws independently. In [0, 1]; default 0 "
+            "(off). Config key: observation_error_probability."
+        ),
+    )
     parser.add_argument("--observability", type=str, default="full",
                         help="Observability mode passed to V2EvolutionaryPopulation.")
     parser.add_argument("--observability-p", type=float, default=1.0,
@@ -168,6 +195,8 @@ def run_one_seed(args: argparse.Namespace, seed: int, label: str, out_root: Path
             fitness_window_fraction=args.fitness_window_fraction,
             benefit=args.benefit,
             cost=args.cost,
+            action_error_probability=args.action_error,
+            observation_error_probability=args.observation_error,
             observability=args.observability,
             observability_p=args.observability_p,
             elite_count=args.elite_count,
@@ -232,6 +261,20 @@ def run_one_seed(args: argparse.Namespace, seed: int, label: str, out_root: Path
 def _resume_source_path(value: str | Path) -> Path:
     path = Path(value).resolve()
     return path / "evolutionary.json" if path.is_dir() else path
+
+
+def noise_suffix(action_error: float, observation_error: float) -> str:
+    """Filename suffix describing the noise level, or "" when noise is off.
+
+    Mirrors the naming the invasion / fixation runners use (``ae0p01_oe0p01``)
+    so an evolution run and its matching measurement sweep land on labels that
+    are obviously the same condition. Staying empty at zero noise is what keeps
+    the historical label of a noise-free run unchanged.
+    """
+    if not action_error and not observation_error:
+        return ""
+    stem = f"ae{action_error:g}_oe{observation_error:g}".replace(".", "p")
+    return f"_{stem}"
 
 
 def _require_async_protocol(cfg: dict, label: str) -> None:
@@ -301,6 +344,14 @@ def run_one_resume(
             fitness_window_fraction=cfg.get(F_CONFIG_FITNESS_WINDOW_FRACTION),
             benefit=float(cfg.get("benefit", 3.0)),
             cost=float(cfg.get("cost", 1.0)),
+            # Inherited, never taken from the CLI: the appended generations
+            # continue the same lineage, so they must be played under the same
+            # noise model as the recorded ones. A log written before noise
+            # existed has no such keys and correctly resumes noise-free.
+            action_error_probability=float(cfg.get(F_CONFIG_ACTION_ERROR, 0.0)),
+            observation_error_probability=float(
+                cfg.get(F_CONFIG_OBSERVATION_ERROR, 0.0)
+            ),
             num_generations=len(previous["trajectory"]) + args.additional_gens,
             observability=cfg.get("observability", "full"),
             observability_p=float(cfg.get("observability_p", 1.0)),
@@ -491,7 +542,10 @@ def run_resume_cli(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
         print(
             f"  seed={cfg['seed']}: {len(data['trajectory'])} -> "
             f"{len(data['trajectory']) + args.additional_gens} gens, "
-            f"rng={rng_mode}, source={path}"
+            f"rng={rng_mode}, "
+            f"noise=ae{float(cfg.get(F_CONFIG_ACTION_ERROR, 0.0)):g}"
+            f"/oe{float(cfg.get(F_CONFIG_OBSERVATION_ERROR, 0.0)):g}, "
+            f"source={path}"
         )
     print(f"  output label: {label} (source logs are never overwritten)")
 
@@ -553,6 +607,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--llm-concurrency must be >= 1")
     if args.seed_workers is not None and args.seed_workers < 1:
         parser.error("--seed-workers must be >= 1")
+    for flag, value in (
+        ("--action-error", args.action_error),
+        ("--observation-error", args.observation_error),
+    ):
+        if not 0.0 <= value <= 1.0:
+            parser.error(f"{flag} must be in [0, 1], got {value}")
     if args.resume_json is not None:
         return run_resume_cli(args, parser)
     if args.additional_gens is not None:
@@ -571,6 +631,7 @@ def main(argv: list[str] | None = None) -> int:
     out_root.mkdir(parents=True, exist_ok=True)
     label = args.label or (
         f"LLM_v3_{args.learning_method}_v3_g100_1000inter_learn-{args.imitation_learning}"
+        + noise_suffix(args.action_error, args.observation_error)
     )
 
     effective_seed_workers = min(args.seed_workers or len(seeds), len(seeds))
@@ -582,6 +643,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  provider: {provider}, model: {get_model(provider, args.model)}", flush=True)
     print(f"  num_gens: {args.gens}, target_interactions: {args.target_interactions}", flush=True)
     print(f"  fitness_window_fraction: {args.fitness_window_fraction}", flush=True)
+    print(
+        f"  noise: action_error={args.action_error:g}, "
+        f"observation_error={args.observation_error:g}",
+        flush=True,
+    )
     print(f"  learning_method: {args.learning_method}", flush=True)
     if args.learning_method == "fermi":
         print(f"  Z-like: mu={args.mutation_rate}, beta={args.fermi_beta}, updates_per_gen={args.updates_per_gen}", flush=True)
@@ -624,6 +690,8 @@ def main(argv: list[str] | None = None) -> int:
                 "num_gens": args.gens,
                 "target_interactions_per_gen": args.target_interactions,
                 "fitness_window_fraction": args.fitness_window_fraction,
+                F_CONFIG_ACTION_ERROR: args.action_error,
+                F_CONFIG_OBSERVATION_ERROR: args.observation_error,
                 "scheme": args.learning_method,
                 "provider": provider,
                 "model": get_model(provider, args.model),
