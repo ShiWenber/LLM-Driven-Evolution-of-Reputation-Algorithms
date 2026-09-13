@@ -677,34 +677,20 @@ class V2EvolutionaryPopulation:
         return self._mutate_code(parent_code, parent_fitness) or parent_code
 
     def _llm_init_code(self, preserve_id: int) -> Optional[str]:
-        """Generate and validate code for one independent Fermi update."""
+        """Generate and validate code for one independent Fermi update.
+
+        The μ path: no reference to the donor j is shown to the LLM, so
+        the new strategy is sampled fresh from the LLM's prior over
+        strategies. Contrast with ``_llm_small_mutate_code``, which
+        does show the parent code.
+
+        Returns ``None`` on repeated LLM/validation failure; FALLBACK
+        selection and ``_fallback_mutation_count`` bookkeeping happen in
+        the ordered commit phase (``_fallback_code_for_job``), not here.
+        """
         return self._request_valid_code(
             self._init_prompt(), f"fermi μ-init slot {preserve_id}"
         )
-
-    def _llm_init_one_agent(self, preserve_id: int) -> object:
-        """Fermi μ-path: independent LLM agent generation.
-
-        No reference to the donor j. The new strategy is sampled fresh
-        from the LLM's prior over strategies. Returns a fully built
-        agent (using preserve_id so the slot's id stays stable across
-        the synchronous commit).
-
-        FALLBACK on 3x LLM failure: a deterministic-random strategy
-        (the FALLBACK_CLASS_V3 for agent-type2; a random pick from
-        FALLBACK_STRATEGIES for agent-type1). Bumps
-        _fallback_mutation_count so we can audit run reliability.
-        """
-        code = self._llm_init_code(preserve_id)
-        if code is None:
-            self._fallback_mutation_count += 1
-            print(f"  [fermi μ-init] FALLBACK for slot id={preserve_id}")
-            code = (
-                FALLBACK_CLASS_V3
-                if self.agent_type == "agent-type2"
-                else self.rng.choice(FALLBACK_STRATEGIES)
-            )
-        return self._make_agent(code, preserve_id)
 
     def _llm_small_mutate_code(
         self, parent_code: str, parent_fitness: float, preserve_id: int
