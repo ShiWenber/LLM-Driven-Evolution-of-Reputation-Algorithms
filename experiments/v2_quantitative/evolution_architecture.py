@@ -17,6 +17,7 @@ from ..evolution_log import (
     ORIGIN_MUTATE,
 )
 from .game import DonorGame, resolve_fitness_window
+from .baselines import LEADING_EIGHT
 from .prompts import OVERALL_GAME_RULES_PROMPT
 
 
@@ -56,7 +57,7 @@ class RetainedAgent:
 class OffspringJob:
     ordinal: int
     output_index: int
-    operator: Literal["llm_init", "llm_mutate"]
+    operator: Literal["llm_init", "llm_mutate", "baseline_init"]
     mutation_kind: Literal["full", "small"] | None
     preserve_agent_id: int | None
     parent_id: int | None
@@ -65,6 +66,7 @@ class OffspringJob:
     parent_fitness: float | None
     origin: str
     birth_gen: int
+    baseline_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -320,10 +322,16 @@ class TournamentEvolutionRule:
 class FermiEvolutionRule:
     name = "fermi"
 
-    def __init__(self, *, beta: float, mutation_rate: float, updates_per_gen: int):
+    def __init__(
+        self, *, beta: float, mutation_rate: float, updates_per_gen: int,
+        init_source: str = "llm",
+    ):
+        if init_source not in ("llm", "baseline"):
+            raise ValueError("init_source must be 'llm' or 'baseline'")
         self.beta = beta
         self.mutation_rate = mutation_rate
         self.updates_per_gen = updates_per_gen
+        self.init_source = init_source
 
     def plan(
         self,
@@ -355,8 +363,14 @@ class FermiEvolutionRule:
                 probability = 0.0 if difference < 0 else 1.0
             if rng.random() >= probability:
                 continue
+            baseline_name = None
             if rng.random() < self.mutation_rate:
                 operator = "llm_init"
+                if self.init_source == "baseline":
+                    operator = "baseline_init"
+                    baseline_name = (
+                        "ALLD" if rng.random() < 0.5 else rng.choice(LEADING_EIGHT)
+                    )
                 mutation_kind = None
                 parent_id = None
                 parent_lineage_id = None
@@ -384,6 +398,7 @@ class FermiEvolutionRule:
                     parent_fitness=parent_fitness,
                     origin=origin,
                     birth_gen=next_gen,
+                    baseline_name=baseline_name,
                 )
             )
             updated_indices.add(learner_index)

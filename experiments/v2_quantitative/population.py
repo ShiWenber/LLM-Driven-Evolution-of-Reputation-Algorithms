@@ -83,9 +83,6 @@ from .prompts import (
 from .baselines import get_baseline, BASELINE_VERSION
 
 
-FITNESS_METRIC = "mean_payoff_per_counted_action_v1"
-
-
 # Fallback strategies when LLM fails (type 1: two top-level functions)
 FALLBACK_STRATEGIES = [
     # Always cooperate
@@ -218,13 +215,15 @@ class V2EvolutionaryPopulation:
         #     P(i copies j) = 1 / (1 + exp(-fermi_beta * (phi_j - phi_i)))
         # with phi = per-agent windowed fitness from the just-finished
         # generation. On an accepted copy, probability
-        # mutation_rate_on_adoption selects an independent LLM rewrite;
+        # mutation_rate_on_adoption selects independent initialization
+        # from fermi_init_source (LLM or the weighted baseline pool);
         # otherwise the LLM creates a parent-conditioned child using
         # imitation_learning_mode ("random" or "deliberate"). The actual
         # role-model fitness is included in either parent-conditioned prompt.
         learning_method: str = "fermi",
         fermi_beta: float = 5.0,
         mutation_rate_on_adoption: float = 0.1,
+        fermi_init_source: str = "llm",
         imitation_learning_mode: str = "random",
         updates_per_gen: Optional[int] = None,
         llm_concurrency: Optional[int] = None,
@@ -273,6 +272,12 @@ class V2EvolutionaryPopulation:
                 f"got {imitation_learning_mode!r}"
             )
         learning_method = learning_method.lower()
+        if fermi_init_source not in ("llm", "baseline"):
+            raise ValueError("fermi_init_source must be 'llm' or 'baseline'")
+        if fermi_init_source == "baseline" and (
+            agent_type != "agent-type1" or learning_method != "fermi"
+        ):
+            raise ValueError("baseline initialization requires Fermi and agent-type1")
         if learning_method not in ("fermi", "tournament"):
             raise ValueError(
                 "learning_method must be 'fermi' or 'tournament', "
@@ -325,6 +330,7 @@ class V2EvolutionaryPopulation:
         self.learning_method = learning_method
         self.fermi_beta = fermi_beta
         self.mutation_rate_on_adoption = mutation_rate_on_adoption
+        self.fermi_init_source = fermi_init_source
         self.imitation_learning_mode = imitation_learning_mode
         effective_updates_per_gen = (
             population_size if updates_per_gen is None else updates_per_gen
@@ -440,7 +446,7 @@ class V2EvolutionaryPopulation:
           * "initial"          — gen-0 initialization (root, no parent)
           * "imitate"          — Fermi 1-μ path: small LLM mutation of a
                                  role model (parent = role model slot)
-          * "independent_init" — Fermi μ path: fresh LLM init, no parent
+          * "independent_init" — Fermi μ path: LLM or baseline initialization, no parent
           * "mutate"           — legacy tournament path: mutated copy of a
                                  survivor (parent = survivor slot)
         """
@@ -814,12 +820,11 @@ class V2EvolutionaryPopulation:
         custom_rule = getattr(self, "evolution_rule", None)
         fields = {
             "cooperation_metric": "both_players_per_joint_action_v1",
-            "fitness_metric": (
-                FITNESS_METRIC
-                if isinstance(scenario, ReputationPrisonersDilemmaScenario)
-                else "scenario_defined"
+            "baseline_version": (
+                BASELINE_VERSION
+                if self.use_baseline or self.fermi_init_source == "baseline"
+                else None
             ),
-            "baseline_version": BASELINE_VERSION if self.use_baseline else None,
             F_CONFIG_AGENT_TYPE: self.agent_type,
             F_CONFIG_POPULATION_SIZE: self.population_size,
             F_CONFIG_NUM_ROUNDS_PER_GEN: self.num_rounds_per_gen,
@@ -849,6 +854,7 @@ class V2EvolutionaryPopulation:
             F_CONFIG_FERMI_BETA: self.fermi_beta,
             F_CONFIG_MUTATION_RATE_ON_ADOPTION:
                 self.mutation_rate_on_adoption,
+            "fermi_init_source": self.fermi_init_source,
             F_CONFIG_IMITATION_LEARNING_MODE:
                 self.imitation_learning_mode,
             F_CONFIG_UPDATES_PER_GEN: self.updates_per_gen,
@@ -943,14 +949,6 @@ class V2EvolutionaryPopulation:
             raise ValueError("resume currently supports non-baseline Fermi runs only")
 
         old_config = previous.get("config", {})
-        if isinstance(self._get_game_scenario(), ReputationPrisonersDilemmaScenario):
-            old_metric = old_config.get("fitness_metric")
-            if old_metric != FITNESS_METRIC:
-                raise ValueError(
-                    "cannot resume a run with a different fitness metric: "
-                    f"checkpoint has {old_metric or 'legacy cumulative payoff'}, "
-                    f"current metric is {FITNESS_METRIC}; start a new run"
-                )
         last_gen = self._restore_from_evolution_log(previous)
         old_fallback_init = int(old_config.get(F_CONFIG_FALLBACK_INIT_COUNT, 0))
         old_fallback_mutation = int(old_config.get(F_CONFIG_FALLBACK_MUTATION_COUNT, 0))
@@ -1062,9 +1060,8 @@ class V2EvolutionaryPopulation:
         # code at a high rate.
         init_ratio = self._fallback_init_count / max(1, self.population_size)
         if self.learning_method == "fermi":
-            # Z-like: every Fermi copy event triggers exactly one LLM
-            # call (μ path = init, 1-μ path = small_mutate). Upper
-            # bound on LLM calls is updates_per_gen per gen.
+            # Upper bound on offspring-generation jobs. Baseline introductions
+            # use no LLM calls; parent-conditioned jobs still use the LLM.
             mut_total = int(
                 (num_generations - 1) * self.updates_per_gen
             ) if num_generations > 1 else 0
@@ -1113,7 +1110,10 @@ class V2EvolutionaryPopulation:
 
     def _run_offspring_job(self, job: OffspringJob) -> OffspringResult:
         """Worker-side operation: generate and validate code, mutate no state."""
-        if job.operator == "llm_init":
+        if job.operator == "baseline_init":
+            assert job.baseline_name is not None
+            code = get_baseline(job.baseline_name)
+        elif job.operator == "llm_init":
             assert job.preserve_agent_id is not None
             code = self._llm_init_code(job.preserve_agent_id)
         elif job.operator == "llm_mutate" and job.mutation_kind == "small":
@@ -1141,6 +1141,9 @@ class V2EvolutionaryPopulation:
         )
 
     def _fallback_code_for_job(self, job: OffspringJob) -> str:
+        if job.operator == "baseline_init":
+            assert job.baseline_name is not None
+            return get_baseline(job.baseline_name)
         if job.operator == "llm_init":
             return (
                 FALLBACK_CLASS_V3
@@ -1291,30 +1294,17 @@ class V2EvolutionaryPopulation:
 
         where phi is the per-agent windowed fitness from the just-
         finished generation. On copy, with probability
-        mutation_rate_on_adoption the offspring is an INDEPENDENT
-        LLM init (no reference to j); with probability 1-mu the
-        offspring is a SMALL LLM mutation of j's code (j is shown to
-        the LLM, the prompt asks for a tiny change). Both paths
-        always perform exactly one LLM call per copy event.
+        mutation_rate_on_adoption the offspring is initialized independently
+        using fermi_init_source: LLM generation, or 50% ALLD / 50% uniform
+        L1--L8 without an LLM call. With probability 1-mu, the LLM generates
+        a parent-conditioned child from j's code.
 
         All decisions are made from the old generation's fitness+code
         and committed synchronously at the end (Moran style, no in-
         place mutation of j that other events could read).
 
-        μ=0 degenerate: with mutation_rate_on_adoption=0 the 1-μ
-        path is still LLM-mutate, NOT verbatim copy. This is the
-        Z-like scheme (vs the Y scheme where 1-μ was free verbatim).
-        To get pure Fermi + no mutation, set
-        mutation_rate_on_adoption=1 so every copy is a free LLM
-        init — but note: that still costs LLM calls. For pure
-        replicator dynamics, run with learning_method="tournament"
-        (tournament+elite path, no LLM in selection step).
-
-        Sanity checks (should pass):
-          * Fermi + ALLC, mu=0       -> stays at 1.0
-          * Fermi + ALLD, mu=0       -> stays at 0.0
-          * Fermi + 1 IS+ + 14 ALLD, mu=0 -> 14/1 (IS+ invades)
-          * Fermi + 1 ALLD + 14 ALLC, mu=0 -> 15/0 (ALLD contained)
+        At mu=0 every accepted update uses parent-conditioned LLM generation;
+        at mu=1 every accepted update uses the independent source.
         """
         if next_gen is None:
             next_gen = 1
@@ -1322,6 +1312,7 @@ class V2EvolutionaryPopulation:
             beta=self.fermi_beta,
             mutation_rate=self.mutation_rate_on_adoption,
             updates_per_gen=self.updates_per_gen,
+            init_source=self.fermi_init_source,
         )
         plan = rule.plan(
             self._population_snapshot(),

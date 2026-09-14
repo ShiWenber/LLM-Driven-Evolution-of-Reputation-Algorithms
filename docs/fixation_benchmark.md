@@ -58,6 +58,13 @@ stabilize indirect reciprocity under imperfect information*, Nat. Commun. 14:208
 
 ### Usage
 
+If `--burn-in` and `--measure` are omitted, burn-in is automatically set to
+`population_size × 10^4` and measurement to `population_size × 3 × 10^4`.
+For example, N=20 uses 200,000 interactions for burn-in and 600,000 for
+measurement. This follows the reference implementation's 1:3 burn-in-to-
+measurement ratio. Explicit arguments can still override this scaling for
+smoke tests or controlled reruns.
+
 ```powershell
 uv run run-fixation-benchmark `
   --candidate "readme_best=experiments/analysis/invasion/custom_strategies/readme_best.py" `

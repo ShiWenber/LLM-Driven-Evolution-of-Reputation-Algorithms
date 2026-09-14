@@ -70,8 +70,10 @@ from .core import NORMS, Competitor, EvolvedSource, write_json_atomic
 from .run_invasion import load_representative_from_path
 
 
-DEFAULT_BURN_IN = 10_000
-DEFAULT_MEASURE = 10_000
+INTERACTIONS_PER_POPULATION = 10_000
+DEFAULT_BURN_IN = INTERACTIONS_PER_POPULATION
+MEASUREMENT_MULTIPLIER = 3
+DEFAULT_MEASURE = INTERACTIONS_PER_POPULATION * MEASUREMENT_MULTIPLIER
 DEFAULT_BETA = 1.0
 DEFAULT_POPULATION = 50
 PROBE_CHOICES = ("ALLC", "ALLD", *NORMS)
@@ -172,8 +174,8 @@ def stationary_mixture(
     mutant_count: int,
     seed: int,
     population_size: int = DEFAULT_POPULATION,
-    burn_in: int = DEFAULT_BURN_IN,
-    measure: int = DEFAULT_MEASURE,
+    burn_in: int | None = None,
+    measure: int | None = None,
     beta: float = DEFAULT_BETA,
     action_error: float = 0.0,
     observation_error: float = 0.0,
@@ -189,6 +191,13 @@ def stationary_mixture(
     Returns the payoff per participation for each type, plus block-wise payoffs
     so callers can check that stationarity was actually reached.
     """
+    # By default, scale both phases with population size so every individual
+    # contributes approximately 10^4 interaction slots to burn-in and to
+    # measurement. Explicit values remain available for controlled reruns.
+    if burn_in is None:
+        burn_in = population_size * INTERACTIONS_PER_POPULATION
+    if measure is None:
+        measure = population_size * INTERACTIONS_PER_POPULATION * MEASUREMENT_MULTIPLIER
     if not 1 <= mutant_count < population_size:
         raise ValueError("mutant_count must be in 1..N-1")
     resident_count = population_size - mutant_count
@@ -533,8 +542,20 @@ def main() -> None:
     )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--population-size", type=int, default=DEFAULT_POPULATION)
-    parser.add_argument("--burn-in", type=int, default=DEFAULT_BURN_IN)
-    parser.add_argument("--measure", type=int, default=DEFAULT_MEASURE)
+    parser.add_argument(
+        "--burn-in", type=int, default=None,
+        help=(
+            "Burn-in interaction count; default is population_size * 10^4 "
+            "(per-individual scaling)."
+        ),
+    )
+    parser.add_argument(
+        "--measure", type=int, default=None,
+        help=(
+            "Measurement interaction count; default is population_size * 10^4 "
+            "* 3 (per-individual scaling)."
+        ),
+    )
     parser.add_argument("--beta", type=float, default=DEFAULT_BETA,
                         help="Selection strength in the fixation formula.")
     parser.add_argument("--action-error", type=float, default=0.0)
@@ -562,6 +583,14 @@ def main() -> None:
             parser.error(f"{name} must be in [0, 1]")
     if args.population_size < 3:
         parser.error("--population-size must be >= 3")
+    if args.burn_in is None:
+        args.burn_in = args.population_size * INTERACTIONS_PER_POPULATION
+    if args.measure is None:
+        args.measure = (
+            args.population_size
+            * INTERACTIONS_PER_POPULATION
+            * MEASUREMENT_MULTIPLIER
+        )
     if args.burn_in < 1 or args.measure < 1:
         parser.error("--burn-in and --measure must be positive")
     if args.replicates < 1:

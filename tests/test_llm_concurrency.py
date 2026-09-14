@@ -130,6 +130,7 @@ def test_fermi_fallback_state_is_committed_on_main_thread(population):
     population.rng = FixedRng()
     population.fermi_beta = 5.0
     population.mutation_rate_on_adoption = 0.0
+    population.fermi_init_source = "llm"
     population.updates_per_gen = 2
     population.agent_type = "agent-type1"
     population._fallback_mutation_count = 0

@@ -94,6 +94,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Fermi beta parameter.")
     parser.add_argument("--mutation-rate", type=float, default=0.1,
                         help="Mutation probability on adoption.")
+    parser.add_argument(
+        "--fermi-init-source", choices=("llm", "baseline"), default="llm",
+        help=("Source for independent initialization during Fermi updates: "
+              "llm, or baseline (50%% ALLD; 50%% uniformly among L1-L8). "
+              "Baseline requires agent-type1; generation 0 is unchanged."),
+    )
     parser.add_argument("--mutation-temperature", type=float, default=0.8,
                         help="LLM mutation temperature.")
     parser.add_argument(
@@ -214,6 +220,7 @@ def run_one_seed(args: argparse.Namespace, seed: int, label: str, out_root: Path
             learning_method=args.learning_method,
             fermi_beta=args.fermi_beta,
             mutation_rate_on_adoption=args.mutation_rate,
+            fermi_init_source=args.fermi_init_source,
             imitation_learning_mode=args.imitation_learning,
             updates_per_gen=args.updates_per_gen,
             llm_concurrency=args.llm_concurrency,
@@ -372,6 +379,7 @@ def run_one_resume(
             mutation_rate_on_adoption=float(
                 cfg.get("mutation_rate_on_adoption", 0.1)
             ),
+            fermi_init_source=cfg.get("fermi_init_source", "llm"),
             imitation_learning_mode=cfg.get("imitation_learning_mode", "random"),
             updates_per_gen=int(
                 cfg.get("updates_per_gen", cfg["population_size"])
@@ -617,6 +625,10 @@ def main(argv: list[str] | None = None) -> int:
         return run_resume_cli(args, parser)
     if args.additional_gens is not None:
         parser.error("--additional-gens requires --resume-json")
+    if args.fermi_init_source == "baseline" and (
+        args.agent_type != "agent-type1" or args.learning_method != "fermi"
+    ):
+        parser.error("--fermi-init-source baseline requires --agent-type agent-type1 and --learning-method fermi")
     if args.updates_per_gen is None:
         args.updates_per_gen = args.population_size
     if args.updates_per_gen < 0 or args.updates_per_gen > args.population_size:
@@ -631,6 +643,7 @@ def main(argv: list[str] | None = None) -> int:
     out_root.mkdir(parents=True, exist_ok=True)
     label = args.label or (
         f"LLM_v3_{args.learning_method}_v3_g100_1000inter_learn-{args.imitation_learning}"
+        + ("_init-baseline" if args.fermi_init_source == "baseline" else "")
         + noise_suffix(args.action_error, args.observation_error)
     )
 
@@ -651,6 +664,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  learning_method: {args.learning_method}", flush=True)
     if args.learning_method == "fermi":
         print(f"  Z-like: mu={args.mutation_rate}, beta={args.fermi_beta}, updates_per_gen={args.updates_per_gen}", flush=True)
+        print(f"  fermi_init_source: {args.fermi_init_source}", flush=True)
     print(f"  llm_concurrency: {args.llm_concurrency or args.population_size}", flush=True)
     print(f"  seed_workers: {effective_seed_workers}", flush=True)
     print(
@@ -693,6 +707,7 @@ def main(argv: list[str] | None = None) -> int:
                 F_CONFIG_ACTION_ERROR: args.action_error,
                 F_CONFIG_OBSERVATION_ERROR: args.observation_error,
                 "scheme": args.learning_method,
+                "fermi_init_source": args.fermi_init_source,
                 "provider": provider,
                 "model": get_model(provider, args.model),
                 "execution": "multiprocess_by_seed",

@@ -333,6 +333,11 @@ $$\rho_{MR} = \frac{1}{1 + \sum_{i=1}^{N-1}\prod_{k=1}^{i}\exp(-\beta\, d_k)},
 where neutrality is $\rho = 1/N$. A single 49-composition sweep yields **both**
 orderings, so the comparison is paired by construction.
 
+When `--burn-in` and `--measure` are omitted, burn-in defaults to
+`population_size × 10^4` and measurement to `population_size × 3 × 10^4`
+(for example, 200,000 + 600,000 at N=20). Explicit values still override this
+per-population scaling.
+
 Two representative hand-written strategies were benchmarked at `N=50`, 12,000
 burn-in + 12,000 measure interactions, five replicates per composition, `β=1`,
 and 1% action + 1% observation error (neutral `ρ = 0.0200`):
@@ -598,6 +603,12 @@ uv run python -m experiments.run_fermi_v3 --dry-run --seeds 0 1 2
 
 Common options:
 
+To introduce baseline strategies through the independent Fermi-update branch:
+
+```bash
+uv run python -m experiments.run_fermi_v3 --agent-type agent-type1 --fermi-init-source baseline --mutation-rate 0.1
+```
+
 | Option | Default | Description |
 | --- | --- | --- |
 | `--seed N` / `--seeds N...` | `[0, 1, 2]` | Seed(s) to run; `--seed` overrides `--seeds` |
@@ -610,7 +621,8 @@ Common options:
 | `--updates-per-gen N` | population size | Distinct learners sampled without replacement per generation; must not exceed population size |
 | `--llm-concurrency N` | population size | Maximum concurrent LLM requests per seed process; aggregate maximum is `seed workers × LLM concurrency` |
 | `--fermi-beta F` | `5.0` | Fermi selection strength |
-| `--mutation-rate F` | `0.1` | Probability of an independent LLM rewrite after accepted imitation (`mu`); the `1-mu` branch is parent-conditioned learning |
+| `--mutation-rate F` | `0.1` | Probability of independent initialization after accepted imitation (`mu`), using `--fermi-init-source`; the `1-mu` branch is parent-conditioned learning |
+| `--fermi-init-source {llm,baseline}` | `llm` | Source for the independent `mu` branch of Fermi updates. `baseline` requires `agent-type1` and samples ALLD with probability 50%, or each of L1--L8 with probability 6.25%, without an LLM call. Initial generation and parent-conditioned learning are unchanged; ALLC is not sampled |
 | `--mutation-temperature F` | `0.8` | LLM mutation temperature |
 | `--imitation-learning {random,deliberate}` | `random` | Parent-conditioned child generation: an undirected related variation or an explicit attempt to improve using the parent's real fitness |
 | `--benefit F` / `--cost F` | `3.0` / `1.0` | PD payoffs |
@@ -661,8 +673,7 @@ Details worth knowing before comparing runs:
   overwrite a noise-free run's directory.
 - **Resume inherits the recorded level** from the log's config rather than
   reading the CLI, so a continued lineage cannot change its noise model
-  mid-run. Only logs already using `mean_payoff_per_counted_action_v1` can be
-  resumed; earlier cumulative-fitness logs require a new evolution run.
+  mid-run.
 
 ## Continuing evolution from trajectory logs
 
