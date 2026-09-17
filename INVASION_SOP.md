@@ -58,6 +58,29 @@
 - 结果目录与 summary 都带 `n{N}`；绘图器从 summary 读 N 并自动改标题，
   所以同一套绘图代码能画任意 N。
 
+### 0.6 支付矩阵跟随日志（2026-09-16）
+
+**被评估的策略必须在它自己被选择时的博弈里评估，否则结论无意义。**
+
+- **规则**：`benefit`/`cost` 默认从每个 `--source` 的 `evolutionary.json` 的
+  `config.benefit` / `config.cost` 读取。逐个字段独立解析：
+  显式 `--benefit`/`--cost` > 日志记录 > 归档常量 `BENEFIT=2.0`/`COST=1.0`。
+- **一个种群一张表**：`resolve_payoff_matrix` 对每条 (候选, resident) 对解析一次。
+  候选与 resident **都来自日志且互不一致**时**报错**（两个策略是在不同博弈下被选择出来的，
+  没有一张表能同时成立）；显式传 `--benefit`/`--cost` 可越过该错误（会有 warning），
+  这是**有意做跨 benefit 对照**时唯一的表达方式。
+- **规范化 norm 与手写 `.py`** 不带日志 → 落到归档常量 `2.0/1.0`，
+  所以归档结果在**显式**重跑时仍可复现。要复现归档数字而源是日志，需显式
+  `--benefit 2 --cost 1`。
+- **记录与缓存**：每个 `invasion.json` / `fixation_benchmark.json` 的 `config`
+  都写 `benefit`/`cost`（`summary.json` 另写 `payoff_matrices`），
+  缓存按它们比对。**改动前产出的结果没有这两个字段，因此不再命中缓存、会被重算**
+  —— 这是有意的：旧结果无法证明自己用的是哪张表。
+- **历史**：改动前 `core.py` 硬编码 `2.0/1.0`，`run_fixation_benchmark.py` 更把
+  `2×对手合作 − 自己合作` 内联在热循环里。两者现都已参数化。
+  ⇒ 2026-09-16 之前产出的入侵/fixation 结果，其矩阵一律是 `2.0/1.0`，
+  即使被测策略是在 `benefit=3.0` 下演化出来的（b3 批因此是"探索性"的）。
+
 ### 0.3 两套方法的分工
 
 | | 入侵扫描（§3）| 固定概率 benchmark（§4）|
@@ -196,6 +219,8 @@ agent type 可省略（默认 `agent-type1`）。
 | `--interactions` | `10000` | **每代全种群配对总数**（不是每人次数）。**必须 ≥10000**，见 §0.1 |
 | `--fitness-window-fraction` | `0.2` | 计入适应度的最后交互占比（其余为 burn-in）|
 | `--action-error` / `--observation-error` | `0`（但**本 SOP 强制 ≥ `0.01`**）| 动作/观测噪声；推荐 `0.01`（1%）。<br>**不可为 0**——0 噪声会落入全好稳态掩盖差异（见 §0.4）|
+| `--benefit` / `--cost` | 不设 → **读 `--source` 日志** | 支付矩阵。不传时跟随日志；显式传值会覆盖日志（会 warning）。
+要复现归档的 `2/1` 结果而对源是日志时，**必须显式传 `--benefit 2 --cost 1`**（见 §0.6）|
 | `--workers` | `8` | 进程数；近 CPU 核数即可（扫描是纯本地模拟）|
 | `--force` | 否 | 忽略缓存重跑 |
 | `--smoke` | 否 | 快速冒烟：2 count、1 seed、2 代 × 20 局 |
@@ -281,6 +306,7 @@ uv run run-fixation-benchmark `
 | `--beta` | `1.0` | 选择强度（ρ 公式里）|
 | `--replicates` | `5` | 每个组成的独立种子数（极端组成可能双模态）|
 | `--action-error` / `--observation-error` | `0`（但**本 SOP 强制 ≥ `0.01`**）| 必须与入侵扫描同噪声，见 §0.4 |
+| `--benefit` / `--cost` | 不设 → **读 `--candidate` 日志** | 支付矩阵；probe 侧是 norm、无日志，所以由候选的日志决定（见 §0.6）|
 | `--seed` / `--workers` / `--force` | `0` / `8` / 否 | — |
 
 > ⚠️ `--candidate` **当前只能给一个**（多次传递会报错）；多策略扫描需**逐个**跑
@@ -539,19 +565,25 @@ Select-String -Path "results/.../<REPORT>.md" -Pattern '!?\[[^\]]*\]\(([^)]+)\)'
 4. 全部运行 exit code = 0，无 traceback；worker 崩溃会被捕获并打印 `FAILED`。
 5. `<label>/<resident>/n<count>_seed<seed>/invasion.json` 每个都有合法
    `final_invader_frequency ∈ [0,1]`，且 `invader_fixed`/`invader_extinct` 与它自洽。
-6. 绘图脚本通过 `population_size`（读自 summary，须 ≥3）、`initial_invader_counts ∈ [1, N)`、
+6. **支付矩阵已记录且与来源一致**：每个 `invasion.json` 的 `config.benefit`/`config.cost`
+   都非空，且等于 `resolve_payoff_matrix` 对该 pair 解析出的值（通常即候选日志的
+   `config.benefit`）。`summary.json` 的 `payoff_matrices` 应只有一项（除非有意混合多个
+   benefit 的候选）。**若结果目录里出现 `benefit=2.0` 而不一致，说明它来自 2026-09-16
+   之前的硬编码版本，不可与日志驱动的结果混用**（见 §0.6）。
+7. 绘图脚本通过 `population_size`（读自 summary，须 ≥3）、`initial_invader_counts ∈ [1, N)`、
    `selection==synchronous_deterministic_payoff_imitation` 校验。
    > 这组校验**只在 `plot_n100_invasion_count_sweep`（§5.3）里**；
    > `plot_pairwise_invasion`（§5.4）**不做任何 schema 校验**，传错 summary 会静默出图。
-   > 策略对策略实验的验收按 3–5 条走，第 6 条不适用。
-7. `README.assets/${RUN_DIR}.png` 生成，且曲线形状与结论一致。
-8. 若需与干净版对照，干净版必须**仅作对照**并在图/文档中标注"0 噪声——全好稳态，结论仅供对照"，
+   > 策略对策略实验的验收按 3–6 条走，第 7 条不适用。
+8. `README.assets/${RUN_DIR}.png` 生成，且曲线形状与结论一致。
+9. 若需与干净版对照，干净版必须**仅作对照**并在图/文档中标注"0 噪声——全好稳态，结论仅供对照"，
    不得作为主结论。
 
 ### 7.2 固定概率 benchmark
 
 9. `fixation_benchmark.json` 的 `config` 里 `population_size` / `burn_in_interactions` /
-   `measure_interactions` / `beta` / `replicates` / 两个噪声值均已记录，且噪声 ≥ `0.01`。
+   `measure_interactions` / `beta` / `replicates` / `benefit` / `cost` / 两个噪声值均已记录，
+   噪声 ≥ `0.01`，且 `benefit`/`cost` 等于候选日志解析出的矩阵（见 §0.6）。
 10. **stationarity 全过**：每个 probe 的 `stationarity.<probe>.max_half_to_half_gap ≤ 0.10`。
     凡超过的 probe，其 ρ **不得写入报告结论**（要么升预算 `--force` 重跑，要么在 caveat 里点名）。
 11. `Neutral fixation probability == 1/N`，且 ρ 的解读引用了这条中性线。
@@ -572,6 +604,9 @@ Select-String -Path "results/.../<REPORT>.md" -Pattern '!?\[[^\]]*\]\(([^)]+)\)'
 |---|---|
 | **忘了加噪声，曲线全部贴对角线** | 这是 0 噪声下的**全好稳态**（见 §0.4），结果无效。必须重跑：加 `--action-error 0.01 --observation-error 0.01` |
 | **曲线全部跑到 100%、看起来很“能入侵”** | 先查 `config.interactions_per_generation`。低于 10000 时这是**假入侵**（噪声棘轮，§0.1），不是真实优势 |
+| **重跑同一命令，数字和上次完全不同** | 矩阵改为跟随日志后，b3 演化的候选现在按 `benefit=3.0` 跑（原来是硬编码 2.0）。要复现旧数字须显式 `--benefit 2 --cost 1`（§0.6）|
+| **报错 "sources were selected under different payoff matrices"** | 两个 `--source` 的日志 benefit 不一致。要么改用同 benefit 的源，要么显式 `--benefit`/`--cost` 强制一张表（§0.6）|
+| **结果目录里混着 `benefit=2.0` 与 `benefit=3.0`** | 前者来自 2026-09-16 之前的硬编码版本，不可与日志驱动的结果混用；换目录重跑（§0.6）|
 | **重建了旧目录，结果没变** | 缓存只比参数，**不知道预算已提高**；旧目录里的低预算结果会原样命中。换目录重跑或删旧结果 |
 | **ρ 表看起来“中性”但 stationarity 在报警** | 该 probe 的 ρ 不可用（§4.3）。加大 `--burn-in`/`--measure` 后 `--force` 重跑 |
 | **`--candidate` 传了两次报错** | 固定概率 runner 当前**只支持一个**候选；多策略扫描要逐进程跑（§4.2）|

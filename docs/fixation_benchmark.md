@@ -59,11 +59,11 @@ stabilize indirect reciprocity under imperfect information*, Nat. Commun. 14:208
 ### Usage
 
 If `--burn-in` and `--measure` are omitted, burn-in is automatically set to
-`population_size × 10^4` and measurement to `population_size × 3 × 10^4`.
-For example, N=20 uses 200,000 interactions for burn-in and 600,000 for
-measurement. This follows the reference implementation's 1:3 burn-in-to-
-measurement ratio. Explicit arguments can still override this scaling for
-smoke tests or controlled reruns.
+`population_size × 5×10^3` and measurement to `population_size × 15×10^3`.
+For example, N=20 uses 100,000 interactions for burn-in and 300,000 for
+measurement. This is half of the earlier long-window budget while preserving
+the reference implementation's 1:3 burn-in-to-measurement ratio. Explicit
+arguments can still override this scaling for smoke tests or controlled reruns.
 
 ```powershell
 uv run run-fixation-benchmark `
@@ -267,9 +267,11 @@ probability against L1 is `0.0000`. The growth was a transient *inside a
 coexisting mixture*; the payoff-difference curve shows why it never completes.
 Reporting only the imitation endpoint would have been misleading.
 
-The benchmark reports one ordering only — the candidate as mutant, each probe as
-resident. The opposite ordering is a different experiment and is not inferred
-from this sweep.
+The benchmark now reports both orderings. It directly simulates the candidate
+as mutant and each probe as resident, then derives the reverse ordering from
+the same payoff-difference curve by reversing the composition and changing
+the sign of the difference. This avoids a second reputation-dynamics sweep
+while still reporting both directional fixation probabilities.
 
 ### Regression tests
 
@@ -279,4 +281,5 @@ from this sweep.
 * monotonicity of `ρ` in the payoff advantage, and `β` scaling.
 * `ρ` remains a probability and stays finite for extreme inputs.
 * `ALLC` vs `ALLC` mixture has `d = 0` exactly.
-* the sweep defines a single frequency axis; there is no reverse label.
+* the reverse-direction fixation probability is consistent with the reversed
+  payoff-difference curve.

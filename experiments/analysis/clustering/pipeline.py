@@ -130,12 +130,18 @@ def _cut_tree(children, distances, n_samples: int, k: int) -> np.ndarray:
     return labels.astype(int)
 
 
-def fit_clusterer(X, k: int, seed: int, method: str = "kmeans"):
+def fit_clusterer(X, k: int, seed: int, method: str = "kmeans", *, n_init: int = 20):
     """Fit a partition into ``k`` clusters with the requested algorithm.
 
     ``method`` is one of :data:`CLUSTERING_METHODS`. The returned object
     always provides ``labels_``, ``n_clusters``, ``cluster_centers_`` and
     ``predict`` so callers are agnostic to the underlying algorithm.
+
+    ``n_init`` is the K-means restart count. The default of 20 is what the
+    published clusterings used; model-selection sweeps that refit the same data
+    dozens of times pass a smaller value, since the winner is re-fitted at the
+    default before anything is reported. It is ignored by the hierarchical
+    method.
     """
     if method == "hierarchical":
         # Build the full merge tree once (distance_threshold=0 keeps every
@@ -161,7 +167,7 @@ def fit_clusterer(X, k: int, seed: int, method: str = "kmeans"):
             f"unknown clustering method {method!r}; "
             f"choose from {CLUSTERING_METHODS}"
         )
-    return KMeans(n_clusters=k, n_init=20, random_state=seed).fit(X)
+    return KMeans(n_clusters=k, n_init=n_init, random_state=seed).fit(X)
 
 
 def _resolve_embedding_device(device: str) -> str:

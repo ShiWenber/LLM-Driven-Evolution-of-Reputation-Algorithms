@@ -1,5 +1,9 @@
 # LLM-Driven Evolution of Reputation Algorithms
 
+Private dataclass signals are available as the opt-in `agent-type2-signal`
+variant. See [the interface and running instructions](docs/private_signal_agents.md).
+The existing agent-type1 and agent-type2 experiments keep their original interfaces.
+
 ![LLM-evolved Evolution of Reputation Algorithms](README.assets/project_overall_architecture.png)
 
 ![Visualization of LLM-evolved strategies](README.assets/visual_clustering_analysis_workflow-v4.png)
@@ -334,8 +338,8 @@ where neutrality is $\rho = 1/N$. A single 49-composition sweep yields **both**
 orderings, so the comparison is paired by construction.
 
 When `--burn-in` and `--measure` are omitted, burn-in defaults to
-`population_size × 10^4` and measurement to `population_size × 3 × 10^4`
-(for example, 200,000 + 600,000 at N=20). Explicit values still override this
+`population_size × 5×10^3` and measurement to `population_size × 15×10^3`
+(for example, 100,000 + 300,000 at N=20). Explicit values still override this
 per-population scaling.
 
 Two representative hand-written strategies were benchmarked at `N=50`, 12,000

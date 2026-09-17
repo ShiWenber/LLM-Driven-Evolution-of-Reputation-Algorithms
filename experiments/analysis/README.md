@@ -190,6 +190,7 @@ experiments/analysis/
 ├── plot_strategy_cluster_evolution.py  # 世代堆叠柱状图 + PCA 动图
 ├── plot_strategy_dendrogram.py  # 策略层次聚类树状图（Ward 合并高度）
 ├── plot_cross_experiment_clusters.py   # 跨实验全局聚类（可直比视图）
+├── plot_code_landscape.py              # ★ 全局代码景观：缓存全部 code 嵌入+聚类+PCA，叠加规范标记与末代存活者
 ├── plot_agent2_schmid_invasion.py      # agent2 Schmid 入侵存档图（336 runs，含两个 orderings）
 ├── plot_n100_invasion_count_sweep.py   # ★ 入侵图 A：候选 vs 规范 norm（INVASION_SOP §4b）
 ├── plot_pairwise_invasion.py           # ★ 入侵图 B：策略对策略 + 支配阈值矩阵（INVASION_SOP §4c）
@@ -198,6 +199,7 @@ experiments/analysis/
 │   ├── io.py                # 解析 evolutionary.json → 世代 population
 │   ├── pipeline.py          # embedding / cluster_codes / LLM naming / cluster_strategies
 │   ├── cli_args.py          # 各聚类入口共用的命令行参数
+│   ├── survivors.py         # 末代存活者读取 + (observe,decide) 真值表探测/规范匹配 + 抽样命名
 │   └── cluster_cli.py       # 最终代聚类 CLI（消费 pipeline）
 ├── invasion/                # 入侵扫描（宿主恒 N=100）
 │   ├── core.py              # 统一引擎：协议常量 + 单代对局 + 复制器（无 matplotlib）
@@ -225,6 +227,16 @@ experiments/analysis/
   **符号/排序指标对"每人一个固定宽严偏移"完全免疫**，而演化种群恰恰是这种形态，
   所以只保留数值层。热图把原始矩阵画出来，是这些标量的 ground truth。
 - `analysis/plot_*.py`：**画图职责**，消费 `clustering` / `lineage` / `consensus` 的接口。
+- `clustering/survivors.py`：**缓存里没有的来源信息**。`code_occurrences.generation` 写入时
+  为 NULL，缓存也不记合作率，所以"末代存活者 + 合作率"只能从 `evolutionary.json` 的
+  `final_population` 读，缓存仅用于把这些 code 定位到全局 code 集合。同一模块还用
+  **调用编译后的函数探测真值表**（8 位评估 + 4 位动作）来判定一条策略是否恰好等于
+  某条规范 —— 判据是行为而非源码文本，因此换了数值的等价实现同样能识别。
+- `analysis/plot_code_landscape.py`：**全局代码景观图**。与 `plot_strategy_clusters.py`
+  的区别是范围：后者只画某个 run 的末代（几十个点），前者画缓存里**全部**历史 code
+  （数万个点），因此 K 选择需对 silhouette 做子采样、且**不支持 hierarchical**
+  （Ward 需 O(n²) 距离矩阵）。三层标记：所有末代存活者（半透明）、高合作子集（描边）、
+  恰好匹配规范者（虚线描边）。A1–A8/L1–L8 等规范同时嵌入同一空间并在原位标注。
 - `analysis/plot_n100_invasion_count_sweep.py` ⟷ `analysis/plot_pairwise_invasion.py`：
   **两张入侵图，服务两种实验模式，不要混用**。前者画 `--norms` 扫描（每 source 一列、
   每 norm 一条曲线，且带 `population_size==100` / `selection` / 完整性三项校验）；
@@ -298,6 +310,14 @@ uv run python -m experiments.analysis.clustering.cluster_cli \
 # 最终代策略散点图（Code embedding + 中心化 PCA）
 uv run python -m experiments.analysis.plot_strategy_clusters \
   --json results/.../evolutionary.json --out results/.../clusters_pca.png
+
+# 全局代码景观（缓存中全部 code；末代存活者 + 高合作 + 规范匹配三层标记）
+uv run python -m experiments.analysis.plot_code_landscape \
+  --out results/quantitative_baseline/plots/code_landscape_pca.png
+#   --survivors-glob "results/.../seed*/evolutionary.json"   # 指定高亮哪个实验的末代
+#   （默认取 mtime 最新的实验族；图上会写明来源实验名）
+#   --min-cooperation 0.90   # 高合作阈值
+#   --no-llm-names           # 跳过 DeepSeek 簇命名（离线）
 
 # 全世代策略聚类演化图（堆叠柱状图 + PCA 动图）
 uv run python -m experiments.analysis.plot_strategy_cluster_evolution \

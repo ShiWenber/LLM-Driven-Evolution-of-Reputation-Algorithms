@@ -61,11 +61,15 @@ from typing import Any
 from experiments.evolution_log import load_evolution_json
 from experiments.v2_quantitative.baselines import BASELINES, BASELINE_VERSION
 from experiments.v2_quantitative.executor import V2StrategyExecutor
+from experiments.v2_quantitative.agent_full import V3StrategyExecutor
+from experiments.v2_quantitative.signal_executor import SignalStrategyExecutor, SIGNAL_INTERFACE_VERSION
 
 from ..paths import quantitative_results_dir
 from .core import (
     AGENT_TYPES,
     ARCHIVED_DIRECTION_LABEL,
+    BENEFIT,
+    COST,
     FITNESS_WINDOW_FRACTION,
     INTERACTIONS_PER_GENERATION,
     KIND_CANDIDATE,
@@ -78,6 +82,7 @@ from .core import (
     norm_source,
     payoff_imitation_update,
     play_generation_noisy,
+    resolve_payoff_matrix,
     resolve_window,
     root_lineage,
     write_json_atomic,
@@ -136,6 +141,21 @@ def experiment_name(
 # --------------------------------------------------------------------------
 # Candidate loading
 # --------------------------------------------------------------------------
+def _logged_payoff_matrix(config: dict[str, Any]) -> tuple[float | None, float | None]:
+    """Payoff matrix recorded in an evolution log, or ``(None, None)``.
+
+    Returning ``None`` rather than a default is what lets
+    ``resolve_payoff_matrix`` tell "this log says b=2" apart from "this log says
+    nothing, so use the archived constant".
+    """
+    benefit = config.get("benefit")
+    cost = config.get("cost")
+    return (
+        None if benefit is None else float(benefit),
+        None if cost is None else float(cost),
+    )
+
+
 def _representative_without_lineage(
     agent_type: str, path: Path, data: dict[str, Any],
 ) -> EvolvedSource:
@@ -169,6 +189,7 @@ def _representative_without_lineage(
         ),
     )
     code = str(winner["code"])
+    payoff = _logged_payoff_matrix(data.get("config", {}))
     return EvolvedSource(
         agent_type=agent_type,
         path=path,
@@ -179,6 +200,8 @@ def _representative_without_lineage(
         fitness=float(winner["fitness"]),
         code=code,
         code_sha256=hashlib.sha256(code.encode("utf-8")).hexdigest(),
+        benefit=payoff[0],
+        cost=payoff[1],
     )
 
 
@@ -210,6 +233,7 @@ def load_representative_from_path(
         key=lambda member: (-float(member["fitness"]), int(member["agent_id"])),
     )
     code = str(winner["code"])
+    payoff = _logged_payoff_matrix(data.get("config", {}))
     return EvolvedSource(
         agent_type=agent_type,
         path=path,
@@ -220,18 +244,24 @@ def load_representative_from_path(
         fitness=float(winner["fitness"]),
         code=code,
         code_sha256=hashlib.sha256(code.encode("utf-8")).hexdigest(),
+        benefit=payoff[0],
+        cost=payoff[1],
     )
 
 
-def load_custom_source(label: str, raw_path: str) -> EvolvedSource:
+def load_custom_source(label: str, raw_path: str, agent_type: str = "agent-type1") -> EvolvedSource:
     """Build an EvolvedSource directly from a hand-written strategy ``.py``."""
     path = Path(raw_path).resolve()
     if not path.is_file():
         raise FileNotFoundError(f"custom strategy file not found for {label}: {path}")
     code = path.read_text(encoding="utf-8")
-    V2StrategyExecutor(code)  # fail fast on interface mismatch
+    executors = {"agent-type1": V2StrategyExecutor, "agent-type2": V3StrategyExecutor,
+                 "agent-type2-signal": SignalStrategyExecutor}
+    if agent_type not in executors:
+        raise ValueError(f"Unknown agent type for {label}: {agent_type}")
+    executors[agent_type](code)  # fail fast on interface mismatch
     return EvolvedSource(
-        agent_type="agent-type1",
+        agent_type=agent_type,
         path=path,
         agent_id=-1,
         lineage_id=-1,
@@ -250,7 +280,7 @@ def load_candidate(label: str, agent_type: str, raw_path: str) -> EvolvedSource:
         raise FileNotFoundError(f"strategy file not found for {label}: {path}")
     if path.suffix == ".json":
         return load_representative_from_path(label, agent_type, path)
-    return load_custom_source(label, path)
+    return load_custom_source(label, path, agent_type)
 
 
 def parse_sources(values: list[str]) -> dict[str, EvolvedSource]:
@@ -335,6 +365,8 @@ def run_one(
     action_error: float = 0.0,
     observation_error: float = 0.0,
     population_size: int = DEFAULT_POPULATION_SIZE,
+    benefit: float = BENEFIT,
+    cost: float = COST,
 ) -> dict[str, Any]:
     """Run the candidate (invader) against the resident from `invader_count` copies."""
     if not 1 <= invader_count < population_size:
@@ -362,7 +394,7 @@ def run_one(
     for generation in range(generations):
         stats = play_generation_noisy(
             population, rng, interactions, fitness_window_fraction,
-            action_error, observation_error,
+            action_error, observation_error, benefit, cost,
         )
         invaders = [m for m in population if m.kind == KIND_CANDIDATE]
         residents = [m for m in population if m.kind != KIND_CANDIDATE]
@@ -424,6 +456,10 @@ def run_one(
             "fitness_window_fraction": fitness_window_fraction,
             "fitness_interactions_per_generation": fitness_interactions,
             "burn_in_interactions_per_generation": interactions - fitness_interactions,
+            # The matrix this mixture was paid from. Recorded so a rerun under a
+            # different candidate log cannot silently reuse this result.
+            "benefit": benefit,
+            "cost": cost,
             "selection": "synchronous_deterministic_payoff_imitation",
             "imitation_eligibility": "strictly_higher_fitness_always_copied",
             "updates_per_generation": population_size,
@@ -448,7 +484,7 @@ def run_one(
 
 
 def _source_record(source: EvolvedSource) -> dict[str, Any]:
-    return {
+    record = {
         "agent_type": source.agent_type,
         "path": str(source.path),
         "agent_id": source.agent_id,
@@ -458,6 +494,9 @@ def _source_record(source: EvolvedSource) -> dict[str, Any]:
         "fitness": source.fitness,
         "code_sha256": source.code_sha256,
     }
+    if source.agent_type == "agent-type2-signal":
+        record["signal_interface_version"] = SIGNAL_INTERFACE_VERSION
+    return record
 
 
 # --------------------------------------------------------------------------
@@ -517,6 +556,8 @@ def cache_matches(
     action_error: float,
     observation_error: float,
     population_size: int = DEFAULT_POPULATION_SIZE,
+    benefit: float = BENEFIT,
+    cost: float = COST,
 ) -> bool:
     config = result.get("config", {})
     expected = {
@@ -526,6 +567,10 @@ def cache_matches(
         "fitness_interactions_per_generation": resolve_window(
             interactions, population_size, fitness_window_fraction
         ),
+        # Results written before the payoff matrix was read from the log carry no
+        # benefit, so they mismatch here and are recomputed rather than reused.
+        "benefit": benefit,
+        "cost": cost,
         "selection": "synchronous_deterministic_payoff_imitation",
         "updates_per_generation": population_size,
         "generation_lifecycle": "fresh_agent_and_reputation_reset",
@@ -535,6 +580,11 @@ def cache_matches(
     }
     if not all(config.get(key) == value for key, value in expected.items()):
         return False
+    for key, strategy in (("candidate_source", candidate), ("resident_source", resident)):
+        if strategy.agent_type == "agent-type2-signal":
+            saved = result.get(key, {})
+            if saved.get("agent_type") != strategy.agent_type or saved.get("signal_interface_version") != SIGNAL_INTERFACE_VERSION:
+                return False
     if result.get("candidate_source", result.get("evolved_source", {})).get(
         "code_sha256"
     ) != candidate.code_sha256:
@@ -555,6 +605,7 @@ def execute(payload: tuple[Any, ...]) -> tuple[tuple[Any, ...], dict[str, Any]]:
         c_label, c_source, r_label, r_source, r_kind, count, seed,
         generations, interactions, fitness_window_fraction,
         action_error, observation_error, population_size,
+        benefit, cost,
     ) = payload
     result = run_one(
         c_source, c_label, r_source, r_label, r_kind, count, seed,
@@ -564,6 +615,8 @@ def execute(payload: tuple[Any, ...]) -> tuple[tuple[Any, ...], dict[str, Any]]:
         action_error=action_error,
         observation_error=observation_error,
         population_size=population_size,
+        benefit=benefit,
+        cost=cost,
     )
     return (c_label, r_label, count, seed), result
 
@@ -612,6 +665,16 @@ def write_summary(
             "seeds": seeds,
             "action_error_probability": action_error,
             "observation_error_probability": observation_error,
+            # One entry per distinct matrix actually played. Normally a single
+            # entry; more than one only when candidates loaded from logs that
+            # disagree are swept together, in which case each candidate's own
+            # rows carry the matrix it was played under.
+            "payoff_matrices": [
+                {"benefit": benefit, "cost": cost}
+                for benefit, cost in sorted({
+                    (row["benefit"], row["cost"]) for row in rows
+                })
+            ],
             "selection": "synchronous_deterministic_payoff_imitation",
             "generation_lifecycle": "fresh_agent_and_reputation_reset",
             "absorbing_state_early_stop": True,
@@ -686,6 +749,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--action-error", type=float, default=0.0)
     parser.add_argument("--observation-error", type=float, default=0.0)
+    parser.add_argument(
+        "--benefit",
+        type=float,
+        default=None,
+        help=(
+            "PD cooperation benefit. Default (unset) reads it from each "
+            "candidate's evolution log, so a strategy is tested in the game it "
+            "was selected under. Pass explicitly to force one matrix, which is "
+            "what reproducing the archived benefit=2 results requires."
+        ),
+    )
+    parser.add_argument(
+        "--cost",
+        type=float,
+        default=None,
+        help="PD cooperation cost. Default (unset): read from the log, like --benefit.",
+    )
     parser.add_argument("--smoke", action="store_true")
     args = parser.parse_args(argv)
 
@@ -751,6 +831,49 @@ def main(argv: list[str] | None = None) -> int:
         for count in args.invader_counts
         for seed in args.seeds
     ]
+    # One matrix per pair: the population is paid from a single table, so the
+    # candidate's log and (in pairwise mode) the resident's log have to agree.
+    try:
+        payoff_by_pair = {
+            (c_label, r_label): resolve_payoff_matrix(
+                candidates[c_label], residents[r_label],
+                benefit=args.benefit, cost=args.cost,
+            )
+            for c_label, r_label in pairs
+        }
+    except ValueError as exc:
+        parser.error(str(exc))
+    for pair, (benefit, cost) in payoff_by_pair.items():
+        if cost <= 0.0:
+            parser.error(f"cost must be positive for pair {pair[0]}>{pair[1]}")
+        if benefit <= cost:
+            parser.error(
+                f"benefit must exceed cost for a social dilemma; "
+                f"pair {pair[0]}>{pair[1]} resolved to benefit={benefit}, cost={cost}"
+            )
+    if args.benefit is not None or args.cost is not None:
+        # Say so when the override contradicts what the log says: the run then
+        # no longer describes the game the strategies were selected under. A
+        # pair whose own logs disagree is reported the same way -- that is
+        # exactly the case the override was needed to get past.
+        contradicted = []
+        for pair in pairs:
+            try:
+                logged = resolve_payoff_matrix(
+                    candidates[pair[0]], residents[pair[1]]
+                )
+            except ValueError:
+                contradicted.append(pair)
+                continue
+            if logged != payoff_by_pair[pair]:
+                contradicted.append(pair)
+        if contradicted:
+            print(
+                f"  [warn] --benefit/--cost override the matrix recorded in the "
+                f"source log(s) for {len(contradicted)} pair(s); results will not "
+                f"describe the game those strategies were selected under.",
+                flush=True,
+            )
     rows: list[dict[str, Any]] = []
     pending: list[tuple[Any, ...]] = []
     task_by_key = {task: task for task in tasks}
@@ -758,6 +881,14 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"=== N={args.population_size} invasion ({mode}-resident): "
         f"{len(tasks)} runs, {len(pairs)} pair(s) ===",
+        flush=True,
+    )
+    matrices = sorted(set(payoff_by_pair.values()))
+    print(
+        f"  payoff matrix: "
+        + ", ".join(f"benefit={b:g}/cost={c:g}" for b, c in matrices)
+        + ("  (from the source log(s); pass --benefit/--cost to override)"
+           if args.benefit is None and args.cost is None else "  (explicit override)"),
         flush=True,
     )
 
@@ -775,6 +906,8 @@ def main(argv: list[str] | None = None) -> int:
                 "final_invader_frequency": result["final_invader_frequency"],
                 "invader_fixed": result["invader_fixed"],
                 "invader_extinct": result["invader_extinct"],
+                "benefit": result["config"]["benefit"],
+                "cost": result["config"]["cost"],
                 "status": status,
                 "path": str(path.relative_to(args.output)),
             }
@@ -784,6 +917,7 @@ def main(argv: list[str] | None = None) -> int:
 
     for task in tasks:
         c_label, r_label, count, seed = task
+        benefit, cost = payoff_by_pair[(c_label, r_label)]
         path = existing_result_path(args.output, c_label, r_label, count, seed)
         if path.exists() and not args.force:
             result = json.loads(path.read_text(encoding="utf-8"))
@@ -792,7 +926,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.generations, args.interactions,
                 args.fitness_window_fraction,
                 args.action_error, args.observation_error,
-                args.population_size,
+                args.population_size, benefit, cost,
             ):
                 needs_normalization = (
                     result.get("config", {}).get("fixation_threshold") != 1.0
@@ -810,6 +944,7 @@ def main(argv: list[str] | None = None) -> int:
                 resident_kinds[r_label], count, seed, args.generations,
                 args.interactions, args.fitness_window_fraction,
                 args.action_error, args.observation_error, args.population_size,
+                benefit, cost,
             )
         )
 

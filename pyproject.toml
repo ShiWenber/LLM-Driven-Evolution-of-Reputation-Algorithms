@@ -52,6 +52,10 @@ plot-fixation-benchmark = "experiments.analysis.plot_fixation_benchmark:main"
 make-figures = "experiments.analysis.make_figures:main"
 plot-lineage = "experiments.analysis.plot_lineage:main"
 
+# Global code landscape: embed + cluster + PCA every archived strategy code,
+# with canonical-norm markers and final-generation survivor overlays.
+plot-code-landscape = "experiments.analysis.plot_code_landscape:main"
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"

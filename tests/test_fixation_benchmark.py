@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 from experiments.analysis.invasion.run_fixation_benchmark import (
+    KEY_BENEFIT,
     KEY_BURN_IN,
+    KEY_COST,
     KEY_MEASURE,
     KEY_POPULATION,
     cache_matches,
@@ -216,6 +218,8 @@ class _Args:
         self.observation_error = kw.get("observation_error", 0.0)
         self.probes = kw.get("probes", ["L1", "ALLD"])
         self.replicates = kw.get("replicates", 1)
+        self.benefit = kw.get("benefit", 2.0)
+        self.cost = kw.get("cost", 1.0)
 
 
 def _stored(candidate, args, probes=None):
@@ -228,6 +232,8 @@ def _stored(candidate, args, probes=None):
             "beta": args.beta,
             "action_error_probability": args.action_error,
             "observation_error_probability": args.observation_error,
+            KEY_BENEFIT: args.benefit,
+            KEY_COST: args.cost,
             "replicates": args.replicates,
         },
         "candidate": {"label": "c", "code_sha256": candidate.code_sha256},
@@ -257,6 +263,8 @@ def test_cache_key_names_are_the_documented_ones():
     ("action_error", 0.05),
     ("observation_error", 0.05),
     ("replicates", 4),
+    ("benefit", 3.0),
+    ("cost", 0.5),
 ])
 def test_cache_rejects_a_changed_setting(field, value):
     candidate = probe_source("L1")
@@ -271,7 +279,25 @@ def test_cache_rejects_a_changed_setting(field, value):
         "action_error": "action_error_probability",
         "observation_error": "observation_error_probability",
         "replicates": "replicates",
+        "benefit": KEY_BENEFIT,
+        "cost": KEY_COST,
     }[field]] = value
+    assert cache_matches(stored, args, candidate, "c") is False
+
+
+def test_cache_rejects_a_result_with_no_recorded_payoff_matrix():
+    """Benchmarks written before the matrix was recorded must be recomputed.
+
+    They were all produced at the hardcoded benefit=2, so reusing them would be
+    numerically identical today -- but the predicate cannot know that, and the
+    whole point of recording the matrix is to make the reuse safe rather than
+    assumed.
+    """
+    candidate = probe_source("L1")
+    args = _Args()
+    stored = _stored(candidate, args)
+    del stored["config"][KEY_BENEFIT]
+    del stored["config"][KEY_COST]
     assert cache_matches(stored, args, candidate, "c") is False
 
 

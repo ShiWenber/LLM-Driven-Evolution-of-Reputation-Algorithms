@@ -189,8 +189,8 @@ REQUIRED_CONFIG_FIELDS = (
 )
 
 # Agent families supported by the v2/v3 quantitative interface.
-# Canonical values: "agent-type1" and "agent-type2".
-AGENT_TYPES = ("agent-type1", "agent-type2")
+# The signal variant adds optional structured fields; legacy records stay scalar.
+AGENT_TYPES = ("agent-type1", "agent-type2", "agent-type2-signal")
 
 # ---------------------------------------------------------------------------
 # Canonical directory / file layout
@@ -213,7 +213,7 @@ def population_entry(
     code: str,
     fitness: float,
     cooperation_rate: float,
-    self_reputation: float,
+    self_reputation: Optional[float],
     *,
     lineage_id: Optional[int] = None,
     parent_id: Optional[int] = None,

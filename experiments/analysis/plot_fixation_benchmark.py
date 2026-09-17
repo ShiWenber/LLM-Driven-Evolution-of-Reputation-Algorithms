@@ -115,10 +115,19 @@ def plot(summary_path: Path, output_path: Path) -> None:
     forward = np.asarray(
         [data["results"][p]["candidate_invades_probe"]["rho"] for p in probes]
     )
-    width = 0.5
+    reverse = np.asarray(
+        [data["results"][p].get("probe_invades_candidate", {}).get("rho", np.nan)
+         for p in probes]
+    )
+    has_reverse = np.all(np.isfinite(reverse))
+    width = 0.36 if has_reverse else 0.5
     ax.axhline(neutral, color="#222222", linewidth=1.6, linestyle="--",
                label=f"neutral $1/N$ = {neutral:.3f}")
-    ax.bar(x, forward, width, label=f"{label} invades probe", color="#2878B5")
+    if has_reverse:
+        ax.bar(x - width / 2, forward, width, label=f"{label} invades probe", color="#2878B5")
+        ax.bar(x + width / 2, reverse, width, label="probe invades candidate", color="#E07A5F")
+    else:
+        ax.bar(x, forward, width, label=f"{label} invades probe", color="#2878B5")
     # Show how far rho would move if each composition had landed in its other
     # basin; a tall whisker is a warning, not a confidence interval.
     los, his = [], []
@@ -132,7 +141,7 @@ def plot(summary_path: Path, output_path: Path) -> None:
             his.append(0.0)
     if any(los) or any(his):
         ax.errorbar(
-            x, forward, yerr=[los, his], fmt="none",
+            x - width / 2 if has_reverse else x, forward, yerr=[los, his], fmt="none",
             ecolor="#333333", elinewidth=1.1, capsize=3, zorder=5,
         )
     ax.set_xticks(x, probes)
@@ -146,7 +155,7 @@ def plot(summary_path: Path, output_path: Path) -> None:
     else:
         ax.set_title(
             "Fixation probability vs the neutral benchmark\n"
-            "bar above dashed = candidate can invade the probe",
+            "bars show both invasion directions",
             fontsize=11,
         )
     ax.grid(axis="y", color="#DDDDDD", linewidth=0.7)

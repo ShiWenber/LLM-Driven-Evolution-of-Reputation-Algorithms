@@ -110,7 +110,42 @@ _CONFIG = {
     "absorbing_state_early_stop": True,
     "action_error_probability": 0.01,
     "observation_error_probability": 0.01,
+    # The matrix the archived sweeps were actually paid from (the engine
+    # hardcoded it). _RUN_ARGS leaves benefit/cost at their defaults, which are
+    # these same values, so an archived result stays cache-resident.
+    "benefit": 2.0,
+    "cost": 1.0,
 }
+
+
+def test_cache_rejects_a_result_recording_a_different_payoff_matrix():
+    candidate = _source("candidate-code")
+    l1 = norm_source("L1")
+    stored = {
+        "config": {**_CONFIG, "benefit": 3.0},
+        "candidate_source": {"code_sha256": candidate.code_sha256},
+        "norm": "L1",
+    }
+    assert not cache_matches(stored, candidate, l1, "L1", *_RUN_ARGS)
+
+
+def test_cache_rejects_a_result_without_a_recorded_payoff_matrix():
+    """Pre-change results recorded no matrix; they must be recomputed.
+
+    Reusing them would silently apply whatever matrix the caller resolved now,
+    which is exactly the mismatch that recording the matrix prevents.
+    """
+    candidate = _source("candidate-code")
+    l1 = norm_source("L1")
+    config = dict(_CONFIG)
+    del config["benefit"]
+    del config["cost"]
+    stored = {
+        "config": config,
+        "candidate_source": {"code_sha256": candidate.code_sha256},
+        "norm": "L1",
+    }
+    assert not cache_matches(stored, candidate, l1, "L1", *_RUN_ARGS)
 
 
 def test_cache_matches_accepts_archived_norm_results():

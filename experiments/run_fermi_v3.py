@@ -162,9 +162,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-root", type=str, default=str(DEFAULT_OUTPUT_ROOT),
                         help="Root directory where per-seed result folders are created.")
     parser.add_argument("--agent-type", type=str, default="agent-type2",
-                        choices=["agent-type1", "agent-type2"],
+                        choices=["agent-type1", "agent-type2", "agent-type2-signal"],
                         help="Agent family to evolve: 'agent-type1' (type-1 "
-                             "functions) or 'agent-type2' (full LLMAgent class).")
+                             "functions), 'agent-type2' (full LLMAgent class), "
+                             "or 'agent-type2-signal' (private dataclass signals).")
     parser.add_argument("--dry-run", action="store_true",
                         help="Validate arguments and print the seed plan without running.")
     return parser

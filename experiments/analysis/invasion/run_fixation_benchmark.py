@@ -64,18 +64,31 @@ from pathlib import Path
 from typing import Any
 
 from experiments.v2_quantitative.baselines import BASELINES
+from experiments.v2_quantitative.game import prisoners_dilemma_payoff
+from experiments.v2_quantitative.signal_executor import SignalStrategyExecutor, SIGNAL_INTERFACE_VERSION
 
 from ..paths import quantitative_results_dir
-from .core import NORMS, Competitor, EvolvedSource, write_json_atomic
+from .core import (
+    BENEFIT,
+    COST,
+    NORMS,
+    Competitor,
+    EvolvedSource,
+    resolve_payoff_matrix,
+    write_json_atomic,
+)
 from .run_invasion import load_representative_from_path
 
 
-INTERACTIONS_PER_POPULATION = 10_000
+INTERACTIONS_PER_POPULATION = 5_000
 DEFAULT_BURN_IN = INTERACTIONS_PER_POPULATION
 MEASUREMENT_MULTIPLIER = 3
 DEFAULT_MEASURE = INTERACTIONS_PER_POPULATION * MEASUREMENT_MULTIPLIER
 DEFAULT_BETA = 1.0
 DEFAULT_POPULATION = 50
+# Interactions per stationarity block. The measurement window is split into
+# blocks of this size so drift can be detected without storing every round.
+DEFAULT_BLOCK_SIZE = 2_000
 PROBE_CHOICES = ("ALLC", "ALLD", *NORMS)
 
 # Canonical config key names. The writer and the cache predicate must agree
@@ -88,6 +101,8 @@ KEY_MEASURE = "measure_interactions"
 KEY_BETA = "beta"
 KEY_ACTION_ERROR = "action_error_probability"
 KEY_OBSERVATION_ERROR = "observation_error_probability"
+KEY_BENEFIT = "benefit"
+KEY_COST = "cost"
 
 # Stationarity is the load-bearing assumption, so every result carries the
 # block-wise payoff series. Inflate --burn-in / --measure until the two series
@@ -112,6 +127,8 @@ def load_candidate(label: str, agent_type: str, raw_path: str) -> EvolvedSource:
     if path.suffix == ".json":
         return load_representative_from_path(label, agent_type, path)
     code = path.read_text(encoding="utf-8")
+    if agent_type == "agent-type2-signal":
+        SignalStrategyExecutor(code)
     return EvolvedSource(
         agent_type=agent_type,
         path=path,
@@ -179,7 +196,9 @@ def stationary_mixture(
     beta: float = DEFAULT_BETA,
     action_error: float = 0.0,
     observation_error: float = 0.0,
-    block_size: int = 2_000,
+    block_size: int = DEFAULT_BLOCK_SIZE,
+    benefit: float = BENEFIT,
+    cost: float = COST,
 ) -> dict[str, Any]:
     """Run one composition to stationarity and return the two type payoffs.
 
@@ -187,6 +206,10 @@ def stationary_mixture(
     ``measure`` interactions are accumulated. Reputations are never reset, so
     the measured phase is drawn from the (approximately) stationary reputation
     distribution rather than a transient.
+
+    ``benefit`` / ``cost`` are the matrix both types are paid from; callers pass
+    what ``resolve_payoff_matrix`` picked so a candidate is measured in the game
+    it was selected under.
 
     Returns the payoff per participation for each type, plus block-wise payoffs
     so callers can check that stationarity was actually reached.
@@ -202,6 +225,9 @@ def stationary_mixture(
         raise ValueError("mutant_count must be in 1..N-1")
     resident_count = population_size - mutant_count
     rng = random.Random(seed)
+    # New signal policies get reproducible, ID-independent streams without
+    # changing the historical matching/perception RNG or legacy policy RNGs.
+    signal_rng = random.Random(2_000_003 + seed)
 
     # Randomised placement so slot identity cannot bias the result.
     slots = list(range(population_size))
@@ -213,6 +239,7 @@ def stationary_mixture(
             "mutant" if slot in mutant_slots else "resident",
             f"m{mutant_count}",
             mutant if slot in mutant_slots else resident,
+            signal_seed=signal_rng.getrandbits(128),
         )
         for slot in slots
     ]
@@ -240,8 +267,26 @@ def stationary_mixture(
             second_coop = second_action == "cooperate"
 
             payoffs = (
-                (first, 2 * int(second_coop) - int(first_coop), first_coop),
-                (second, 2 * int(first_coop) - int(second_coop), second_coop),
+                (
+                    first,
+                    prisoners_dilemma_payoff(
+                        my_cooperates=first_coop,
+                        other_cooperates=second_coop,
+                        benefit=benefit,
+                        cost=cost,
+                    ),
+                    first_coop,
+                ),
+                (
+                    second,
+                    prisoners_dilemma_payoff(
+                        my_cooperates=second_coop,
+                        other_cooperates=first_coop,
+                        benefit=benefit,
+                        cost=cost,
+                    ),
+                    second_coop,
+                ),
             )
             if completed >= burn_in:
                 for member, payoff, _ in payoffs:
@@ -331,6 +376,8 @@ def payoff_difference_curve(
     observation_error: float,
     workers: int,
     replicates: int = 1,
+    benefit: float = BENEFIT,
+    cost: float = COST,
 ) -> list[dict[str, Any]]:
     """Sweep every two-type composition, in parallel, and return the curve.
 
@@ -347,7 +394,8 @@ def payoff_difference_curve(
     """
     payloads = [
         (mutant, resident, k, seed + 1_000_003 * rep + k, population_size,
-         burn_in, measure, beta, action_error, observation_error)
+         burn_in, measure, beta, action_error, observation_error,
+         DEFAULT_BLOCK_SIZE, benefit, cost)
         for k in range(1, population_size)
         for rep in range(replicates)
     ]
@@ -434,22 +482,35 @@ def benchmark_pair(
     workers: int,
     base_seed: int,
     replicates: int = 1,
+    benefit: float = BENEFIT,
+    cost: float = COST,
 ) -> dict[str, Any]:
-    """Fixation probability of the candidate against one probe, from one sweep.
+    """Fixation probabilities in both directions against one probe.
 
-    ``curve[k-1]`` holds ``pi_mutant(k) - pi_resident(k)`` for the composition
-    with ``k`` candidates, which is exactly what the Traulsen--Hauert formula
-    needs for "candidate invades probe". The opposite ordering is a different
-    experiment and is not inferred here.
+    ``curve[k-1]`` holds ``pi_candidate(k) - pi_probe(k)``. The reverse
+    probability is obtained from the same two-type curve by reversing the
+    composition and changing the sign: when the probe is the mutant at k,
+    the candidate has N-k individuals, so d_reverse(k) = -d_forward(N-k).
+    This gives both directional fixation probabilities without a second
+    reputation-dynamics simulation.
     """
     source_probe = probe_source(probe)
     curve = payoff_difference_curve(
         candidate, source_probe, base_seed, population_size, burn_in, measure,
         beta, action_error, observation_error, workers, replicates,
+        benefit, cost,
     )
+    forward = _summarise_curve(curve, beta, population_size)
+    reverse_curve = [
+        {**entry, "mutant_count": population_size - entry["mutant_count"],
+         "payoff_difference": -entry["payoff_difference"]}
+        for entry in reversed(curve)
+    ]
+    reverse = _summarise_curve(reverse_curve, beta, population_size)
     return {
         "probe": probe,
-        "candidate_invades_probe": _summarise_curve(curve, beta, population_size),
+        "candidate_invades_probe": forward,
+        "probe_invades_candidate": reverse,
     }
 
 
@@ -476,6 +537,10 @@ def cache_matches(
     should pass ``--force``.
     """
     cfg = existing.get("config", {})
+    if candidate.agent_type == "agent-type2-signal":
+        saved = existing.get("candidate", {})
+        if saved.get("agent_type") != candidate.agent_type or saved.get("signal_interface_version") != SIGNAL_INTERFACE_VERSION:
+            return False
     return bool(
         cfg.get(KEY_POPULATION) == args.population_size
         and cfg.get(KEY_BURN_IN) == args.burn_in
@@ -483,6 +548,10 @@ def cache_matches(
         and cfg.get(KEY_BETA) == args.beta
         and cfg.get(KEY_ACTION_ERROR) == args.action_error
         and cfg.get(KEY_OBSERVATION_ERROR) == args.observation_error
+        # Results written before the matrix was read from the log carry no
+        # benefit, so they mismatch and are recomputed.
+        and cfg.get(KEY_BENEFIT) == args.benefit
+        and cfg.get(KEY_COST) == args.cost
         and cfg.get("replicates", 1) == args.replicates
         and existing.get("candidate", {}).get("label") == label
         and existing.get("candidate", {}).get("code_sha256") == candidate.code_sha256
@@ -545,15 +614,15 @@ def main() -> None:
     parser.add_argument(
         "--burn-in", type=int, default=None,
         help=(
-            "Burn-in interaction count; default is population_size * 10^4 "
+            "Burn-in interaction count; default is population_size * 5*10^3 "
             "(per-individual scaling)."
         ),
     )
     parser.add_argument(
         "--measure", type=int, default=None,
         help=(
-            "Measurement interaction count; default is population_size * 10^4 "
-            "* 3 (per-individual scaling)."
+            "Measurement interaction count; default is population_size * 15*10^3 "
+            "(per-individual scaling)."
         ),
     )
     parser.add_argument("--beta", type=float, default=DEFAULT_BETA,
@@ -572,6 +641,23 @@ def main() -> None:
         ),
     )
     parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument(
+        "--benefit",
+        type=float,
+        default=None,
+        help=(
+            "PD cooperation benefit. Default (unset) reads it from the "
+            "candidate's evolution log, so the mutant is measured in the game "
+            "it was selected under. Pass explicitly to force the archived "
+            "benefit=2 matrix."
+        ),
+    )
+    parser.add_argument(
+        "--cost",
+        type=float,
+        default=None,
+        help="PD cooperation cost. Default (unset): read from the log, like --benefit.",
+    )
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
 
@@ -600,6 +686,24 @@ def main() -> None:
     except (ValueError, FileNotFoundError) as exc:
         parser.error(str(exc))
 
+    # The probe side is a canonical norm, which carries no log, so the matrix
+    # comes from the candidate's own run unless the CLI overrides it.
+    try:
+        args.benefit, args.cost = resolve_payoff_matrix(
+            candidate, benefit=args.benefit, cost=args.cost
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+    if args.benefit <= args.cost:
+        parser.error(
+            f"benefit must exceed cost for a social dilemma; resolved to "
+            f"benefit={args.benefit}, cost={args.cost}"
+        )
+    print(
+        f"  payoff matrix: benefit={args.benefit:g}, cost={args.cost:g}",
+        flush=True,
+    )
+
     output = args.output or (default_output() / label)
     output.mkdir(parents=True, exist_ok=True)
     result_path = output / "fixation_benchmark.json"
@@ -626,6 +730,7 @@ def main() -> None:
             candidate, label, probe, args.population_size, args.burn_in,
             args.measure, args.beta, args.action_error, args.observation_error,
             args.workers, args.seed, args.replicates,
+            args.benefit, args.cost,
         )
         rho = results[probe]["candidate_invades_probe"]["rho"]
         neutral = 1.0 / args.population_size
@@ -660,6 +765,10 @@ def main() -> None:
             KEY_BURN_IN: args.burn_in,
             KEY_MEASURE: args.measure,
             KEY_BETA: args.beta,
+            # The matrix both types were paid from, resolved from the candidate
+            # log unless --benefit/--cost overrode it.
+            KEY_BENEFIT: args.benefit,
+            KEY_COST: args.cost,
             "neutral_fixation_probability": 1.0 / args.population_size,
             KEY_ACTION_ERROR: args.action_error,
             KEY_OBSERVATION_ERROR: args.observation_error,
@@ -674,6 +783,9 @@ def main() -> None:
         "results": results,
         "elapsed_seconds": time.perf_counter() - started,
     }
+    if candidate.agent_type == "agent-type2-signal":
+        payload["candidate"]["signal_interface_version"] = SIGNAL_INTERFACE_VERSION
+        payload["candidate"]["signal_schema"] = SignalStrategyExecutor(candidate.code).schema_record()
     write_json_atomic(result_path, payload)
     print(f"Wrote {result_path}  ({payload['elapsed_seconds']:.1f}s)")
     print()
@@ -708,11 +820,15 @@ def _warn_if_not_stationary(payload: dict[str, Any]) -> None:
 def _print_report(payload: dict[str, Any], label: str) -> None:
     neutral = payload["config"]["neutral_fixation_probability"]
     print()
-    print(f"=== {label}: invasion ability (neutral rho = {neutral:.4f}) ===")
-    print(f"{'probe':>6} {label + '->probe':>16} {'verdict':>18}")
+    print(f"=== {label}: bidirectional invasion (neutral rho = {neutral:.4f}) ===")
+    print(f"{'probe':>6} {label + '->probe':>16} {'probe->' + label:>16} "
+          f"{'verdicts (forward / reverse)':>38}")
     for probe, entry in payload["results"].items():
         forward = entry["candidate_invades_probe"]["rho"]
-        print(f"{probe:>6} {forward:>16.4f} {_verdict(forward, neutral):>18}")
+        reverse = entry["probe_invades_candidate"]["rho"]
+        print(f"{probe:>6} {forward:>16.4f} {reverse:>16.4f} "
+              f"{_verdict(forward, neutral):>18} / "
+              f"{_verdict(reverse, neutral):>18}")
 
 
 if __name__ == "__main__":

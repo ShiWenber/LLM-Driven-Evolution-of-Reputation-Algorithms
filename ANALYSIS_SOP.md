@@ -7,8 +7,15 @@
 > 命名约定与验收标准**，是可直接照做的标准操作流程。
 >
 > **§1–§9**：逐 seed 聚类/谱系可视化（回答"策略空间与谱系"）。
+> **§6**：分两步 —— **§6.1** 跨 seed 联合聚类；**§6.2** 用 6.1 的 `run_id` 做**联合标签谱系树**
+> （5 个 seed 共享同一套 cluster 颜色，可跨 seed 比较谱系）。§6.2 依赖 6.1，不可跳过。
 > **§10**：逐目标私人声誉矩阵热图（回答"所有人对同一目标的看法在数值上是否一致"）。
-> 两段互相独立，可只跑其中一段。
+> 三段互相独立，可只跑需要的部分。
+>
+> 📌 **§6.2 是 2026-09-14 新增**：此前 `plot_lineage` 的 `--cluster-run-id` 能力
+> 虽已在代码中存在，但未写入 SOP，导致"跨 seed 可比的谱系树"实际无人产出。
+> 注意 §4（逐 seed 独立聚类谱系树）与 §6.2（联合标签谱系树）是**两套不同产物**，
+> 用文件名 `__joint` 后缀区分，不可混用。
 
 
 ---
@@ -143,7 +150,11 @@ uv run python -m experiments.analysis.plot_evolution_curves `
 
 ---
 
-## 6. 跨 seed 联合聚类（同一策略空间对比）
+## 6. 跨 seed 联合聚类与联合谱系（同一策略空间对比）
+
+> 本节含两步，**必须按顺序做**：先 6.1 得到联合 `run_id`，再用该 `run_id` 做 6.2。
+
+### 6.1 联合聚类
 
 将所有 seed 的 json 一起传入，**共享一次 embedding + PCA + K-means**（K 全局自动选），
 保证 cluster 编号/名称跨 seed 可比：
@@ -162,10 +173,78 @@ uv run python -m experiments.analysis.plot_cross_experiment_clusters `
 - `cross_experiment_strategy_space.png` — 共享 PCA 空间散点
 - `*_seed<N>_cluster_composition.png` — 每 seed 单独构成图
 - `source_manifest.json` — 输入路径清单
-- 打印 `run_id`（← 记录到汇总报告，用于回查缓存）
+- 打印 `run_id`（← 记录到汇总报告，**并且必须传给 6.2**）
 
 > ⚠️ 已知限制：脚本 `_experiment_label()` 只按 `LLM_v2`/`LLM_v3` 前缀区分类型，
 > 非 `LLM_v2` 一律显示为 "LLM_v3"。agent-type1 run 的图例标签会有误导，解读时注意。
+
+### 6.2 联合标签谱系树（用 6.1 的 run_id）
+
+把 **6.1 的 `run_id`** 传给 `plot_lineage`，使 5 个 seed 的谱系树**共享同一套 cluster
+颜色与名称**，从而可以跨 seed 横向比较谱系构成。
+
+`plot_lineage` **没有 `--out-dir`**（输出固定写到 `--json` 所在目录），因此推荐用
+**单进程脚本**直接调库函数、把产物写到汇总目录：
+
+```python
+# 单进程：一次加载 sklearn/scipy，循环 5 个 seed（避免 CLI 反复重载被中断）
+# 下文的 $OUT / $LABEL / $RID 是本文档的占位符，用时替换为实际值。
+from pathlib import Path
+from experiments.analysis.clustering.cache import AnalysisCache
+from experiments.analysis.plot_lineage import lineage_backtrack_tree, lineage_survival_plot
+from experiments.evolution_log import F_CODE, F_LINEAGE_ID, F_POPULATION, K_TRAJECTORY, load_evolution_json
+
+JOINT = Path("$OUT/analysis_<描述>/joint_<n>seed");  JOINT.mkdir(parents=True, exist_ok=True)
+cache = AnalysisCache(None)                       # None ⇒ 默认共享缓存
+code_labels, names = cache.get_clustering_run_labels("$RID")
+
+for seed in range(5):
+    data = load_evolution_json(f"$OUT/$LABEL_seed{seed}/evolutionary.json")
+    code_by_lineage = {}
+    for gen in data.get(K_TRAJECTORY, []):
+        for a in gen.get(F_POPULATION, []):
+            lid = a.get(F_LINEAGE_ID)
+            if lid is not None and lid not in code_by_lineage:
+                code_by_lineage[lid] = a.get(F_CODE, "")
+    clusters = ({l: code_labels[c] for l, c in code_by_lineage.items() if c in code_labels},
+                names, "stored Code embedding (joint run)", "$RID")
+    lineage_survival_plot(data, JOINT / f"lineage_survival__joint_seed{seed}.png", clusters=clusters)
+    lineage_backtrack_tree(data, JOINT / f"survivor_ancestry_tree__joint_seed{seed}.png",
+                           clusters=clusters, survivors_only=True)
+    lineage_backtrack_tree(data, JOINT / f"full_birth_event_tree__joint_seed{seed}.png",
+                           clusters=clusters, survivors_only=False)
+```
+
+命令行等价形式（产物落在 seed 目录，需手工搬到汇总目录并改名）：
+
+```powershell
+uv run python -m experiments.analysis.plot_lineage --cluster-run-id $RID `
+  --survivors-only --out-suffix jsurv --json "$OUT/$LABEL`_seed$s/evolutionary.json"
+uv run python -m experiments.analysis.plot_lineage --cluster-run-id $RID `
+  --out-suffix jfull --json "$OUT/$LABEL`_seed$s/evolutionary.json"
+```
+
+命名约定（必须带 `__joint` 后缀，与 §4 的独立聚类版区分）：
+
+| 输出 | 汇总目录下的规范名 |
+|---|---|
+| 幸存者祖先树 | `survivor_ancestry_tree__joint_seed<N>.png` |
+| 全分支出生事件树 | `full_birth_event_tree__joint_seed<N>.png` |
+| 谱系存活区间 | `lineage_survival__joint_seed<N>.png` |
+
+> 🚨 **最容易搞错的一点**：`plot_lineage` **默认对每个 seed 各自重新聚类**。
+> 不传 `--cluster-run-id` 时产出的是**逐 seed 独立标签**版，
+> **不能**跨 seed 比较 cluster 编号。§4 的产物就是这种独立版。
+> 两套必须用文件名区分（§4 无 `__joint` 后缀，§6.2 有）。
+
+> ⚠️ 不要在 PowerShell 里循环调 CLI：每次启动都要重新加载 sklearn/scipy/numpy，
+> 5 seed × 2 次 = 10 次重载，实测多次 `KeyboardInterrupt`。用上面的单进程脚本。
+
+覆盖度自查（应输出 0）：
+
+```python
+miss = sum(1 for code in code_by_lineage.values() if code not in code_labels)
+```
 
 ---
 
@@ -177,8 +256,9 @@ uv run python -m experiments.analysis.plot_cross_experiment_clusters `
 |---|---|
 | 摘要表（gen0/最终 coop、fitness、唯一策略数、lineage 事件数）| 逐 seed `evolutionary.json`（`trajectory[0]` / `trajectory[-1]` / `final_population` / `lineage_events`）|
 | 每 seed 产物索引表 | §1–§4 产物，相对链接到 seed 目录 |
-| 联合聚类参数与 cluster 名表 | SQLite 缓存 `clustering_runs`（`cluster_names_json`、`cluster_count`），run_id 来自 §6 打印 |
+| 联合聚类参数与 cluster 名表 | SQLite 缓存 `clustering_runs`（`cluster_names_json`、`cluster_count`），run_id 来自 §6.1 打印 |
 | 最终代联合构成（每 seed 各 cluster 人数）| SQLite `cluster_assignments`，`WHERE run_id=? AND generation=99` |
+| 联合标签谱系树索引（5 seed × 3 图）| §6.2 产物，相对链接到 `joint_<n>seed/`；附各 seed 存活谱系数 / top-1 占比 / 存活根 origin |
 
 从缓存读取元数据的参考语句：
 
@@ -203,10 +283,20 @@ con.execute("SELECT experiment_id, cluster_id, COUNT(*) FROM cluster_assignments
    `final_strategy_clusters_pca.png`、`strategy_dendrogram.png`、
    `lineage_survival.png`、`full_birth_event_tree.png`、
    `final_survivor_ancestry_tree.png`、`lineage.json`、`evolutionary.json`。
+   ⚠️ 这 10 项里的谱系图是 **§4 的逐 seed 独立聚类版**（无 `__joint` 后缀），
+   不要把它们当成联合标签版。
 2. 全部命令 exit code = 0，无 traceback；`plot_lineage` 不报 schema < 4。
 3. `lineage.json` 输出 `n_events`/`n_lineages` 与 `lineage_events` 长度自洽。
 4. 汇总目录存在 `README.md` + 进化曲线 + `joint_*` 输出。
 5. 缓存中能按 run_id 查到聚类名称与最终构成（用于报告追溯）。
+6. **§6.2 联合标签谱系树齐备**：`joint_<n>seed/` 下恰好 `survivor_ancestry_tree__joint_seed<N>.png`、
+   `full_birth_event_tree__joint_seed<N>.png`、`lineage_survival__joint_seed<N>.png` 各 n 份
+   （n = seed 数），且**文件名带 `__joint` 后缀**以区别于 §4。
+7. **联合标签覆盖度 = 100%**：每个 seed 的 `lineage_id -> code` 全部命中
+   `--cluster-run-id` 的 `code_labels`（unlabelled = 0）。若有缺号，说明 6.1 的
+   run 与 6.2 的 json 不匹配（例如 6.1 之后有新 run 覆盖了缓存），需重跑 6.1。
+8. **颜色可比性**：5 个 seed 的 6.2 图例（cluster 名 → 颜色）完全一致，
+   即同一 cluster 名在 5 张图里同色。
 
 ---
 
@@ -217,6 +307,9 @@ con.execute("SELECT experiment_id, cluster_id, COUNT(*) FROM cluster_assignments
 | PowerShell 中 `$LABEL_seed` 变量粘连 | 用反引号转义：`"$OUT/${LABEL}_seed$s/..."` 或 `` "$OUT/$LABEL`_seed$s/..." `` |
 | 单 seed 产物缺失 | 单独重跑该命令；embedding/cache 命中，秒级~分钟级 |
 | `plot_evolution_curves` 报 `Missing required runs` | `--seeds` 里有 seed 目录缺 `evolutionary.json`；从 `--seeds` 中移除该 seed |
+| 想要跨 seed 可比的谱系树 | 必须给 `plot_lineage` 传 `--cluster-run-id`（§6.2）；不传就是逐 seed 独立聚类 |
+| §6.2 里有谱系是灰色/无颜色 | 该谱系的代码不在 6.1 的标签里；检查 unlabelled 计数，必要时重跑 6.1 |
+| 循环调 `plot_lineage` CLI 被中断（`KeyboardInterrupt`） | 每次 CLI 都重载 sklearn/scipy/numpy；改成**单进程脚本**调库函数（§6.2）|
 | 聚类名缓存未命中导致额外 DeepSeek 调用 | 属正常；同代码复跑会命中（`--refresh-cluster-names` 可强制重命名）|
 | `--json` 多文件时用 PowerShell 反引号续行 | 每行末加 `` ` ``，勿留尾随空格 |
 

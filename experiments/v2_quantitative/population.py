@@ -3,7 +3,7 @@
 Mirrors the v1 EvolutionaryPopulation but uses the v2 QuantitativeAgent
 and DonorGame.
 
-Supports two agent types:
+Supports three agent types:
   - `agent_type="agent-type1"`: type-1 agents. The LLM
     emits two top-level Python functions (`observe` + `decide`); the
     framework maintains a scalar reputation matrix for them. observe()
@@ -16,6 +16,8 @@ Supports two agent types:
     internal state structure (dicts, lists, counters — anything). The
     framework still maintains a scalar `reputations` matrix for
     bookkeeping, but the LLM is not required to read it.
+  - `agent_type="agent-type2-signal"`: framework-owned private dataclass
+    signals and an identity-free instance-method policy (see agent_signal.py).
 
 Type 2 baseline mode currently only supports ALLC and ALLD
 (via the ALLC_CLASS_SOURCE / ALLD_CLASS_SOURCE source strings for the
@@ -61,6 +63,12 @@ from .agent_full import (
     ALLC_CLASS_SOURCE, ALLD_CLASS_SOURCE,
 )
 from .executor import V2StrategyExecutor
+from .agent_signal import SignalAgent, ALLC_SIGNAL_SOURCE, ALLD_SIGNAL_SOURCE
+from .signal_executor import SignalStrategyExecutor, SIGNAL_INTERFACE_VERSION
+from .signal_prompts import (
+    INIT_PROMPT_SIGNAL, MUTATION_PROMPT_SIGNAL, SMALL_MUTATION_PROMPT_SIGNAL,
+    DELIBERATE_MUTATION_PROMPT_SIGNAL,
+)
 from .evolution_architecture import (
     AgentSnapshot,
     EvolutionRule,
@@ -261,9 +269,9 @@ class V2EvolutionaryPopulation:
         evolution_rule: Optional[EvolutionRule] = None,
         offspring_generator: Optional[OffspringGenerator] = None,
     ):
-        if agent_type not in ("agent-type1", "agent-type2"):
+        if agent_type not in ("agent-type1", "agent-type2", "agent-type2-signal"):
             raise ValueError(
-                f"agent_type must be 'agent-type1' or 'agent-type2', "
+                f"agent_type must be 'agent-type1', 'agent-type2', or 'agent-type2-signal', "
                 f"got {agent_type!r}"
             )
         if imitation_learning_mode not in ("random", "deliberate"):
@@ -526,6 +534,9 @@ class V2EvolutionaryPopulation:
 
     def _make_agent(self, code: str, agent_id: int):
         """Validate `code` and instantiate one agent of the configured type."""
+        if self.agent_type == "agent-type2-signal":
+            executor = SignalStrategyExecutor(code, seed=self.rng.getrandbits(128))
+            return SignalAgent(agent_id, executor, code=code)
         if self.agent_type == "agent-type2":
             executor = V3StrategyExecutor(code)
             return FullAgent(agent_id, executor=executor, code=code)
@@ -549,7 +560,7 @@ class V2EvolutionaryPopulation:
         uniform across both agent types.
         """
         birth = self._slot_birth.get(a.agent_id, {})
-        return population_entry(
+        record = population_entry(
             agent_id=a.agent_id,
             code=a.code,
             fitness=a.fitness,
@@ -561,6 +572,9 @@ class V2EvolutionaryPopulation:
             origin=birth.get(F_ORIGIN),
             birth_gen=birth.get(F_BIRTH_GEN),
         )
+        if self.agent_type == "agent-type2-signal":
+            record.update(a.signal_metadata())
+        return record
 
     def _validate_code(self, code: str) -> None:
         """Validate that `code` is acceptable for the current agent_type.
@@ -570,7 +584,9 @@ class V2EvolutionaryPopulation:
         V3StrategyExecutor (which loads the LLMAgent class). Raises on
         any error.
         """
-        if self.agent_type == "agent-type2":
+        if self.agent_type == "agent-type2-signal":
+            SignalStrategyExecutor(code)
+        elif self.agent_type == "agent-type2":
             V3StrategyExecutor(code)
         else:
             V2StrategyExecutor(code)
@@ -650,6 +666,8 @@ class V2EvolutionaryPopulation:
 
     def _init_prompt(self) -> str:
         """The agent-type-appropriate init prompt with real sim params."""
+        if self.agent_type == "agent-type2-signal":
+            return INIT_PROMPT_SIGNAL.format(**self._sim_params())
         template = (
             INIT_PROMPT_V3 if self.agent_type == "agent-type2" else INIT_PROMPT_V2
         )
@@ -672,7 +690,7 @@ class V2EvolutionaryPopulation:
         codes = self._parallel_llm_map(generate_one, range(self.population_size))
         for i, code in enumerate(codes):
             if code is None:
-                fb = FALLBACK_CLASS_V3 if self.agent_type == "agent-type2" else self.rng.choice(FALLBACK_STRATEGIES)
+                fb = self._initial_fallback_code()
                 code = fb
                 self._fallback_init_count += 1
                 print(f"  [init agent {i}] using FALLBACK strategy")
@@ -681,7 +699,12 @@ class V2EvolutionaryPopulation:
     def _init_population_baseline(self):
         """All agents use the same baseline strategy."""
         assert self.use_baseline is not None
-        if self.agent_type == "agent-type2":
+        if self.agent_type == "agent-type2-signal":
+            signal_baselines = {"ALLC": ALLC_SIGNAL_SOURCE, "ALLD": ALLD_SIGNAL_SOURCE}
+            if self.use_baseline not in signal_baselines:
+                raise ValueError("agent-type2-signal baseline mode supports ALLC / ALLD; compare Leading Eight as type1 residents")
+            code = signal_baselines[self.use_baseline]
+        elif self.agent_type == "agent-type2":
             # Only ALLC / ALLD supported as type-2 baselines
             t2_baselines = {"ALLC": ALLC_CLASS_SOURCE, "ALLD": ALLD_CLASS_SOURCE}
             if self.use_baseline not in t2_baselines:
@@ -697,10 +720,7 @@ class V2EvolutionaryPopulation:
                 self.agents.append(self._new_agent(code))
             except Exception as e:
                 print(f"  [init baseline {i}] validation fail: {e}")
-                if self.agent_type == "agent-type2":
-                    fb = FALLBACK_CLASS_V3
-                else:
-                    fb = self.rng.choice(FALLBACK_STRATEGIES)
+                fb = self._initial_fallback_code()
                 self.agents.append(self._new_agent(fb))
         print(f"  Initialized {len(self.agents)} agents with baseline '{self.use_baseline}' (agent_type={self.agent_type})")
 
@@ -713,7 +733,11 @@ class V2EvolutionaryPopulation:
         single-threaded commit phase.
         """
         sim = self._sim_params()
-        if self.agent_type == "agent-type2":
+        if self.agent_type == "agent-type2-signal":
+            user_msg = MUTATION_PROMPT_SIGNAL.format(
+                fitness=parent_fitness, parent_code=parent_code, **sim
+            )
+        elif self.agent_type == "agent-type2":
             user_msg = MUTATION_PROMPT_V3.format(
                 fitness=parent_fitness, parent_code=parent_code, **sim
             )
@@ -747,7 +771,13 @@ class V2EvolutionaryPopulation:
         self, parent_code: str, parent_fitness: float, preserve_id: int
     ) -> Optional[str]:
         """Generate and validate code for one parent-conditioned update."""
-        if self.agent_type == "agent-type2":
+        if self.agent_type == "agent-type2-signal":
+            template = (
+                DELIBERATE_MUTATION_PROMPT_SIGNAL
+                if self.imitation_learning_mode == "deliberate"
+                else SMALL_MUTATION_PROMPT_SIGNAL
+            )
+        elif self.agent_type == "agent-type2":
             template = (
                 DELIBERATE_MUTATION_PROMPT_V3
                 if self.imitation_learning_mode == "deliberate"
@@ -879,6 +909,13 @@ class V2EvolutionaryPopulation:
             "rng_state": self.rng.getstate(),
             "rng_state_format": "python_random_v1",
         }
+        if self.agent_type == "agent-type2-signal":
+            fields.update({
+                "signal_interface_version": SIGNAL_INTERFACE_VERSION,
+                "signal_observations_include_participants": True,
+                F_CONFIG_INITIAL_REPUTATION: None,
+                "signal_initialization": "Signal()",
+            })
         fields.update(extra)
         return make_config(**fields)
 
@@ -1140,16 +1177,20 @@ class V2EvolutionaryPopulation:
             error_kind="generation_failed" if code is None else None,
         )
 
+    def _initial_fallback_code(self) -> str:
+        if self.agent_type == "agent-type2-signal":
+            # Explicitly counted as fallback, with no identity-seeded RNG.
+            return self.rng.choice((ALLC_SIGNAL_SOURCE, ALLD_SIGNAL_SOURCE))
+        if self.agent_type == "agent-type2":
+            return FALLBACK_CLASS_V3
+        return self.rng.choice(FALLBACK_STRATEGIES)
+
     def _fallback_code_for_job(self, job: OffspringJob) -> str:
         if job.operator == "baseline_init":
             assert job.baseline_name is not None
             return get_baseline(job.baseline_name)
         if job.operator == "llm_init":
-            return (
-                FALLBACK_CLASS_V3
-                if self.agent_type == "agent-type2"
-                else self.rng.choice(FALLBACK_STRATEGIES)
-            )
+            return self._initial_fallback_code()
         assert job.parent_code is not None
         return job.parent_code
 
@@ -1221,6 +1262,9 @@ class V2EvolutionaryPopulation:
         old_ids = set(old_by_id)
         new_ids = {agent.agent_id for agent in committed_agents}
         for agent in committed_agents:
+            if self.agent_type == "agent-type2-signal":
+                agent.handle_agents_replaced(old_ids - new_ids, new_ids - old_ids)
+                continue
             for removed_id in old_ids - new_ids:
                 agent.reputations.pop(removed_id, None)
 

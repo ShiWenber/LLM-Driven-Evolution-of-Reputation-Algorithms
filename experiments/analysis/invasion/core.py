@@ -12,12 +12,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from experiments.v2_quantitative.agent import QuantitativeAgent
 from experiments.v2_quantitative.agent_full import FullAgent, V3StrategyExecutor
+from experiments.v2_quantitative.agent_signal import SignalAgent
+from experiments.v2_quantitative.signal_executor import SignalStrategyExecutor
 from experiments.v2_quantitative.baselines import BASELINES, LEADING_EIGHT
 from experiments.v2_quantitative.executor import V2StrategyExecutor
 from experiments.v2_quantitative.game import (
@@ -26,7 +29,7 @@ from experiments.v2_quantitative.game import (
 )
 
 
-AGENT_TYPES = ("agent-type1", "agent-type2")
+AGENT_TYPES = ("agent-type1", "agent-type2", "agent-type2-signal")
 NORMS = (*LEADING_EIGHT, "ALLC", "ALLD")
 
 # The invasion experiment measures a single frequency axis: the candidate
@@ -58,10 +61,16 @@ NUM_GENERATIONS = 50
 
 # The payoff matrix and the fitness window are both taken from the main
 # evolutionary engine (``experiments.v2_quantitative.game``) rather than
-# redefined here. The three values below are the protocol constants every
-# archived invasion result was produced with; they are recorded facts about
-# that data, not live parameters, so changing them would break comparability
-# with the archive.
+# redefined here.
+#
+# BENEFIT / COST are the FALLBACK payoff matrix, used only when nothing in the
+# run says otherwise. A strategy loaded from an ``evolutionary.json`` carries
+# the matrix it was actually selected under (``config.benefit`` / ``config.cost``)
+# on its ``EvolvedSource``, and ``resolve_payoff_matrix`` prefers that: testing a
+# b=3 candidate with a b=2 matrix silently changes the game the mutant was
+# adapted to. These two values remain the defaults because every archived result
+# was produced with them, so a run whose sources carry no log still reproduces
+# the archive.
 BENEFIT = 2.0
 COST = 1.0
 FITNESS_WINDOW_FRACTION = 0.2
@@ -104,6 +113,68 @@ class EvolvedSource:
     fitness: float
     code: str
     code_sha256: str
+    # Payoff matrix this strategy was selected under, read from the run log.
+    # ``None`` means "no log says", which is the case for canonical norms and
+    # hand-written ``.py`` strategies; ``resolve_payoff_matrix`` then falls back
+    # to the archived protocol constant.
+    benefit: float | None = None
+    cost: float | None = None
+
+
+def resolve_payoff_matrix(
+    *sources: EvolvedSource,
+    benefit: float | None = None,
+    cost: float | None = None,
+) -> tuple[float, float]:
+    """Pick the ``(benefit, cost)`` a two-type mixture is played under.
+
+    The payoff matrix is a property of the population, not of either strategy:
+    both members of every pair are paid from the same table, so one pair of
+    values has to cover all of them. Each field is resolved independently, in
+    this order:
+
+    1. The explicit ``benefit`` / ``cost`` argument (the ``--benefit`` /
+       ``--cost`` CLI override).
+    2. The value recorded in the log the source was loaded from. Sources with
+       no log (canonical norms, hand-written ``.py``) are skipped.
+    3. ``BENEFIT`` / ``COST``, the constant every archived result was produced
+       with.
+
+    Two log-derived sources that disagree on a field make the mixture
+    ill-defined -- they were selected under different games, so no single table
+    realises both -- and that raises rather than silently picking one.
+    Overriding the field explicitly suppresses that error, which is how a
+    deliberate cross-benefit comparison is run.
+    """
+    logged_benefits = {s.benefit for s in sources if s.benefit is not None}
+    logged_costs = {s.cost for s in sources if s.cost is not None}
+
+    def pick(
+        explicit: float | None,
+        logged: set[float],
+        default: float,
+        field: str,
+    ) -> float:
+        if explicit is not None:
+            return float(explicit)
+        if len(logged) > 1:
+            origins = "; ".join(
+                f"{s.path}: {field}={getattr(s, field)}" for s in sources
+                if getattr(s, field) is not None
+            )
+            raise ValueError(
+                f"sources were selected under different payoff matrices, so no "
+                f"single matrix covers the mixture ({field} disagrees): {origins}. "
+                f"Pass --{field} to force one explicitly."
+            )
+        if logged:
+            return float(next(iter(logged)))
+        return float(default)
+
+    return (
+        pick(benefit, logged_benefits, BENEFIT, "benefit"),
+        pick(cost, logged_costs, COST, "cost"),
+    )
 
 
 def norm_source(norm: str) -> EvolvedSource:
@@ -234,6 +305,7 @@ class Competitor:
     @classmethod
     def create(
         cls, agent_id: int, kind: str, label: str, source: EvolvedSource,
+        *, signal_seed: int | None = None,
     ) -> Competitor:
         if source.agent_type == "agent-type1":
             agent = QuantitativeAgent(
@@ -242,6 +314,13 @@ class Competitor:
         elif source.agent_type == "agent-type2":
             agent = FullAgent(
                 agent_id, V3StrategyExecutor(source.code), code=source.code
+            )
+        elif source.agent_type == "agent-type2-signal":
+            agent = SignalAgent(
+                agent_id, SignalStrategyExecutor(
+                    source.code,
+                    seed=random.getrandbits(128) if signal_seed is None else signal_seed,
+                ), code=source.code
             )
         else:
             raise ValueError(f"Unknown source agent type: {source.agent_type}")
@@ -319,12 +398,19 @@ def play_generation_noisy(
     fitness_window_fraction: float = FITNESS_WINDOW_FRACTION,
     action_error: float = 0.0,
     observation_error: float = 0.0,
+    benefit: float = BENEFIT,
+    cost: float = COST,
 ) -> dict[str, Any]:
     """Play one generation with independent action and perception flips.
 
     ``fitness_window_fraction`` selects the trailing share of interactions that
     counts toward fitness (see ``resolve_window``); earlier ones are burn-in
     that still updates reputations.
+
+    ``benefit`` / ``cost`` are the payoff matrix the generation is paid from.
+    Callers pass the values ``resolve_payoff_matrix`` picked, so a candidate is
+    evaluated in the game it was selected under rather than a fixed one; the
+    defaults keep the archived protocol reproduces when nothing overrides them.
     """
     for agent in population:
         agent.reset_generation_tracking()
@@ -357,18 +443,18 @@ def play_generation_noisy(
             first_cooperates = first_action == "cooperate"
             second_cooperates = second_action == "cooperate"
             # Payoffs come from the shared matrix definition in the main
-            # engine, evaluated at this protocol's (benefit, cost) values.
+            # engine, evaluated at the matrix this mixture resolved to.
             first_payoff = prisoners_dilemma_payoff(
                 my_cooperates=first_cooperates,
                 other_cooperates=second_cooperates,
-                benefit=BENEFIT,
-                cost=COST,
+                benefit=benefit,
+                cost=cost,
             )
             second_payoff = prisoners_dilemma_payoff(
                 my_cooperates=second_cooperates,
                 other_cooperates=first_cooperates,
-                benefit=BENEFIT,
-                cost=COST,
+                benefit=benefit,
+                cost=cost,
             )
             payoffs[first_pos] += first_payoff
             payoffs[second_pos] += second_payoff
