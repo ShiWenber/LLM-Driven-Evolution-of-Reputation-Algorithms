@@ -569,22 +569,23 @@ the production-run script `_run_fermi_3seed_100gen_v3.py` at the repo root.
 At the start of every generation, framework-managed reputations are reset to
 the neutral value `0.0`; reputations do not carry across generations.
 
-Within a generation, each interaction draws a single pair of agents uniformly
-at random and delivers that pair's observations immediately, before the next
-pair is drawn. Reputations therefore evolve continuously inside a generation,
-and a later pair already sees the effects of earlier ones. Because the two
-draws are independent, an agent's number of interactions per generation is a
-random variable (mean two: once as donor, once as recipient) rather than a
-fixed count; averaged over a full generation the exposure is even.
+Within a generation, each round randomly partitions agents into disjoint pairs
+(one agent sits out if the population size is odd). All pairs choose their
+actions before observations from that round are delivered. Participants are
+updated first, followed by third-party observations, as in the historical
+synchronous implementation. Observation updates themselves retain their original
+sequential ordering; this does not freeze all reputation judgments at once.
 
-> **Protocol note.** Results generated before 2026-09-12 used an earlier
-> *synchronous* observation protocol instead, in which each round paired up the
-> whole population on a frozen reputation snapshot and delivered that round's
-> observations together. The two protocols are not interchangeable — they imply
-> different within-generation information dynamics — so those archived runs are
-> not directly comparable with runs produced by the current code, and `--resume`
-> refuses to extend a log written under the old protocol. Burn-in/fitness
-> numbers are unaffected (the window is a share of interactions either way).
+For N=16, 10,000 pair interactions means 1,250 rounds, with 1,250 actions per
+agent. Targets not divisible by the number of pairs round up to a complete round.
+Fitness remains mean payoff per action over the trailing 20% of interactions,
+aligned to whole rounds. Execution/perception noise is unchanged.
+
+> **Protocol note (2026-09-17).** Synchronous matching is again the default.
+> Archived asynchronous runs used independent pair draws and immediate
+> observation delivery. Their protocol remains available for replay, and
+> `--resume` inherits the recorded schedule instead of switching protocols.
+> Comparing the two modes changes both pairing and observation timing.
 
 Run a single seed:
 
@@ -618,7 +619,7 @@ uv run python -m experiments.run_fermi_v3 --agent-type agent-type1 --fermi-init-
 | `--seed N` / `--seeds N...` | `[0, 1, 2]` | Seed(s) to run; `--seed` overrides `--seeds` |
 | `--seed-workers N` | number of seeds | Maximum seed processes; use `1` for sequential execution |
 | `--gens N` | `100` | Number of generations |
-| `--target-interactions N` | `1000` | PD interactions per generation; one randomly drawn pair plays per interaction, with observations delivered immediately |
+| `--target-interactions N` | `1000` | Target pair interactions per generation; rounded up to complete synchronous matching rounds |
 | `--fitness-window-fraction F` | `0.2` | Share of joint actions used for selection fitness: each agent's payoff in that window divided by its own action count in the same window. Earlier actions are burn-in; pass `0` to use the whole generation |
 | `--population-size N` | `15` | Population size |
 | `--learning-method {fermi,tournament}` | `fermi` | Learning/selection rule; tournament uses elite retention and tournament-selected survivors |
