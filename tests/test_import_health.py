@@ -32,11 +32,17 @@ def _source_backed_module_names() -> list[str]:
 
     ``pkgutil`` also lists orphaned ``__pycache__/*.pyc`` left behind by deleted
     modules; those are build artifacts, and failing on them is a false positive.
+
+    A package counts when its ``__init__.py`` exists, so the package itself is
+    exercised too -- not only its submodules.
     """
     names = []
     for info in pkgutil.walk_packages([str(PACKAGE_ROOT)], prefix=PREFIX):
         relative = info.name[len(PREFIX):].replace(".", "/")
-        if (PACKAGE_ROOT / f"{relative}.py").is_file():
+        if (
+            (PACKAGE_ROOT / f"{relative}.py").is_file()
+            or (PACKAGE_ROOT / relative / "__init__.py").is_file()
+        ):
             names.append(info.name)
     return sorted(names)
 

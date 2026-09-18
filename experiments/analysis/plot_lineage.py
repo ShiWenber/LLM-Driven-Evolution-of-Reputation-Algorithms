@@ -31,12 +31,13 @@ import matplotlib.pyplot as plt
 
 from experiments.evolution_log import (
     F_CODE,
-    F_CONFIG_SCHEMA_VERSION,
     F_LINEAGE_ID,
     F_POPULATION,
     K_FINAL_POPULATION,
     K_TRAJECTORY,
+    EvolutionLogError,
     load_evolution_json,
+    require_schema_v4,
 )
 
 from .clustering.cache import AnalysisCache
@@ -315,8 +316,10 @@ def main():
 
     json_path = Path(args.json)
     data = load_evolution_json(json_path)
-    if data.get("config", {}).get(F_CONFIG_SCHEMA_VERSION, 0) < 4:
-        raise SystemExit("requires schema >= 4 (re-run evolution with updated framework)")
+    try:
+        require_schema_v4(data, source=json_path)
+    except EvolutionLogError as exc:
+        raise SystemExit(str(exc)) from exc
 
     out_dir = json_path.parent
     if args.cluster_run_id:

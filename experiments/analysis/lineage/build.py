@@ -26,9 +26,10 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from experiments.evolution_log import (
-    F_AGENT_ID, F_BIRTH_GEN, F_CONFIG_SCHEMA_VERSION, F_GENERATION,
+    F_AGENT_ID, F_BIRTH_GEN, F_GENERATION,
     F_LINEAGE_ID, F_ORIGIN, F_PARENT_LINEAGE_ID, F_POPULATION,
-    K_FINAL_POPULATION, K_LINEAGE_EVENTS, K_TRAJECTORY, load_evolution_json,
+    K_FINAL_POPULATION, K_LINEAGE_EVENTS, K_TRAJECTORY, EvolutionLogError,
+    load_evolution_json, require_schema_v4,
 )
 
 
@@ -137,12 +138,10 @@ def main():
 
     json_path = Path(args.json)
     data = load_evolution_json(json_path)
-    if data.get("config", {}).get(F_CONFIG_SCHEMA_VERSION, 0) < 4:
-        raise SystemExit(
-            f"{json_path} is schema {data.get('config', {}).get(F_CONFIG_SCHEMA_VERSION)}, "
-            f"but lineage fields require schema >= 4. Re-run the evolution with "
-            f"the updated framework."
-        )
+    try:
+        require_schema_v4(data, source=json_path)
+    except EvolutionLogError as exc:
+        raise SystemExit(str(exc)) from exc
     tree = build_lineage_tree(data)
     out = Path(args.out) if args.out else json_path.with_name("lineage.json")
     out.write_text(json.dumps(tree, indent=2, ensure_ascii=False), encoding="utf-8")
