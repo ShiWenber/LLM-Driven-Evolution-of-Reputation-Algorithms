@@ -8,16 +8,10 @@ interface, and output constraints.
 OVERALL_GAME_RULES_PROMPT = """OVERALL GAME RULES (these rules apply to the task below):
   - The simulation has {population_size} agents and runs for
     {num_generations} generations.
-  - Each generation consists of {num_rounds_per_gen} interactions. In every
-    interaction, two agents are drawn uniformly at random from the population.
-    Draws are independent, so the same agents may interact repeatedly; each of
-    the two acts exactly once in that interaction.
+  - {protocol_description}
   - The two agents in an interaction choose simultaneously, using only
     information available before that interaction's observations. Each chooses
     either "cooperate" or "defect".
-  - Observations are delivered immediately after each interaction, before the
-    next one is drawn. Both players always receive their own interaction as an
-    observation.
   - Cooperating costs the actor {cost:g} and gives the partner {benefit:g};
     defecting costs and gives nothing. Therefore the pair payoffs are:
       (C, C): {cc_payoff:g} each
@@ -190,3 +184,30 @@ PARENT:
 
 """ + TYPE2_INTERFACE_PROMPT + "\n" + TYPE2_OUTPUT_PROMPT
 )
+
+
+ASYNC_OVERALL_GAME_RULES_PROMPT = """OVERALL GAME RULES (these rules apply to the task below):
+  - The simulation has {population_size} agents and runs for
+    {num_generations} generations.
+  - Each generation consists of {num_rounds_per_gen} interactions. In every
+    interaction, two agents are drawn uniformly at random from the population.
+    Draws are independent, so the same agents may interact repeatedly; each of
+    the two acts exactly once in that interaction.
+  - The two agents in an interaction choose simultaneously, using only
+    information available before that interaction's observations. Each chooses
+    either "cooperate" or "defect".
+  - Observations are delivered immediately after each interaction, before the
+    next one is drawn. Both players always receive their own interaction as an
+    observation.
+  - Cooperating costs the actor {cost:g} and gives the partner {benefit:g};
+    defecting costs and gives nothing. Therefore the pair payoffs are:
+      (C, C): {cc_payoff:g} each
+      (C, D): cooperator -{cost:g}, defector +{benefit:g}
+      (D, C): defector +{benefit:g}, cooperator -{cost:g}
+      (D, D): 0 each
+  - Third-party observation is configured as follows:
+    {observability_description}
+  - Fitness is realized Prisoner's Dilemma payoff per action:
+    {fitness_window_description}. Selection evaluates generated code by this
+    realized average; the LLM must not assume that a proposed change succeeds.
+"""

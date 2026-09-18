@@ -75,7 +75,7 @@ def test_degenerate_inputs_are_safe():
 
 def test_windowed_fitness_matches_hand_computation():
     population_size, steps, fraction = 8, 20, 0.25
-    game = DonorGame(
+    game = DonorGame(observation_schedule="asynchronous",
         population_size=population_size,
         benefit=2.0,
         cost=1.0,
@@ -107,7 +107,7 @@ def test_windowed_fitness_matches_hand_computation():
 
 
 def test_disabled_window_divides_total_payoff_by_total_actions():
-    game = DonorGame(
+    game = DonorGame(observation_schedule="asynchronous",
         population_size=4,
         benefit=2.0,
         cost=1.0,
@@ -126,7 +126,7 @@ def test_disabled_window_divides_total_payoff_by_total_actions():
 
 
 def test_window_uses_matching_payoff_and_action_count_slices():
-    game = DonorGame(
+    game = DonorGame(observation_schedule="asynchronous",
         population_size=4, benefit=3.0, cost=1.0,
         fitness_window_fraction=0.5, seed=3,
     )
@@ -152,7 +152,7 @@ def test_window_uses_matching_payoff_and_action_count_slices():
 
 
 def test_no_counted_actions_has_zero_fitness():
-    game = DonorGame(population_size=3, fitness_window_fraction=0.5, seed=0)
+    game = DonorGame(observation_schedule="asynchronous", population_size=3, fitness_window_fraction=0.5, seed=0)
     game.setup_population([_Stub(i) for i in range(3)])
     assert game.get_windowed_fitness() == [0.0, 0.0, 0.0]
 
@@ -166,7 +166,7 @@ def test_scenario_passes_average_payoff_to_evolution():
     scenario = ReputationPrisonersDilemmaScenario(
         population_size=8, benefit=3.0, cost=1.0,
         observability="full", observability_p=1.0,
-        fitness_window_fraction=0.2, num_rounds_per_gen=100,
+        fitness_window_fraction=0.2, num_rounds_per_gen=100, observation_schedule="asynchronous",
     )
     result = scenario.evaluate(agents, generation_seed=0, num_rounds=100)
     assert result.n_interactions == 100

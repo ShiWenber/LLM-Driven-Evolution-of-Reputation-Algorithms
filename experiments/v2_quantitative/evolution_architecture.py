@@ -145,8 +145,10 @@ class ReputationPrisonersDilemmaScenario:
         num_rounds_per_gen: int,
         action_error_probability: float = 0.0,
         observation_error_probability: float = 0.0,
+        observation_schedule: str = "synchronous",
     ) -> None:
         self.population_size = population_size
+        self.observation_schedule = observation_schedule
         self.benefit = benefit
         self.cost = cost
         self.observability = observability
@@ -166,6 +168,7 @@ class ReputationPrisonersDilemmaScenario:
         num_rounds: int,
     ) -> EvaluationResult:
         game = DonorGame(
+            observation_schedule=self.observation_schedule,
             population_size=self.population_size,
             benefit=self.benefit,
             cost=self.cost,
@@ -185,7 +188,7 @@ class ReputationPrisonersDilemmaScenario:
         game._interaction_deltas = []
         for _ in range(num_rounds):
             game.distribute_observations_and_self_judgments(
-                game.play_interaction()["interactions"]
+                game.play_step()["interactions"]
             )
         coop_count = sum(
             1
@@ -232,9 +235,10 @@ class ReputationPrisonersDilemmaScenario:
             )
 
         rounds = self.num_rounds_per_gen
-        total_interactions = rounds
+        pairs = max(1, self.population_size // 2) if self.observation_schedule == "synchronous" else 1
+        total_interactions = rounds * pairs
         fraction = self.fitness_window_fraction
-        window = resolve_fitness_window(fraction, total_interactions, 1)
+        window = resolve_fitness_window(fraction, total_interactions, pairs)
         if window is None:
             fitness_window_description = (
                 "total payoff divided by the agent's actual number of actions "
@@ -257,8 +261,20 @@ class ReputationPrisonersDilemmaScenario:
             )
         )
         params["num_rounds_per_gen"] = rounds
-        return OVERALL_GAME_RULES_PROMPT.format(
+        from .prompts import ASYNC_OVERALL_GAME_RULES_PROMPT
+        template = OVERALL_GAME_RULES_PROMPT if self.observation_schedule == "synchronous" else ASYNC_OVERALL_GAME_RULES_PROMPT
+        return template.format(
             **params,
+            protocol_description=(
+                f"Each generation consists of {rounds} rounds ({total_interactions} joint interactions). "
+                "In each round agents are randomly partitioned into pairs; one agent sits out if N is odd. "
+                "All pairs choose their actions before any observations from this round are delivered. "
+                "After all pairs act, participants receive their own observations, then third-party observations are delivered."
+                if self.observation_schedule == "synchronous" else
+                f"Each generation consists of {rounds} interactions. In every interaction, two agents are drawn uniformly at random. "
+                "Draws are independent. Both players choose simultaneously. Observations are delivered immediately "
+                "after each interaction, before the next pair is drawn. Both players observe their own interaction."
+            ),
             observability_description=observability_description,
             fitness_window_description=fitness_window_description,
         ).strip()
