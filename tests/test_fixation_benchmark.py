@@ -216,6 +216,7 @@ class _Args:
         self.beta = kw.get("beta", 1.0)
         self.action_error = kw.get("action_error", 0.0)
         self.observation_error = kw.get("observation_error", 0.0)
+        self.observation_schedule = kw.get("observation_schedule", "synchronous")
         self.probes = kw.get("probes", ["L1", "ALLD"])
         self.replicates = kw.get("replicates", 1)
         self.benefit = kw.get("benefit", 2.0)
@@ -232,6 +233,7 @@ def _stored(candidate, args, probes=None):
             "beta": args.beta,
             "action_error_probability": args.action_error,
             "observation_error_probability": args.observation_error,
+            "observation_schedule": args.observation_schedule,
             KEY_BENEFIT: args.benefit,
             KEY_COST: args.cost,
             "replicates": args.replicates,
@@ -255,6 +257,16 @@ def test_cache_key_names_are_the_documented_ones():
     )
 
 
+def test_legacy_cache_is_asynchronous_and_cannot_satisfy_sync_request():
+    candidate = probe_source("L1")
+    args = _Args(observation_schedule="asynchronous")
+    stored = _stored(candidate, args)
+    del stored["config"]["observation_schedule"]
+    assert cache_matches(stored, args, candidate, "c")
+    args.observation_schedule = "synchronous"
+    assert not cache_matches(stored, args, candidate, "c")
+
+
 @pytest.mark.parametrize("field, value", [
     ("population_size", 12),
     ("burn_in", 999),
@@ -262,6 +274,7 @@ def test_cache_key_names_are_the_documented_ones():
     ("beta", 2.0),
     ("action_error", 0.05),
     ("observation_error", 0.05),
+    ("observation_schedule", "asynchronous"),
     ("replicates", 4),
     ("benefit", 3.0),
     ("cost", 0.5),
@@ -278,6 +291,7 @@ def test_cache_rejects_a_changed_setting(field, value):
         "beta": "beta",
         "action_error": "action_error_probability",
         "observation_error": "observation_error_probability",
+        "observation_schedule": "observation_schedule",
         "replicates": "replicates",
         "benefit": KEY_BENEFIT,
         "cost": KEY_COST,

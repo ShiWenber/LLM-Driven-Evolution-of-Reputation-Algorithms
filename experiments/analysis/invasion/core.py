@@ -68,10 +68,9 @@ NUM_GENERATIONS = 50
 # the matrix it was actually selected under (``config.benefit`` / ``config.cost``)
 # on its ``EvolvedSource``, and ``resolve_payoff_matrix`` prefers that: testing a
 # b=3 candidate with a b=2 matrix silently changes the game the mutant was
-# adapted to. These two values remain the defaults because every archived result
-# was produced with them, so a run whose sources carry no log still reproduces
-# the archive.
-BENEFIT = 2.0
+# adapted to. The fallback now follows the current experiment default; archived
+# b=2 results can still be reproduced with an explicit ``benefit=2`` override.
+BENEFIT = 3.0
 COST = 1.0
 FITNESS_WINDOW_FRACTION = 0.2
 
@@ -137,8 +136,7 @@ def resolve_payoff_matrix(
        ``--cost`` CLI override).
     2. The value recorded in the log the source was loaded from. Sources with
        no log (canonical norms, hand-written ``.py``) are skipped.
-    3. ``BENEFIT`` / ``COST``, the constant every archived result was produced
-       with.
+    3. ``BENEFIT`` / ``COST``, the current analysis defaults.
 
     Two log-derived sources that disagree on a field make the mixture
     ill-defined -- they were selected under different games, so no single table
@@ -410,7 +408,7 @@ def play_generation_noisy(
     ``benefit`` / ``cost`` are the payoff matrix the generation is paid from.
     Callers pass the values ``resolve_payoff_matrix`` picked, so a candidate is
     evaluated in the game it was selected under rather than a fixed one; the
-    defaults keep the archived protocol reproduces when nothing overrides them.
+    defaults select the current experiment matrix when nothing overrides them.
     """
     for agent in population:
         agent.reset_generation_tracking()

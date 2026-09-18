@@ -25,7 +25,7 @@ stability claim rests on three steps, all reproduced here:
        pi_i = 1/(N-1) * sum_j ( b * x_ji - c * x_ij )
 
    with ``x_ij`` the stationary rate at which ``i`` cooperates towards ``j``.
-   For a simultaneous Prisoner's Dilemma with ``b=2, c=1`` this equals the mean
+   For a simultaneous Prisoner's Dilemma with ``b=3, c=1`` this equals the mean
    payoff per interaction, which is what this module accumulates directly.
 
 3. **Fixation probability, not a fate after 50 generations.** With
@@ -86,6 +86,9 @@ MEASUREMENT_MULTIPLIER = 3
 DEFAULT_MEASURE = INTERACTIONS_PER_POPULATION * MEASUREMENT_MULTIPLIER
 DEFAULT_BETA = 1.0
 DEFAULT_POPULATION = 50
+# Fixed-mixture evaluation uses the faster per-pair delivery loop by default.
+# This is independent of the main evolutionary engine's observation schedule.
+DEFAULT_OBSERVATION_SCHEDULE = "asynchronous"
 # Interactions per stationarity block. The measurement window is split into
 # blocks of this size so drift can be detected without storing every round.
 DEFAULT_BLOCK_SIZE = 2_000
@@ -199,6 +202,7 @@ def stationary_mixture(
     block_size: int = DEFAULT_BLOCK_SIZE,
     benefit: float = BENEFIT,
     cost: float = COST,
+    observation_schedule: str = DEFAULT_OBSERVATION_SCHEDULE,
 ) -> dict[str, Any]:
     """Run one composition to stationarity and return the two type payoffs.
 
@@ -223,6 +227,8 @@ def stationary_mixture(
         measure = population_size * INTERACTIONS_PER_POPULATION * MEASUREMENT_MULTIPLIER
     if not 1 <= mutant_count < population_size:
         raise ValueError("mutant_count must be in 1..N-1")
+    if observation_schedule not in ("synchronous", "asynchronous"):
+        raise ValueError("unknown observation schedule")
     resident_count = population_size - mutant_count
     rng = random.Random(seed)
     # New signal policies get reproducible, ID-independent streams without
@@ -257,6 +263,7 @@ def stationary_mixture(
     while completed < total_rounds:
         order = list(range(population_size))
         rng.shuffle(order)
+        pending = []
         for offset in range(0, population_size - 1, 2):
             first, second = population[order[offset]], population[order[offset + 1]]
             first_intended = "cooperate" if first.choose(second.agent_id) else "defect"
@@ -296,8 +303,12 @@ def stationary_mixture(
                     block_participation[member.kind] += 1
                 cooperation_events += int(first_coop) + int(second_coop)
 
-            # Observers judge with private, possibly noisy, information.
-            for observer in population:
+            # Legacy mode delivers each pair immediately in population order.
+            # Both modes retain the same random matching, unlike the archived
+            # main evolutionary engine's independently sampled pair schedule.
+            if observation_schedule == "synchronous":
+                pending.append((first, second, first_action, second_action))
+            for observer in population if observation_schedule == "asynchronous" else ():
                 seen_first = _flip(first_action, rng, observation_error)
                 seen_second = _flip(second_action, rng, observation_error)
                 if observer.agent_id == second.agent_id:
@@ -309,6 +320,21 @@ def stationary_mixture(
                         first.agent_id, seen_first, second.agent_id, seen_second
                     )
             completed += 1
+
+        # Match DonorGame: all actions, then all participant judgments, then
+        # third-party observations. Perceived recipient actions are drawn first
+        # for the recipient's own judgment, as in the main engine.
+        for first, second, first_action, second_action in pending:
+            first.observe(first.agent_id, _flip(first_action, rng, observation_error),
+                          second.agent_id, _flip(second_action, rng, observation_error))
+            second.observe(second.agent_id, _flip(second_action, rng, observation_error),
+                           first.agent_id, _flip(first_action, rng, observation_error))
+        for first, second, first_action, second_action in pending:
+            for observer in population:
+                if observer.agent_id in (first.agent_id, second.agent_id):
+                    continue
+                observer.observe(first.agent_id, _flip(first_action, rng, observation_error),
+                                 second.agent_id, _flip(second_action, rng, observation_error))
 
         if completed >= next_block or completed >= total_rounds:
             block_payoffs.append({
@@ -378,6 +404,7 @@ def payoff_difference_curve(
     replicates: int = 1,
     benefit: float = BENEFIT,
     cost: float = COST,
+    observation_schedule: str = DEFAULT_OBSERVATION_SCHEDULE,
 ) -> list[dict[str, Any]]:
     """Sweep every two-type composition, in parallel, and return the curve.
 
@@ -395,7 +422,7 @@ def payoff_difference_curve(
     payloads = [
         (mutant, resident, k, seed + 1_000_003 * rep + k, population_size,
          burn_in, measure, beta, action_error, observation_error,
-         DEFAULT_BLOCK_SIZE, benefit, cost)
+         DEFAULT_BLOCK_SIZE, benefit, cost, observation_schedule)
         for k in range(1, population_size)
         for rep in range(replicates)
     ]
@@ -484,6 +511,7 @@ def benchmark_pair(
     replicates: int = 1,
     benefit: float = BENEFIT,
     cost: float = COST,
+    observation_schedule: str = DEFAULT_OBSERVATION_SCHEDULE,
 ) -> dict[str, Any]:
     """Fixation probabilities in both directions against one probe.
 
@@ -498,7 +526,7 @@ def benchmark_pair(
     curve = payoff_difference_curve(
         candidate, source_probe, base_seed, population_size, burn_in, measure,
         beta, action_error, observation_error, workers, replicates,
-        benefit, cost,
+        benefit, cost, observation_schedule,
     )
     forward = _summarise_curve(curve, beta, population_size)
     reverse_curve = [
@@ -548,6 +576,7 @@ def cache_matches(
         and cfg.get(KEY_BETA) == args.beta
         and cfg.get(KEY_ACTION_ERROR) == args.action_error
         and cfg.get(KEY_OBSERVATION_ERROR) == args.observation_error
+        and cfg.get("observation_schedule", "asynchronous") == args.observation_schedule
         # Results written before the matrix was read from the log carry no
         # benefit, so they mismatch and are recomputed.
         and cfg.get(KEY_BENEFIT) == args.benefit
@@ -629,6 +658,9 @@ def main() -> None:
                         help="Selection strength in the fixation formula.")
     parser.add_argument("--action-error", type=float, default=0.0)
     parser.add_argument("--observation-error", type=float, default=0.0)
+    parser.add_argument("--observation-schedule", choices=("synchronous", "asynchronous"),
+                        default=DEFAULT_OBSERVATION_SCHEDULE,
+                        help="Default: faster asynchronous per-pair delivery. Synchronous matches DonorGame's full-round delivery. Both use random matching.")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--replicates", type=int, default=5,
@@ -644,12 +676,11 @@ def main() -> None:
     parser.add_argument(
         "--benefit",
         type=float,
-        default=None,
+        default=BENEFIT,
         help=(
-            "PD cooperation benefit. Default (unset) reads it from the "
-            "candidate's evolution log, so the mutant is measured in the game "
-            "it was selected under. Pass explicitly to force the archived "
-            "benefit=2 matrix."
+            f"PD cooperation benefit. Default: {BENEFIT:g}. Pass explicitly "
+            "to force another matrix; use --benefit 2 to reproduce the "
+            "archived benefit=2 matrix."
         ),
     )
     parser.add_argument(
@@ -730,7 +761,7 @@ def main() -> None:
             candidate, label, probe, args.population_size, args.burn_in,
             args.measure, args.beta, args.action_error, args.observation_error,
             args.workers, args.seed, args.replicates,
-            args.benefit, args.cost,
+            args.benefit, args.cost, args.observation_schedule,
         )
         rho = results[probe]["candidate_invades_probe"]["rho"]
         neutral = 1.0 / args.population_size
@@ -765,14 +796,17 @@ def main() -> None:
             KEY_BURN_IN: args.burn_in,
             KEY_MEASURE: args.measure,
             KEY_BETA: args.beta,
-            # The matrix both types were paid from, resolved from the candidate
-            # log unless --benefit/--cost overrode it.
+            # The matrix both types were paid from. Benefit defaults to the
+            # current analysis value; cost is resolved from the candidate log
+            # unless --cost overrides it.
             KEY_BENEFIT: args.benefit,
             KEY_COST: args.cost,
             "neutral_fixation_probability": 1.0 / args.population_size,
             KEY_ACTION_ERROR: args.action_error,
             KEY_OBSERVATION_ERROR: args.observation_error,
             "seed": args.seed,
+            "observation_schedule": args.observation_schedule,
+            "pairing_scheme": "random_matching",
             "replicates": args.replicates,
             "reputation_reset_between_rounds": False,
         },

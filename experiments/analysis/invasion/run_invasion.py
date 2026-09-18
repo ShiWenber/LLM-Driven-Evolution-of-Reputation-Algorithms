@@ -145,8 +145,8 @@ def _logged_payoff_matrix(config: dict[str, Any]) -> tuple[float | None, float |
     """Payoff matrix recorded in an evolution log, or ``(None, None)``.
 
     Returning ``None`` rather than a default is what lets
-    ``resolve_payoff_matrix`` tell "this log says b=2" apart from "this log says
-    nothing, so use the archived constant".
+    ``resolve_payoff_matrix`` distinguish a logged matrix from a source that
+    carries no payoff configuration.
     """
     benefit = config.get("benefit")
     cost = config.get("cost")
@@ -752,12 +752,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--benefit",
         type=float,
-        default=None,
+        default=BENEFIT,
         help=(
-            "PD cooperation benefit. Default (unset) reads it from each "
-            "candidate's evolution log, so a strategy is tested in the game it "
-            "was selected under. Pass explicitly to force one matrix, which is "
-            "what reproducing the archived benefit=2 results requires."
+            f"PD cooperation benefit. Default: {BENEFIT:g}. Pass explicitly "
+            "to force another matrix; use --benefit 2 to reproduce the "
+            "archived benefit=2 results."
         ),
     )
     parser.add_argument(
@@ -869,7 +868,7 @@ def main(argv: list[str] | None = None) -> int:
                 contradicted.append(pair)
         if contradicted:
             print(
-                f"  [warn] --benefit/--cost override the matrix recorded in the "
+                f"  [warn] configured benefit/cost override the matrix recorded in the "
                 f"source log(s) for {len(contradicted)} pair(s); results will not "
                 f"describe the game those strategies were selected under.",
                 flush=True,
@@ -887,8 +886,9 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"  payoff matrix: "
         + ", ".join(f"benefit={b:g}/cost={c:g}" for b, c in matrices)
-        + ("  (from the source log(s); pass --benefit/--cost to override)"
-           if args.benefit is None and args.cost is None else "  (explicit override)"),
+        + ("  (benefit default; cost resolved from source logs when available)"
+           if args.benefit == BENEFIT and args.cost is None
+           else "  (configured override)"),
         flush=True,
     )
 

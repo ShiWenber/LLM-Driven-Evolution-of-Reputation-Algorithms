@@ -3,6 +3,16 @@
 `run-fixation-benchmark` measures **fixation probability** following Schmid et
 al. (2023), which is the quantity a stability claim actually needs.
 
+The fixed-mixture runner defaults to `--benefit 3` and
+`--observation-schedule asynchronous`: each pair acts before its observations
+are delivered, and then the next pair acts. Matching remains balanced within
+each round. A local paired timing test favored this loop over full-round
+synchronous delivery (median 0.329 versus 0.339 seconds for 8,000 interactions).
+The main evolutionary engine retains its own scheduling default. Explicit
+`--observation-schedule synchronous` remains available for reproducibility.
+Changing the default benefit does not convert cached b=2 measurements into
+b=3 measurements; those must be rerun or kept explicitly labeled as historical.
+
 The invasion sweep measures a single frequency axis — the candidate's initial
 share — and nothing is inferred about the opposite ordering. Whether the
 candidate is itself invadable is a separate experiment, measured here directly
@@ -42,9 +52,10 @@ stabilize indirect reciprocity under imperfect information*, Nat. Commun. 14:208
    $$\pi_i = \frac{1}{N-1}\sum_{j \neq i}\left(b\,\hat{x}_{ji} - c\,\hat{x}_{ij}\right)$$
 
    with $\hat{x}_{ij}$ the stationary cooperation rate of `i` towards `j`. For
-   this repository's simultaneous Prisoner's Dilemma with $b=2$, $c=1$ this is
-   exactly the mean payoff per participation, which is what the implementation
-   accumulates. **No `reset_for_generation` call happens in the measured
+   this repository's simultaneous Prisoner's Dilemma with the current default
+   $b=3$, $c=1$ this is exactly the mean payoff per participation, which is what
+   the implementation accumulates. Historical $b=2$ results can be reproduced
+   with an explicit `--benefit 2`. **No `reset_for_generation` call happens in the measured
    phase**, unlike the imitation sweeps.
 
 3. **Fixation probability, not a fate.** With

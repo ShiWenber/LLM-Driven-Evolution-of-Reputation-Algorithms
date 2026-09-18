@@ -92,9 +92,10 @@ def _source(code: str) -> EvolvedSource:
     )
 
 
-# Archived runs must stay cache-resident, otherwise every re-run recomputes
-# thousands of simulations. They record `evolved_source` + `norm` and no
-# resident hash, unlike results written by run_invasion.
+# Archived runs record benefit=2. They remain cache-resident only when the
+# historical payoff is requested explicitly; the current default is benefit=3.
+# They record `evolved_source` + `norm` and no resident hash, unlike results
+# written by run_invasion.
 # Args are (generations, interactions, fitness_window_fraction, ae, oe,
 # population_size); the 0.2 share reproduces the archived 200/1000 burn-in
 # split, and N=100 is the population every archived sweep was produced at.
@@ -111,8 +112,7 @@ _CONFIG = {
     "action_error_probability": 0.01,
     "observation_error_probability": 0.01,
     # The matrix the archived sweeps were actually paid from (the engine
-    # hardcoded it). _RUN_ARGS leaves benefit/cost at their defaults, which are
-    # these same values, so an archived result stays cache-resident.
+    # hardcoded it). It must be passed explicitly to reuse those results.
     "benefit": 2.0,
     "cost": 1.0,
 }
@@ -122,7 +122,7 @@ def test_cache_rejects_a_result_recording_a_different_payoff_matrix():
     candidate = _source("candidate-code")
     l1 = norm_source("L1")
     stored = {
-        "config": {**_CONFIG, "benefit": 3.0},
+        "config": {**_CONFIG, "benefit": 2.0},
         "candidate_source": {"code_sha256": candidate.code_sha256},
         "norm": "L1",
     }
@@ -156,14 +156,15 @@ def test_cache_matches_accepts_archived_norm_results():
         "evolved_source": {"code_sha256": candidate.code_sha256},
         "norm": "L1",
     }
-    assert cache_matches(archived, candidate, l1, "L1", *_RUN_ARGS)
-    assert not cache_matches(archived, candidate, l2, "L2", *_RUN_ARGS)
-    assert not cache_matches(archived, _source("other"), l1, "L1", *_RUN_ARGS)
+    archive_args = (*_RUN_ARGS, 2.0, 1.0)
+    assert cache_matches(archived, candidate, l1, "L1", *archive_args)
+    assert not cache_matches(archived, candidate, l2, "L2", *archive_args)
+    assert not cache_matches(archived, _source("other"), l1, "L1", *archive_args)
     # Different run parameters must invalidate the cache.
     assert not cache_matches(
         {"config": {**_CONFIG, "num_generations": 25},
          "evolved_source": {"code_sha256": candidate.code_sha256}, "norm": "L1"},
-        candidate, l1, "L1", *_RUN_ARGS,
+        candidate, l1, "L1", *archive_args,
     )
 
 
@@ -176,10 +177,11 @@ def test_cache_matches_uses_resident_hash_when_present():
         "candidate_source": {"code_sha256": candidate.code_sha256},
         "resident_source": {"code_sha256": l1.code_sha256},
     }
-    assert cache_matches(modern, candidate, l1, "L1", *_RUN_ARGS)
+    archive_args = (*_RUN_ARGS, 2.0, 1.0)
+    assert cache_matches(modern, candidate, l1, "L1", *archive_args)
     # The hash wins over any label, so a mismatched resident is rejected even
     # if the caller passes the label recorded in the file.
-    assert not cache_matches(modern, candidate, l2, "L1", *_RUN_ARGS)
+    assert not cache_matches(modern, candidate, l2, "L1", *archive_args)
 
 
 def test_strategy_labels_covers_residents_that_never_invade():

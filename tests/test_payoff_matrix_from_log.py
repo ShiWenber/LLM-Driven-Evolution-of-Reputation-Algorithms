@@ -61,8 +61,12 @@ def test_log_matrix_is_used_when_there_is_one():
     assert resolve_payoff_matrix(source, norm_source("L1")) == (3.0, 1.0)
 
 
-def test_norm_and_custom_sources_fall_back_to_the_archived_constant():
+def test_norm_and_custom_sources_fall_back_to_current_default():
     assert resolve_payoff_matrix(norm_source("L1"), _bare_source()) == (BENEFIT, COST)
+
+
+def test_current_default_benefit_is_three():
+    assert BENEFIT == 3.0
 
 
 def test_a_log_source_covers_norm_residents():
@@ -159,7 +163,7 @@ def test_loader_leaves_the_matrix_unset_when_the_log_omits_it(tmp_path):
     log = _write_log(tmp_path / "legacy.json", benefit=None, cost=None)
     source = load_representative_from_path("legacy", "agent-type1", log)
     assert (source.benefit, source.cost) == (None, None)
-    # ...and the unresolved case still resolves to the archived constant.
+    # ...and the unresolved case still resolves to the current default.
     assert resolve_payoff_matrix(source) == (BENEFIT, COST)
 
 
