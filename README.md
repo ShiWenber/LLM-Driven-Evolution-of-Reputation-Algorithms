@@ -260,7 +260,7 @@ Thus invasion count changes the low-frequency outcome for `SJ`/`SJ+`, but the
 N=100 sweep still shows a broad frequency-selection advantage for `agent-type2`
 under this deterministic payoff-imitation rule.
 
-Run or resume the experiment and regenerate the figure by passing explicit
+Run the experiment and regenerate the figure by passing explicit
 strategy sources (`LABEL=AGENT_TYPE=PATH` pointing at a run's
 `evolutionary.json`):
 
@@ -310,7 +310,7 @@ the errors reveal an even clearer broad invasion advantage for
 `agent-type2`, while preserving a frequency-dependent exception for
 `SJ`/`SJ+`.
 
-Run or resume the noisy sweep and regenerate its figure with:
+Run the noisy sweep and regenerate its figure with:
 
 ```powershell
 uv run run-invasion --workers 12 `
@@ -583,11 +583,15 @@ aligned to whole rounds. Execution/perception noise is unchanged.
 
 > **Protocol note (2026-09-17).** Synchronous matching is again the default.
 > Archived asynchronous runs used independent pair draws and immediate
-> observation delivery. Their protocol remains available for replay, and
-> `--resume` inherits the recorded schedule instead of switching protocols.
+> observation delivery. Offline analysis uses the schedule recorded in each log.
 > Comparing the two modes changes both pairing and observation timing.
 
 Run a single seed:
+
+Each invocation starts a new run. Interrupted runs must be restarted from
+generation 0; there is no checkpoint recovery or separate control runner.
+Use the main CLI's `--mutation-rate` and `--fermi-init-source` options to choose
+the initialization condition.
 
 ```powershell
 uv run python -m experiments.run_fermi_v3 --seed 0 --gens 100 --target-interactions 1000
@@ -641,8 +645,6 @@ uv run python -m experiments.run_fermi_v3 --agent-type agent-type1 --fermi-init-
 | `--label S` | mode-specific | Output directory / summary label; the automatic label contains `learn-random` or `learn-deliberate` |
 | `--output-root PATH` | `results/quantitative_baseline` | Root for per-seed result folders |
 | `--dry-run` | off | Validate and print the seed plan without running |
-| `--resume-json PATH...` | off | Continue one or more saved `evolutionary.json` trajectories |
-| `--additional-gens N` | required in resume mode | Number of new evaluated generations appended to each source trajectory |
 
 ### Noise in the evolution engine
 
@@ -676,126 +678,6 @@ Details worth knowing before comparing runs:
 - **The automatic label carries the level** (`_ae0p01_oe0p01`), using the same
   suffix convention as the invasion runners, so a noisy run cannot silently
   overwrite a noise-free run's directory.
-- **Resume inherits the recorded level** from the log's config rather than
-  reading the CLI, so a continued lineage cannot change its noise model
-  mid-run.
-
-## Continuing evolution from trajectory logs
-
-Resume mode continues a completed Fermi trajectory without initializing a new
-population or replaying its earlier generations. It supports one trajectory or
-several independent seed trajectories in the same command.
-
-Continue one trajectory:
-
-```powershell
-uv run python -m experiments.run_fermi_v3 `
-  --resume-json results/my_run_seed0/evolutionary.json `
-  --additional-gens 25 `
-  --llm-concurrency 25 `
-  --label my_run_continued
-```
-
-Continue several seeds in parallel processes:
-
-```powershell
-uv run python -m experiments.run_fermi_v3 `
-  --resume-json `
-    results/run_seed0/evolutionary.json `
-    results/run_seed1/evolutionary.json `
-    results/run_seed2/evolutionary.json `
-  --additional-gens 75 `
-  --seed-workers 3 `
-  --llm-concurrency 25 `
-  --label continued_to_g100
-```
-
-`--additional-gens` means additional evaluated generations, not a new total.
-For example, a 25-generation source plus `--additional-gens 75` produces a
-100-generation merged trajectory.
-
-Preview and validate the plan without calling the LLM API:
-
-```powershell
-uv run python -m experiments.run_fermi_v3 `
-  --resume-json results/run_seed0/evolutionary.json `
-  --additional-gens 75 `
-  --dry-run
-```
-
-### Generation-boundary semantics
-
-The final population in a source log has already played and has a saved
-fitness, but the original run intentionally did not perform a reproduction
-step after its final generation. Resume therefore proceeds in this order:
-
-1. Restore final strategy code, fitness, stable agent IDs, current lineage IDs,
-   birth records, and the complete lineage-event history.
-2. Perform the missing Fermi transition from the old final generation to the
-   first new generation, using the saved fitness.
-3. Re-instantiate the new population. Reputation and all other within-generation
-   state start from their normal generation-boundary values (`0.0` reputation
-   for agent-type1).
-4. Evaluate the first new generation and append it to the trajectory.
-5. Repeat the transition/evaluation cycle for the remaining additional
-   generations.
-
-This avoids evaluating the old final population twice and preserves the
-existing lineage tree instead of constructing a new set of roots.
-
-### Configuration and output
-
-Scientific settings are inherited independently from every source log,
-including population size, interactions, payoff parameters, observability,
-Fermi beta, mutation rate, imitation mode, learners per generation, seed, and
-agent type. Historical logs that predate a saved mutation temperature use the
-historical default `0.8`.
-
-The resume command controls operational settings:
-
-- `--provider` selects the API credential and base URL.
-- `--model` optionally overrides the model recorded in the source log.
-- `--llm-concurrency` optionally overrides per-seed request concurrency;
-  otherwise the saved value is reused.
-- `--seed-workers` controls the number of independent trajectory processes.
-- `--label` and `--output-root` select the new output location.
-
-Input logs in one command must have distinct seeds because output directories
-are keyed by seed. Source logs are never overwritten. Resume refuses to replace
-an existing destination, so choose a new label if that output already exists.
-Each successful output contains the old and new trajectory records, the final
-population, and the complete old and new lineage events:
-
-```text
-<output-root>/<label>_seed<seed>/evolutionary.json
-<output-root>/<label>_summary.json
-```
-
-### RNG and prompt compatibility
-
-New logs store the Python RNG checkpoint and can restore that local random
-stream exactly. Historical logs without this field use a stable derived seed
-and are marked `config.resume.rng_mode="derived_branch"`. New LLM births use
-the prompt templates in the current code version; this is also recorded in
-the resume metadata. Restoring the Python RNG does not make external LLM output
-deterministic: provider sampling, service changes, request retries, and parallel
-completion timing remain external sources of variation.
-
-Relevant metadata is stored under `config.resume`:
-
-```json
-{
-  "source_path": ".../evolutionary.json",
-  "source_generations": 25,
-  "additional_generations": 75,
-  "rng_mode": "derived_branch",
-  "derived_rng_seed": 1595074935,
-  "uses_current_prompt": true
-}
-```
-
-For logs created after RNG checkpoint support was added, `rng_mode` is
-`"checkpoint"` and `derived_rng_seed` is `null`.
 
 Per seed, results are written to
 `<output-root>/<label>_seed<s>/evolutionary.json`, and a combined

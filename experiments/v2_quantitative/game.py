@@ -4,8 +4,9 @@ Game model:
   - N agents (15 in the default config), each is its own instance with a
     private reputation matrix `reputations: dict[int, float]` keyed by
     agent_id, with `reputations[agent_id]` being the self-rating.
-  - Each interaction: draw one random pair of agents independently of earlier
-    draws. Both players simultaneously choose C (cooperate) or D (defect).
+  - By default, each round randomly matches agents into disjoint pairs.
+    All pairs act before observations are delivered (one sitout if N is odd).
+    Both players simultaneously choose C (cooperate) or D (defect).
     Payoffs (benefit=3, cost=1):
       (C, C) -> each +2
       (C, D) -> C gets -1, D gets +3
@@ -44,9 +45,9 @@ from typing import Dict, List, Optional
 from .agent import QuantitativeAgent
 
 
-# The one observation protocol the framework implements. Recorded in result
-# configs so an archived run states which protocol produced it.
-OBSERVATION_SCHEDULE = "asynchronous"
+# Default protocol; asynchronous mode remains available for archived replays.
+# Result configs always record the selected schedule.
+OBSERVATION_SCHEDULE = "synchronous"
 
 
 def flip_action(action: str, rng, probability: float) -> str:
@@ -90,8 +91,7 @@ def resolve_fitness_window(
 
     The window is floored to a whole number of rounds (never fewer than one).
     Matching-based callers can pass their pairs-per-round count to preserve
-    round boundaries; this asynchronous game passes 1 and does not assume
-    equal per-agent exposure.
+    round boundaries; asynchronous callers pass 1.
     """
     if fraction is None:
         return None
@@ -140,10 +140,8 @@ def prisoners_dilemma_payoff(
 class DonorGame:
     """2-player simultaneous-PD game with reputation tracking.
 
-    One step plays a single pair of agents, drawn uniformly at random. That
-    pair's observations are delivered before the next pair is drawn, so
-    reputations evolve continuously within a generation and a later pair
-    already sees the effects of earlier ones.
+    One default step plays a full random matching. All pairs act before
+    observation delivery. Explicit asynchronous mode instead plays one pair.
     """
 
     def __init__(
@@ -157,7 +155,11 @@ class DonorGame:
         fitness_window_fraction: Optional[float] = 0.2,
         action_error_probability: float = 0.0,
         observation_error_probability: float = 0.0,
+        observation_schedule: str = OBSERVATION_SCHEDULE,
     ):
+        if observation_schedule not in ("synchronous", "asynchronous"):
+            raise ValueError("Unknown observation schedule")
+        self.observation_schedule = observation_schedule
         self.population_size = population_size
         self.benefit = benefit
         self.cost = cost
@@ -281,6 +283,26 @@ class DonorGame:
         self._global_log.append(interaction)
         return interaction
 
+    def _form_pairs(self):
+        """Historical random matching; one agent sits out when N is odd."""
+        agent_ids = [a.agent_id for a in self.agents]
+        self.rng.shuffle(agent_ids)
+        return list(zip(agent_ids[::2], agent_ids[1::2]))
+
+    def play_round(self) -> Dict:
+        """All matched pairs act before any observation is delivered."""
+        if self.population_size < 2:
+            raise ValueError("an interaction needs at least 2 agents")
+        self.round_num += 1
+        return {"round": self.round_num,
+                "interactions": [self._play_pair(a, b) for a, b in self._form_pairs()]}
+
+    def play_step(self) -> Dict:
+        """Play a matching round (default) or one archived-protocol pair."""
+        if self.observation_schedule == "synchronous":
+            return self.play_round()
+        return self.play_interaction()
+
     def play_interaction(self) -> Dict:
         """Play one step: one pair drawn uniformly at random.
 
@@ -399,41 +421,6 @@ class DonorGame:
             return interactions
         return [i for i in self._global_log if i["round"] == self.round_num]
 
-    def run_generation(self) -> Dict:
-        """Run a full generation: one step per agent, then aggregate stats.
-
-        Interaction counts per agent are multinomial, so ``population_size``
-        steps is the natural default rather than an equality guarantee: each
-        agent is drawn a mean of twice per generation (once as donor, once as
-        recipient).
-        """
-        self.round_num = 0
-        self.payoffs = [0.0] * self.population_size
-        self._global_log = []
-        self._interaction_deltas = []
-        for _ in range(self.population_size):
-            self.distribute_observations_and_self_judgments(
-                self.play_interaction()["interactions"]
-            )
-        # Stats
-        coop_count = sum(
-            1
-            for inter in self._global_log
-            if inter["donor_action"] == "cooperate"
-        )
-        coop_count += sum(
-            1
-            for inter in self._global_log
-            if inter["recipient_action"] == "cooperate"
-        )
-        coop_rate = coop_count / max(1, 2 * len(self._global_log))
-        return {
-            "cooperation_rate_mean": coop_rate,
-            "n_interactions": len(self._global_log),
-            "round_num": self.population_size,
-            "payoffs": list(self.payoffs),
-        }
-
     def get_windowed_fitness(self) -> List[float]:
         """Return each agent's mean payoff per action in the fitness window.
 
@@ -442,13 +429,14 @@ class DonorGame:
         they still affect reputations, but not selection fitness. An agent
         that was never drawn in the window receives fitness 0.0.
 
-        Random independent pairing gives agents different exposure counts;
+        Asynchronous pairing gives agents different exposure counts;
         dividing by actual actions prevents extra draws alone from raising
         an otherwise identical strategy's fitness.
         """
         deltas = self._interaction_deltas
         n_total = len(deltas)
-        window = resolve_fitness_window(self.fitness_window_fraction, n_total, 1)
+        pairs = max(1, self.population_size // 2) if self.observation_schedule == "synchronous" else 1
+        window = resolve_fitness_window(self.fitness_window_fraction, n_total, pairs)
         selected_deltas = deltas if window is None else deltas[-window:]
         selected_interactions = (
             self._global_log if window is None else self._global_log[-window:]

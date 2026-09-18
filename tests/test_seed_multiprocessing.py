@@ -3,7 +3,7 @@ from concurrent.futures import Future
 from pathlib import Path
 from types import SimpleNamespace
 
-from experiments.run_fermi_v3 import run_resume_batch, run_seed_batch
+from experiments.run_fermi_v3 import run_seed_batch
 
 
 class ImmediateExecutor:
@@ -63,22 +63,3 @@ def test_seed_worker_limit_caps_process_count():
     )
 
     assert ImmediateExecutor.instances[-1].max_workers == 2
-
-
-def test_multiple_resume_logs_use_process_pool():
-    ImmediateExecutor.instances.clear()
-    args = SimpleNamespace(seed_workers=2)
-    sources = [Path("seed0.json"), Path("seed1.json"), Path("seed2.json")]
-
-    results = run_resume_batch(
-        args,
-        sources,
-        "continued",
-        Path("."),
-        executor_cls=ImmediateExecutor,
-    )
-
-    executor = ImmediateExecutor.instances[-1]
-    assert executor.max_workers == 2
-    assert executor.submitted == sources
-    assert len(results) == 3

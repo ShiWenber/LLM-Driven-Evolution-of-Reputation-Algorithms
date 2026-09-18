@@ -4,6 +4,7 @@ Usage examples:
     python -m experiments.run_fermi_v3 --seeds 0 1 2
     python -m experiments.run_fermi_v3 --seed 0 --gens 20 --target-interactions 200
     python -m experiments.run_fermi_v3 --provider deepseek --model deepseek-v4-flash --output-root results/quantitative_baseline
+    python -m experiments.run_fermi_v3 --seed 0 --observation-schedule asynchronous
 """
 from __future__ import annotations
 
@@ -18,13 +19,12 @@ from pathlib import Path
 from experiments.config.load_env import get_api_key, get_base_url, get_model
 from experiments.evolution_log import (
     F_CONFIG_ACTION_ERROR,
-    F_CONFIG_FITNESS_WINDOW_FRACTION,
     F_CONFIG_OBSERVATION_ERROR,
     F_CONFIG_OBSERVATION_SCHEDULE,
-    evolution_json_path, load_evolution_json, run_dir, write_evolution_json,
+    evolution_json_path, run_dir, write_evolution_json,
 )
-from experiments.v2_quantitative.population import V2EvolutionaryPopulation
 from experiments.v2_quantitative.game import OBSERVATION_SCHEDULE
+from experiments.v2_quantitative.population import V2EvolutionaryPopulation
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "results" / "quantitative_baseline"
@@ -49,22 +49,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--gens", "--num-generations", type=int, default=100,
                         help="Number of generations to run.")
-    parser.add_argument(
-        "--resume-json",
-        type=str,
-        nargs="+",
-        default=None,
-        help=(
-            "One or more evolutionary.json logs to continue. Experiment "
-            "parameters are inherited from each log; seeds run in parallel."
-        ),
-    )
-    parser.add_argument(
-        "--additional-gens",
-        type=int,
-        default=None,
-        help="Number of new generations to append to every --resume-json log.",
-    )
     parser.add_argument("--target-interactions", type=int, default=1000,
                         help="Target PD interactions per generation.")
     parser.add_argument(
@@ -141,6 +125,24 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Observability mode passed to V2EvolutionaryPopulation.")
     parser.add_argument("--observability-p", type=float, default=1.0,
                         help="Probability of observability in the selected mode.")
+    parser.add_argument(
+        "--observation-schedule",
+        choices=("synchronous", "asynchronous"),
+        default=OBSERVATION_SCHEDULE,
+        help=(
+            "Observation protocol. 'synchronous' (default) plays whole "
+            "matching rounds: every pair acts before any observation from "
+            "that round is delivered. 'asynchronous' plays one uniformly "
+            "drawn pair at a time and delivers its observations immediately, "
+            "so the same pair can meet repeatedly and per-agent interaction "
+            "counts are uneven. The two protocols differ in pairing, in "
+            "observation timing, and in the rules text sent to the LLM, so "
+            "they are separate experimental conditions, not a scheduling "
+            "detail. --target-interactions still means total pair "
+            "interactions per generation; the number of rounds differs "
+            "because a synchronous round contains floor(N/2) pairs."
+        ),
+    )
     parser.add_argument("--elite-count", type=int, default=2,
                         help="Elite count for selection logic.")
     parser.add_argument("--num-eliminate", type=int, default=5,
@@ -206,6 +208,7 @@ def run_one_seed(args: argparse.Namespace, seed: int, label: str, out_root: Path
             observation_error_probability=args.observation_error,
             observability=args.observability,
             observability_p=args.observability_p,
+            observation_schedule=args.observation_schedule,
             elite_count=args.elite_count,
             num_eliminate=args.num_eliminate,
             tournament_size=args.tournament_size,
@@ -266,11 +269,6 @@ def run_one_seed(args: argparse.Namespace, seed: int, label: str, out_root: Path
     return summary
 
 
-def _resume_source_path(value: str | Path) -> Path:
-    path = Path(value).resolve()
-    return path / "evolutionary.json" if path.is_dir() else path
-
-
 def noise_suffix(action_error: float, observation_error: float) -> str:
     """Filename suffix describing the noise level, or "" when noise is off.
 
@@ -285,182 +283,16 @@ def noise_suffix(action_error: float, observation_error: float) -> str:
     return f"_{stem}"
 
 
-def _require_async_protocol(cfg: dict, label: str) -> None:
-    """Refuse to continue a log recorded under a different protocol.
+def schedule_suffix(observation_schedule: str) -> str:
+    """Filename suffix for the observation protocol, or "" for the default.
 
-    The framework implements asynchronous observation delivery only. A log
-    written under the earlier synchronous protocol cannot be continued into it:
-    the offspring would be evaluated under different information dynamics than
-    their parents, silently mixing two protocols inside one lineage.
+    Synchronous is the default and therefore adds nothing: the historical
+    label of a synchronous run must stay byte-identical, or archived results
+    would no longer be addressable by their recorded label.
     """
-    recorded = cfg.get(F_CONFIG_OBSERVATION_SCHEDULE, "synchronous")
-    if recorded != OBSERVATION_SCHEDULE:
-        raise ValueError(
-            f"{label} was recorded under the {recorded!r} observation protocol, "
-            f"but this framework implements only {OBSERVATION_SCHEDULE!r}. "
-            "Start a new run rather than resuming this log."
-        )
-
-
-def run_one_resume(
-    args: argparse.Namespace,
-    source: str | Path,
-    label: str,
-    out_root: Path,
-) -> dict:
-    """Continue one saved trajectory without modifying its source file."""
-    source_path = _resume_source_path(source)
-    previous = load_evolution_json(source_path)
-    cfg = previous["config"]
-    _require_async_protocol(cfg, str(source_path))
-    seed = int(cfg["seed"])
-    out_path = evolution_json_path(out_root, label, seed)
-    if out_path.resolve() == source_path.resolve():
-        raise ValueError("resume output must not overwrite its source log")
-    if out_path.exists():
-        raise FileExistsError(
-            f"resume output already exists: {out_path}; choose a new --label"
-        )
-
-    api_key = get_api_key(args.provider)
-    base_url = get_base_url(args.provider)
-    model = get_model(args.provider, args.model or cfg.get("llm_model"))
-    llm_concurrency = (
-        args.llm_concurrency
-        if args.llm_concurrency is not None
-        else cfg.get("llm_concurrency")
-    )
-    agent_type = cfg.get("agent_type", "agent-type1")
-
-    print(
-        f"=== seed {seed} resume {len(previous['trajectory'])} "
-        f"+ {args.additional_gens} generations ===",
-        flush=True,
-    )
-    t0 = time.time()
-    summary = {
-        "seed": seed,
-        "source": str(source_path),
-        "completed": False,
-        "error": None,
-    }
-    try:
-        pop = V2EvolutionaryPopulation(
-            population_size=int(cfg["population_size"]),
-            num_rounds_per_gen=int(cfg.get("num_rounds_per_gen", 30)),
-            target_interactions_per_gen=cfg.get("target_interactions_per_gen"),
-            fitness_window_fraction=cfg.get(F_CONFIG_FITNESS_WINDOW_FRACTION),
-            benefit=float(cfg.get("benefit", 3.0)),
-            cost=float(cfg.get("cost", 1.0)),
-            # Inherited, never taken from the CLI: the appended generations
-            # continue the same lineage, so they must be played under the same
-            # noise model as the recorded ones. A log written before noise
-            # existed has no such keys and correctly resumes noise-free.
-            action_error_probability=float(cfg.get(F_CONFIG_ACTION_ERROR, 0.0)),
-            observation_error_probability=float(
-                cfg.get(F_CONFIG_OBSERVATION_ERROR, 0.0)
-            ),
-            num_generations=len(previous["trajectory"]) + args.additional_gens,
-            observability=cfg.get("observability", "full"),
-            observability_p=float(cfg.get("observability_p", 1.0)),
-            elite_count=int(cfg.get("elite_count", 2)),
-            num_eliminate=int(cfg.get("num_eliminate", 5)),
-            tournament_size=int(cfg.get("tournament_size", 3)),
-            llm_model=model,
-            api_key=api_key,
-            api_base_url=base_url,
-            mutation_temperature=float(cfg.get("mutation_temperature", 0.8)),
-            seed=seed,
-            results_dir=str(out_root),
-            use_baseline=cfg.get("use_baseline"),
-            agent_type=agent_type,
-            llm_thinking=bool(cfg.get("llm_thinking", False) or args.llm_thinking),
-            learning_method=cfg.get("learning_method"),
-            fermi_beta=float(cfg.get("fermi_beta", 5.0)),
-            mutation_rate_on_adoption=float(
-                cfg.get("mutation_rate_on_adoption", 0.1)
-            ),
-            fermi_init_source=cfg.get("fermi_init_source", "llm"),
-            imitation_learning_mode=cfg.get("imitation_learning_mode", "random"),
-            updates_per_gen=int(
-                cfg.get("updates_per_gen", cfg["population_size"])
-            ),
-            llm_concurrency=llm_concurrency,
-        )
-        result = pop.resume_evolution(
-            previous,
-            args.additional_gens,
-            source_path=str(source_path),
-        )
-        elapsed = time.time() - t0
-        write_evolution_json(out_path, result)
-        last = result["trajectory"][-1]
-        summary.update({
-            "completed": True,
-            "output": str(out_path),
-            "elapsed_sec": elapsed,
-            "elapsed_min": elapsed / 60,
-            "total_generations": len(result["trajectory"]),
-            "final_coop": last["cooperation_rate_mean"],
-            "final_fitness": last["fitness_mean"],
-            "rng_mode": result["config"]["resume"]["rng_mode"],
-        })
-        print(
-            f"=== seed {seed} resume done: total={len(result['trajectory'])}, "
-            f"{elapsed/60:.1f} min ===",
-            flush=True,
-        )
-    except Exception as exc:  # pragma: no cover - long-running CLI wrapper
-        elapsed = time.time() - t0
-        summary.update({
-            "elapsed_sec": elapsed,
-            "error": f"{type(exc).__name__}: {exc}",
-            "traceback": traceback.format_exc(),
-        })
-        print(f"=== seed {seed} resume FAILED: {type(exc).__name__}: {exc} ===")
-        print(traceback.format_exc(), flush=True)
-    return summary
-
-
-def run_resume_batch(
-    args: argparse.Namespace,
-    sources: list[str | Path],
-    label: str,
-    out_root: Path,
-    *,
-    on_result=None,
-    executor_cls=ProcessPoolExecutor,
-) -> list[dict]:
-    """Continue independent trajectory logs in separate processes."""
-    if not sources:
-        return []
-    worker_limit = args.seed_workers or len(sources)
-    max_workers = min(worker_limit, len(sources))
-    if len(sources) == 1:
-        result = run_one_resume(args, sources[0], label, out_root)
-        if on_result is not None:
-            on_result([result])
-        return [result]
-
-    completed: dict[int, dict] = {}
-    with executor_cls(max_workers=max_workers) as pool:
-        future_to_index = {
-            pool.submit(run_one_resume, args, source, label, out_root): index
-            for index, source in enumerate(sources)
-        }
-        for future in as_completed(future_to_index):
-            index = future_to_index[future]
-            try:
-                completed[index] = future.result()
-            except Exception as exc:
-                completed[index] = {
-                    "source": str(sources[index]),
-                    "completed": False,
-                    "error": f"worker {type(exc).__name__}: {exc}",
-                }
-            if on_result is not None:
-                on_result([completed[i] for i in range(len(sources)) if i in completed])
-    return [completed[i] for i in range(len(sources))]
+    if observation_schedule == OBSERVATION_SCHEDULE:
+        return ""
+    return f"_{observation_schedule}"
 
 
 def run_seed_batch(
@@ -512,101 +344,6 @@ def run_seed_batch(
     return [completed[seed] for seed in seeds]
 
 
-def run_resume_cli(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
-    """Validate and dispatch --resume-json mode."""
-    if args.additional_gens is None or args.additional_gens < 1:
-        parser.error("--resume-json requires --additional-gens >= 1")
-    sources = [_resume_source_path(value) for value in args.resume_json]
-    missing = [str(path) for path in sources if not path.is_file()]
-    if missing:
-        parser.error(f"resume log not found: {', '.join(missing)}")
-
-    previews = [load_evolution_json(path) for path in sources]
-    seeds = [int(data["config"]["seed"]) for data in previews]
-    if len(set(seeds)) != len(seeds):
-        parser.error(
-            "--resume-json inputs must have distinct seeds because outputs "
-            "use one directory per seed"
-        )
-    for path, data in zip(sources, previews):
-        cfg = data["config"]
-        if cfg.get("use_baseline") or cfg.get("learning_method", "fermi") != "fermi":
-            parser.error(f"resume currently requires a Fermi LLM log: {path}")
-        try:
-            _require_async_protocol(cfg, str(path))
-        except ValueError as exc:
-            parser.error(str(exc))
-
-    out_root = Path(args.output_root)
-    out_root.mkdir(parents=True, exist_ok=True)
-    label = args.label or f"continued_plus{args.additional_gens}gen"
-    effective_workers = min(args.seed_workers or len(sources), len(sources))
-    print(
-        f"=== resume {len(sources)} trajectories "
-        f"(+{args.additional_gens} generations, processes={effective_workers}) ==="
-    )
-    for path, data in zip(sources, previews):
-        cfg = data["config"]
-        rng_mode = "checkpoint" if cfg.get("rng_state") is not None else "derived_branch"
-        print(
-            f"  seed={cfg['seed']}: {len(data['trajectory'])} -> "
-            f"{len(data['trajectory']) + args.additional_gens} gens, "
-            f"rng={rng_mode}, "
-            f"noise=ae{float(cfg.get(F_CONFIG_ACTION_ERROR, 0.0)):g}"
-            f"/oe{float(cfg.get(F_CONFIG_OBSERVATION_ERROR, 0.0)):g}, "
-            f"source={path}"
-        )
-    print(f"  output label: {label} (source logs are never overwritten)")
-
-    if args.dry_run:
-        return 0
-    api_key = get_api_key(args.provider)
-    if not api_key:
-        print(
-            f"[run_fermi_v3] no API key found for provider '{args.provider}'.",
-            flush=True,
-        )
-        return 2
-
-    overall_t0 = time.time()
-
-    def write_summary(partial: list[dict]) -> None:
-        summary_path = out_root / f"{label}_summary.json"
-        with open(summary_path, "w", encoding="utf-8") as stream:
-            json.dump({
-                "label": label,
-                "mode": "resume",
-                "additional_generations": args.additional_gens,
-                "execution": "multiprocess_by_trajectory",
-                "seed_workers": effective_workers,
-                "sources": [str(path) for path in sources],
-                "runs": partial,
-                "overall_elapsed_sec": time.time() - overall_t0,
-            }, stream, indent=2, ensure_ascii=False)
-
-    summary = run_resume_batch(
-        args,
-        sources,
-        label,
-        out_root,
-        on_result=write_summary,
-    )
-    n_done = sum(1 for row in summary if row.get("completed"))
-    print(
-        f"=== RESUME DONE: {n_done}/{len(summary)} completed in "
-        f"{(time.time() - overall_t0)/60:.1f} min ==="
-    )
-    for row in summary:
-        if row.get("completed"):
-            print(
-                f"  seed {row['seed']}: total={row['total_generations']}, "
-                f"final_coop={row['final_coop']:.3f}, rng={row['rng_mode']}"
-            )
-        else:
-            print(f"  {row.get('source', '?')}: FAILED ({row.get('error', '?')})")
-    return 0 if n_done == len(summary) else 1
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -622,10 +359,6 @@ def main(argv: list[str] | None = None) -> int:
     ):
         if not 0.0 <= value <= 1.0:
             parser.error(f"{flag} must be in [0, 1], got {value}")
-    if args.resume_json is not None:
-        return run_resume_cli(args, parser)
-    if args.additional_gens is not None:
-        parser.error("--additional-gens requires --resume-json")
     if args.fermi_init_source == "baseline" and (
         args.agent_type != "agent-type1" or args.learning_method != "fermi"
     ):
@@ -645,6 +378,7 @@ def main(argv: list[str] | None = None) -> int:
     label = args.label or (
         f"LLM_v3_{args.learning_method}_v3_g100_1000inter_learn-{args.imitation_learning}"
         + ("_init-baseline" if args.fermi_init_source == "baseline" else "")
+        + schedule_suffix(args.observation_schedule)
         + noise_suffix(args.action_error, args.observation_error)
     )
 
@@ -656,6 +390,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"  provider: {provider}, model: {get_model(provider, args.model)}", flush=True)
     print(f"  num_gens: {args.gens}, target_interactions: {args.target_interactions}", flush=True)
+    print(f"  observation_schedule: {args.observation_schedule}", flush=True)
     print(f"  fitness_window_fraction: {args.fitness_window_fraction}", flush=True)
     print(
         f"  noise: action_error={args.action_error:g}, "
@@ -705,6 +440,7 @@ def main(argv: list[str] | None = None) -> int:
                 "num_gens": args.gens,
                 "target_interactions_per_gen": args.target_interactions,
                 "fitness_window_fraction": args.fitness_window_fraction,
+                F_CONFIG_OBSERVATION_SCHEDULE: args.observation_schedule,
                 F_CONFIG_ACTION_ERROR: args.action_error,
                 F_CONFIG_OBSERVATION_ERROR: args.observation_error,
                 "scheme": args.learning_method,

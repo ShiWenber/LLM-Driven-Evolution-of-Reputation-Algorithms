@@ -39,14 +39,17 @@ def recover_seeds(data):
             a=nxt[job.output_index]
             assert (a['origin'],a['parent_id'],a['parent_lineage_id'])==(job.origin,job.parent_id,job.parent_lineage_id)
         plans[g+1]=plan
-    assert json.dumps(rng.getstate())==json.dumps(cfg['rng_state']), 'Final RNG state mismatch'
+    if 'rng_state' in cfg:
+        assert json.dumps(rng.getstate())==json.dumps(cfg['rng_state']), 'Final RNG state mismatch'
     return seeds,plans
 
 
 def play(cohort,cfg,seed):
     random.seed(0)
     agents=[QuantitativeAgent(a['agent_id'],a['code'],V2StrategyExecutor(a['code'])) for a in cohort]
-    scenario=ReputationPrisonersDilemmaScenario(**{k:cfg[k] for k in (
+    scenario=ReputationPrisonersDilemmaScenario(
+        observation_schedule=cfg.get('observation_schedule', 'synchronous'),
+        **{k:cfg[k] for k in (
         'population_size','benefit','cost','observability','observability_p','fitness_window_fraction',
         'num_rounds_per_gen','action_error_probability','observation_error_probability')})
     return scenario.evaluate(agents,generation_seed=seed,num_rounds=cfg['num_rounds_per_gen'])

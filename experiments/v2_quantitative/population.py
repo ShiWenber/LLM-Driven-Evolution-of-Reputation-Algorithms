@@ -25,7 +25,6 @@ trivial always-cooperate / always-defect strategies). The 8
 leading-eight rules live in type-1 land.
 """
 from __future__ import annotations
-import copy
 import random
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -174,12 +173,13 @@ class V2EvolutionaryPopulation:
         # target_interactions_per_gen: if set (and > 0), overrides
         # num_rounds_per_gen at construction time so the caller can
         # think in terms of total PD games per gen rather than
-        # rounds. One pair plays per interaction, so target=1000 ->
-        # 1000 interactions. The LLM call count is governed separately
+        # rounds. Synchronous rounds contain floor(N/2) pair interactions.
+        # Targets are rounded up to whole rounds. LLM calls are governed separately
         # by num_eliminate (5/gen) and does NOT scale with the
         # interaction count, so more game time means the same ~5 LLM
         # calls per gen.
         target_interactions_per_gen: Optional[int] = None,
+        observation_schedule: str = OBSERVATION_SCHEDULE,
         # fitness_window_fraction: the trailing share of joint actions
         # used for selection. Fitness is each agent's payoff in that
         # window divided by its own action count there; earlier actions
@@ -292,15 +292,16 @@ class V2EvolutionaryPopulation:
                 f"got {learning_method!r}"
             )
         self.population_size = population_size
-        # The framework implements one protocol: a single randomly drawn pair
-        # per interaction, with its observations delivered immediately. The
-        # value is recorded in each result config so archives stay
-        # self-describing.
-        self.observation_schedule = OBSERVATION_SCHEDULE
-        # If the caller asked for a target interaction count, that IS the step
-        # count, because exactly one pair plays per interaction.
+        # Synchronous matching is the default. Retain explicit asynchronous
+        # mode for archived controls, and record the schedule in each log.
+        if observation_schedule not in ("synchronous", "asynchronous"):
+            raise ValueError("Unknown observation schedule")
+        self.observation_schedule = observation_schedule
+        # Convert the target pair-interaction budget to complete matching rounds.
+        # Non-divisible targets round up by at most floor(N/2)-1 interactions.
         if target_interactions_per_gen is not None and target_interactions_per_gen > 0:
-            num_rounds_per_gen = target_interactions_per_gen
+            pairs = max(1, population_size // 2) if observation_schedule == "synchronous" else 1
+            num_rounds_per_gen = (target_interactions_per_gen + pairs - 1) // pairs
         self.num_rounds_per_gen = num_rounds_per_gen
         self.target_interactions_per_gen = target_interactions_per_gen
         if fitness_window_fraction is not None:
@@ -362,6 +363,7 @@ class V2EvolutionaryPopulation:
         self.use_baseline = use_baseline
         self.agent_type = agent_type
         self.game_scenario = game_scenario or ReputationPrisonersDilemmaScenario(
+            observation_schedule=self.observation_schedule,
             population_size=population_size,
             benefit=benefit,
             cost=cost,
@@ -432,12 +434,12 @@ class V2EvolutionaryPopulation:
         # the override took effect (and so log analysis can grep for
         # it).
         if target_interactions_per_gen is not None and target_interactions_per_gen > 0:
-            actual = self.num_rounds_per_gen
+            actual = self.num_rounds_per_gen * (max(1, population_size // 2) if self.observation_schedule == "synchronous" else 1)
             print(
                 f"  [V2EvolutionaryPopulation] target_interactions_per_gen="
                 f"{target_interactions_per_gen} -> num_rounds_per_gen="
                 f"{self.num_rounds_per_gen} -> {actual} games/gen "
-                f"(N={population_size}, one pair per interaction)"
+                f"(N={population_size}, {self.observation_schedule})"
             )
 
     def _new_lineage(
@@ -638,6 +640,7 @@ class V2EvolutionaryPopulation:
         scenario = getattr(self, "game_scenario", None)
         if scenario is None:
             scenario = ReputationPrisonersDilemmaScenario(
+                observation_schedule=getattr(self, "observation_schedule", OBSERVATION_SCHEDULE),
                 population_size=self.population_size,
                 benefit=self.benefit,
                 cost=self.cost,
@@ -837,15 +840,8 @@ class V2EvolutionaryPopulation:
     def round_num_offset(self) -> int:
         return getattr(self, "_round_offset", 0)
 
-    @staticmethod
-    def _tuple_tree(value):
-        """Convert JSON-loaded RNG-state lists back to tuples."""
-        if isinstance(value, list):
-            return tuple(V2EvolutionaryPopulation._tuple_tree(v) for v in value)
-        return value
-
     def _result_config(self, num_generations: int, **extra) -> Dict:
-        """Build the common config block, including a resumable RNG checkpoint."""
+        """Build the configuration and diagnostics recorded in the results."""
         scenario = self._get_game_scenario()
         custom_rule = getattr(self, "evolution_rule", None)
         fields = {
@@ -873,9 +869,7 @@ class V2EvolutionaryPopulation:
                 self.target_interactions_per_gen,
             F_CONFIG_FITNESS_WINDOW_FRACTION: self.fitness_window_fraction,
             F_CONFIG_OBSERVATION_SCHEDULE: self.observation_schedule,
-            # Noise actually in force for this run. Read back by --resume-json,
-            # so a continued lineage keeps the noise level it started under
-            # instead of silently turning noise off mid-run.
+            # Record the noise actually used so archived results can be analyzed.
             F_CONFIG_ACTION_ERROR: self.action_error_probability,
             F_CONFIG_OBSERVATION_ERROR: self.observation_error_probability,
             F_CONFIG_LLM_THINKING: self.llm_thinking,
@@ -904,10 +898,6 @@ class V2EvolutionaryPopulation:
                 if custom_rule is not None
                 else self.learning_method
             ),
-            # random.Random state contains only JSON-safe numbers/tuples.
-            # json.dump writes tuples as arrays; _tuple_tree restores them.
-            "rng_state": self.rng.getstate(),
-            "rng_state_format": "python_random_v1",
         }
         if self.agent_type == "agent-type2-signal":
             fields.update({
@@ -918,140 +908,6 @@ class V2EvolutionaryPopulation:
             })
         fields.update(extra)
         return make_config(**fields)
-
-    def _restore_from_evolution_log(self, previous: Dict) -> int:
-        """Restore the evaluated final population and lineage bookkeeping.
-
-        Returns the last recorded generation number. Reputations and other
-        within-generation state are intentionally not restored: an evolution
-        checkpoint lies at a generation boundary, where agents are rebuilt.
-        """
-        trajectory = previous.get("trajectory", [])
-        final_population = previous.get("final_population", [])
-        if not trajectory:
-            raise ValueError("resume log has an empty trajectory")
-        if len(final_population) != self.population_size:
-            raise ValueError(
-                "resume population size mismatch: "
-                f"log has {len(final_population)}, configured {self.population_size}"
-            )
-
-        restored = []
-        self._slot_lineage = {}
-        self._slot_birth = {}
-        for rec in final_population:
-            aid = int(rec["agent_id"])
-            agent = self._make_agent(rec["code"], aid)
-            agent.fitness = float(rec.get("fitness", 0.0))
-            restored.append(agent)
-            lineage_id = rec.get("lineage_id")
-            if lineage_id is not None:
-                self._slot_lineage[aid] = int(lineage_id)
-            self._slot_birth[aid] = lineage_event(
-                lineage_id=lineage_id,
-                parent_lineage_id=rec.get(F_PARENT_LINEAGE_ID),
-                parent_id=rec.get(F_PARENT_ID),
-                origin=rec.get(F_ORIGIN),
-                birth_gen=rec.get(F_BIRTH_GEN),
-            )
-
-        self.agents = restored
-        self._lineage_events = copy.deepcopy(previous.get("lineage_events", []))
-        lineage_ids = [
-            ev.get("lineage_id") for ev in self._lineage_events
-            if ev.get("lineage_id") is not None
-        ]
-        self._next_lineage_id = max(lineage_ids, default=-1) + 1
-        self._next_agent_id = max((a.agent_id for a in restored), default=-1) + 1
-        return int(trajectory[-1]["generation"])
-
-    def resume_evolution(
-        self,
-        previous: Dict,
-        additional_generations: int,
-        *,
-        derived_rng_seed: Optional[int] = None,
-        source_path: Optional[str] = None,
-    ) -> Dict:
-        """Append generations to an existing Fermi evolution log.
-
-        The prior final generation is already evaluated, but its transition
-        to the next generation was never performed. Consequently every
-        appended generation begins with selection/reproduction using the
-        previous generation's saved fitness, then evaluates the new cohort.
-        """
-        if additional_generations < 1:
-            raise ValueError("additional_generations must be >= 1")
-        if self.use_baseline or self.learning_method != "fermi":
-            raise ValueError("resume currently supports non-baseline Fermi runs only")
-
-        old_config = previous.get("config", {})
-        last_gen = self._restore_from_evolution_log(previous)
-        old_fallback_init = int(old_config.get(F_CONFIG_FALLBACK_INIT_COUNT, 0))
-        old_fallback_mutation = int(old_config.get(F_CONFIG_FALLBACK_MUTATION_COUNT, 0))
-        self._fallback_init_count = old_fallback_init
-        self._fallback_mutation_count = old_fallback_mutation
-
-        saved_rng_state = old_config.get("rng_state")
-        if saved_rng_state is not None:
-            self.rng.setstate(self._tuple_tree(saved_rng_state))
-            rng_mode = "checkpoint"
-            effective_derived_seed = None
-        else:
-            if derived_rng_seed is None:
-                # Stable across Python processes and versions; deliberately
-                # does not use hash(), whose salt changes between processes.
-                derived_rng_seed = (
-                    int(self.seed) * 1_000_003
-                    + int(last_gen + 1) * 97_409
-                    + 0x5EED_C0DE
-                ) & ((1 << 63) - 1)
-            self.rng.seed(derived_rng_seed)
-            rng_mode = "derived_branch"
-            effective_derived_seed = int(derived_rng_seed)
-
-        trajectory = copy.deepcopy(previous["trajectory"])
-        total_generations = len(trajectory) + additional_generations
-        self.num_generations = total_generations
-
-        for gen in range(last_gen + 1, last_gen + 1 + additional_generations):
-            # Complete the transition omitted after the old run's final gen.
-            self._select_and_reproduce_fermi(next_gen=gen)
-            self._round_offset = gen
-            stats = self._run_one_generation()
-            for i, agent in enumerate(self.agents):
-                agent.fitness = stats["payoffs"][i] if i < len(stats["payoffs"]) else 0.0
-            trajectory.append(trajectory_entry(
-                generation=gen,
-                cooperation_rate_mean=stats["cooperation_rate_mean"],
-                n_interactions=stats["n_interactions"],
-                fitness_mean=sum(stats["payoffs"]) / max(1, len(stats["payoffs"])),
-                fitness_max=max(stats["payoffs"]) if stats["payoffs"] else 0.0,
-                population=[self._agent_record(a) for a in self.agents],
-            ))
-            print(
-                f"  Gen {gen}: coop={stats['cooperation_rate_mean']:.3f}, "
-                f"fitness_mean={sum(stats['payoffs'])/max(1,len(stats['payoffs'])):.3f}"
-            )
-
-        resume_meta = {
-            "source_path": source_path,
-            "source_generations": len(previous["trajectory"]),
-            "additional_generations": additional_generations,
-            "rng_mode": rng_mode,
-            "derived_rng_seed": effective_derived_seed,
-            "uses_current_prompt": True,
-        }
-        return build_evolution_results(
-            trajectory=trajectory,
-            final_population=[self._agent_record(a) for a in self.agents],
-            lineage_events=self._lineage_events,
-            config=self._result_config(
-                total_generations,
-                resumed=True,
-                resume=resume_meta,
-            ),
-        )
 
     def run_evolution(self, num_generations: int) -> Dict:
         """Run num_generations and return aggregate results."""

@@ -1,6 +1,6 @@
 """Tests for the asynchronous observation protocol.
 
-The framework implements one protocol: each interaction draws a single pair of
+The archived asynchronous protocol: each interaction draws a single pair of
 agents uniformly at random and delivers that pair's observations immediately,
 before the next pair is drawn. Reputations therefore evolve continuously
 within a generation, and a later pair already sees the effects of earlier ones.
@@ -65,7 +65,7 @@ class _CoinAgent:
 
 def _make_game(population_size, seed=0):
     game = DonorGame(
-        population_size=population_size,
+        population_size=population_size, observation_schedule="asynchronous",
         benefit=2.0,
         cost=1.0,
         fitness_window_fraction=None,
@@ -82,6 +82,19 @@ def _make_game(population_size, seed=0):
 # --------------------------------------------------------------------------
 # Pairing
 # --------------------------------------------------------------------------
+def _play_steps(game, steps):
+    """The engine's generation loop: play one step, then deliver its observations.
+
+    Mirrors ``ReputationPrisonersDilemmaScenario.evaluate``; one iteration is
+    one matching round under the synchronous protocol and one pair under the
+    asynchronous one.
+    """
+    for _ in range(steps):
+        game.distribute_observations_and_self_judgments(
+            game.play_step()["interactions"]
+        )
+
+
 def test_one_step_plays_exactly_one_pair():
     game, _ = _make_game(16)
     step = game.play_interaction()
@@ -197,10 +210,11 @@ def test_one_delta_and_one_log_entry_per_interaction():
     assert len(game._interaction_deltas) == 48
 
 
-def test_run_generation_plays_population_size_interactions():
+def test_each_step_plays_one_pair_and_advances_the_round():
+    """Asynchronous: one step is one interaction, and round_num counts them."""
     game, _ = _make_game(9)
-    stats = game.run_generation()
-    assert stats["n_interactions"] == 9
+    _play_steps(game, 9)
+    assert len(game._global_log) == 9
     assert game.round_num == 9
 
 
@@ -210,12 +224,12 @@ def test_run_generation_plays_population_size_interactions():
 def _population(**kwargs):
     """A population with the LLM path stubbed out."""
     return V2EvolutionaryPopulation(
-        population_size=8, num_generations=1, **kwargs
+        population_size=8, num_generations=1, observation_schedule="asynchronous", **kwargs
     )
 
 
-def test_protocol_constant_is_asynchronous():
-    assert OBSERVATION_SCHEDULE == "asynchronous"
+def test_default_protocol_is_synchronous():
+    assert OBSERVATION_SCHEDULE == "synchronous"
 
 
 def test_target_interactions_is_the_step_count():
@@ -251,6 +265,51 @@ def test_scenario_reports_no_schedule_choice():
     # These described the synchronous matching and are gone.
     assert "num_pairs" not in params
     assert "observation_schedule" not in params
+
+
+# --------------------------------------------------------------------------
+# The CLI switch between the two protocols
+# --------------------------------------------------------------------------
+def test_cli_defaults_to_synchronous_and_accepts_asynchronous():
+    from experiments import run_fermi_v3 as cli
+
+    parser = cli.build_parser()
+    assert parser.parse_args([]).observation_schedule == "synchronous"
+    chosen = parser.parse_args(["--observation-schedule", "asynchronous"])
+    assert chosen.observation_schedule == "asynchronous"
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--observation-schedule", "nope"])
+
+
+def test_only_the_non_default_protocol_changes_the_label():
+    """Synchronous must keep its historical label, or archived runs break."""
+    from experiments.run_fermi_v3 import schedule_suffix
+
+    assert schedule_suffix("synchronous") == ""
+    assert schedule_suffix("asynchronous") == "_asynchronous"
+
+
+def test_run_one_seed_forwards_the_schedule_to_the_engine(monkeypatch, tmp_path):
+    """A flag that never reaches the engine would be decorative."""
+    from experiments import run_fermi_v3 as cli
+
+    captured = {}
+
+    class _Stub:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def run_evolution(self, num_generations):
+            raise RuntimeError("stop before any LLM work")
+
+    monkeypatch.setattr(cli, "V2EvolutionaryPopulation", _Stub)
+    monkeypatch.setattr(cli, "get_api_key", lambda provider: "test-key")
+    args = cli.build_parser().parse_args(
+        ["--observation-schedule", "asynchronous", "--gens", "1",
+         "--output-root", str(tmp_path)]
+    )
+    cli.run_one_seed(args, 0, "label", tmp_path)
+    assert captured["observation_schedule"] == "asynchronous"
 
 
 def test_generation_runs_end_to_end():

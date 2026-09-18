@@ -17,14 +17,11 @@ touching the RNG.
 """
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from experiments.evolution_log import (
     F_CONFIG_ACTION_ERROR,
     F_CONFIG_OBSERVATION_ERROR,
-    SCHEMA_VERSION,
 )
 from experiments.run_fermi_v3 import build_parser, noise_suffix
 from experiments.v2_quantitative.agent import QuantitativeAgent
@@ -214,9 +211,17 @@ def test_action_error_is_recorded_as_the_executed_action():
 
 
 def test_action_error_at_one_makes_a_generation_fully_defect():
+    """Every intended cooperation is inverted, so nothing is logged as cooperate."""
     game, _ = _game(6, action_error_probability=1.0)
-    stats = game.run_generation()
-    assert stats["cooperation_rate_mean"] == 0.0
+    for _ in range(6):
+        game.distribute_observations_and_self_judgments(
+            game.play_step()["interactions"]
+        )
+    assert game._global_log, "the loop must actually play"
+    assert all(
+        inter["donor_action"] == "defect" and inter["recipient_action"] == "defect"
+        for inter in game._global_log
+    )
 
 
 def test_action_error_reaches_observers_not_just_payoffs():
@@ -471,127 +476,3 @@ def test_dry_run_label_carries_the_noise_level(capsys):
     printed = capsys.readouterr().out
     assert "ae0p01_oe0p01" in printed
     assert "noise: action_error=0.01, observation_error=0.01" in printed
-
-
-# --------------------------------------------------------------------------
-# Resume: the noise model is inherited from the log, never re-specified
-# --------------------------------------------------------------------------
-def _write_log(path, noise_keys):
-    population = [
-        {
-            "agent_id": agent_id,
-            "code": "def decide(my_reputation, opponent_reputation):\n    return True\n",
-            "fitness": 1.0,
-            "cooperation_rate": 0.0,
-            "self_reputation": 0.0,
-            "lineage_id": 100 + agent_id,
-            "parent_id": None,
-            "parent_lineage_id": None,
-            "origin": "initial",
-            "birth_gen": 0,
-        }
-        for agent_id in (0, 1)
-    ]
-    path.write_text(
-        json.dumps(
-            {
-                "trajectory": [
-                    {
-                        "generation": 0,
-                        "cooperation_rate_mean": 0.5,
-                        "n_interactions": 2,
-                        "fitness_mean": 1.0,
-                        "fitness_max": 1.0,
-                        "population": population,
-                    }
-                ],
-                "final_population": population,
-                "lineage_events": [],
-                "config": {
-                    "schema_version": SCHEMA_VERSION,
-                    "agent_type": "agent-type1",
-                    "seed": 5,
-                    "population_size": 2,
-                    "learning_method": "fermi",
-                    "observation_schedule": "asynchronous",
-                    **noise_keys,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-
-
-def _valid_result(previous):
-    """A stub resume result that still satisfies the log's schema contract."""
-    return {
-        "trajectory": previous["trajectory"],
-        "final_population": previous["final_population"],
-        "lineage_events": [],
-        "config": {
-            "schema_version": SCHEMA_VERSION,
-            "agent_type": "agent-type1",
-            "seed": 5,
-            "population_size": 2,
-            "resume": {"rng_mode": "checkpoint"},
-        },
-    }
-
-
-def _run_stubbed_resume(tmp_path, monkeypatch, noise_keys, label, extra=()):
-    """Drive ``run_one_resume`` with the population and the API key stubbed.
-
-    Returns the kwargs the real code would have built the population with:
-    that is where an inherited noise level shows up.
-    """
-    from experiments import run_fermi_v3 as cli
-
-    source = tmp_path / "old.json"
-    _write_log(source, noise_keys)
-
-    captured = {}
-
-    class _StubPopulation:
-        def __init__(self, **kwargs):
-            captured.update(kwargs)
-
-        def resume_evolution(self, previous, additional, *, source_path=None):
-            return _valid_result(previous)
-
-    monkeypatch.setattr(cli, "V2EvolutionaryPopulation", _StubPopulation)
-    monkeypatch.setattr(cli, "get_api_key", lambda provider: "test-key")
-
-    args = cli.build_parser().parse_args(
-        ["--resume-json", str(source), "--additional-gens", "1",
-         "--label", label, "--output-root", str(tmp_path / "out"), *extra]
-    )
-    cli.run_one_resume(args, source, label, tmp_path / "out")
-    return captured
-
-
-@pytest.mark.parametrize(
-    "noise_keys, expected",
-    [
-        ({F_CONFIG_ACTION_ERROR: 0.01, F_CONFIG_OBSERVATION_ERROR: 0.02}, (0.01, 0.02)),
-        # A log written before noise existed must resume noise-free.
-        ({}, (0.0, 0.0)),
-    ],
-)
-def test_resume_inherits_the_recorded_noise(
-    tmp_path, monkeypatch, noise_keys, expected
-):
-    captured = _run_stubbed_resume(tmp_path, monkeypatch, noise_keys, "resumed")
-
-    assert captured["action_error_probability"] == expected[0]
-    assert captured["observation_error_probability"] == expected[1]
-
-
-def test_resume_ignores_cli_noise_because_the_lineage_already_fixed_it(
-    tmp_path, monkeypatch
-):
-    """Passing --action-error on resume must not rewrite a recorded level."""
-    captured = _run_stubbed_resume(
-        tmp_path, monkeypatch, {}, "resumed2", extra=["--action-error", "0.5"]
-    )
-
-    assert captured["action_error_probability"] == 0.0

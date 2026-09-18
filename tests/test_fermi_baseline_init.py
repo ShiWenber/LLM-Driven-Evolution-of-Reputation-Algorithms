@@ -15,6 +15,23 @@ from experiments.v2_quantitative.population import V2EvolutionaryPopulation
 SNAPSHOT = tuple(AgentSnapshot(i, "parent", 1.0, i) for i in range(2))
 
 
+def test_independent_initialization_uses_fresh_prompt(monkeypatch):
+    pop = V2EvolutionaryPopulation(
+        population_size=4, agent_type="agent-type1",
+        mutation_rate_on_adoption=.1, fermi_init_source="llm",
+    )
+    captured = []
+
+    def request(prompt, label):
+        captured.append((prompt, label))
+        return "test return value"
+
+    monkeypatch.setattr(pop, "_request_valid_code", request)
+    assert pop._llm_init_code(3) == "test return value"
+    assert captured[0][0] == pop._init_prompt()
+    assert "slot 3" in captured[0][1]
+
+
 def test_baseline_pool_probabilities_and_lineage():
     rule = FermiEvolutionRule(
         beta=0, mutation_rate=1, updates_per_gen=2, init_source="baseline",

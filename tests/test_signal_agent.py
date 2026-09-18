@@ -254,14 +254,6 @@ def test_evolution_logs_and_generation_cleanup(learning_method, tmp_path):
     assert candidate.agent_type == "agent-type2-signal"
 
 
-def test_resume_signal_evolution_preserves_old_trajectory():
-    previous = population().run_evolution(1)
-    resumed = population().resume_evolution(previous, 1)
-    assert resumed["trajectory"][0] == previous["trajectory"][0]
-    assert len(resumed["trajectory"]) == 2
-    validate_evolution_results(resumed)
-
-
 def test_signal_fallback_is_valid_and_counted():
     pop = population()
     pop._request_valid_code = lambda prompt, label: None
@@ -352,12 +344,12 @@ def test_signal_benchmark_cache_requires_interface_version():
     assert not cache_matches(run, candidate, resident, "L1", *args)
     settings = SimpleNamespace(population_size=4, burn_in=20, measure=20,
         beta=1.0, action_error=0.0, observation_error=0.0, replicates=1,
-        probes=["L1"], benefit=2.0, cost=1.0)
+        probes=["L1"], benefit=2.0, cost=1.0, observation_schedule="synchronous")
     stored = {
         "config": {"population_size": 4, "burn_in_interactions": 20,
                    "measure_interactions": 20, "beta": 1.0,
                    "action_error_probability": 0.0, "observation_error_probability": 0.0,
-                   "benefit": 2.0, "cost": 1.0},
+                   "benefit": 2.0, "cost": 1.0, "observation_schedule": "synchronous"},
         "candidate": {"label": "s", "code_sha256": candidate.code_sha256,
                       "agent_type": candidate.agent_type,
                       "signal_interface_version": SIGNAL_INTERFACE_VERSION},
