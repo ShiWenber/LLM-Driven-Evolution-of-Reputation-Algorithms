@@ -96,3 +96,6 @@ inferface_focus/
 docs/research_doc
 references/
 .worktrees/
+
+# Local figure-generation project workspaces
+projects/
